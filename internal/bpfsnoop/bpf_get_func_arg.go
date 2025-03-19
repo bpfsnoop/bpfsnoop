@@ -14,3 +14,9 @@ func genGetFuncArg(index int, dst asm.Register) asm.Instructions {
 		asm.LoadMem(dst, asm.R10, -8, asm.DWord),
 	}
 }
+
+func genAccessArg(index int, dst asm.Register) asm.Instructions {
+	return asm.Instructions{
+		asm.LoadMem(dst, asm.R1, int16(index*8), asm.DWord),
+	}
+}

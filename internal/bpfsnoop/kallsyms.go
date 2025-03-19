@@ -19,6 +19,9 @@ const kallsymsFilepath = "/proc/kallsyms"
 const (
 	kmodBuiltinPfx = "__builtin"
 	kmodBpf        = "bpf"
+
+	bpfRawTpStart = "__start__bpf_raw_tp"
+	bpfRawTpStop  = "__stop__bpf_raw_tp"
 )
 
 func isKernelBuiltinMod(mod string) bool {
@@ -59,6 +62,9 @@ type Kallsyms struct {
 
 	stext  uint64
 	sysBPF uint64
+
+	bpfRawTpStart uint64
+	bpfRawTpStop  uint64
 }
 
 // NewKallsyms reads /proc/kallsyms and returns a Kallsyms instance.
@@ -112,6 +118,21 @@ func NewKallsyms() (*Kallsyms, error) {
 
 			case "__x64_sys_bpf":
 				ks.sysBPF = entry.addr
+			}
+		} else if fields[1] == "D" || fields[1] == "d" {
+			name := fields[2]
+			switch name {
+			case bpfRawTpStart, bpfRawTpStop:
+				addr, err := strconv.ParseUint(fields[0], 16, 64)
+				if err != nil {
+					return nil, fmt.Errorf("failed to parse addr %s: %w", fields[0], err)
+				}
+
+				if name == bpfRawTpStart {
+					ks.bpfRawTpStart = addr
+				} else {
+					ks.bpfRawTpStop = addr
+				}
 			}
 		}
 	}

@@ -38,6 +38,7 @@ var (
 type Flags struct {
 	progs  []string
 	kfuncs []string
+	ktps   []string
 
 	outputFile string
 
@@ -52,7 +53,8 @@ func ParseFlags() (*Flags, error) {
 
 	f := flag.NewFlagSet("bpfsnoop", flag.ExitOnError)
 	f.StringSliceVarP(&flags.progs, "prog", "p", nil, "bpf prog info for bpfsnoop in format PROG[,PROG,..], PROG: PROGID[:<prog function name>], PROGID: <prog ID> or 'i/id:<prog ID>' or 'p/pinned:<pinned file>' or 't/tag:<prog tag>' or 'n/name:<prog full name>' or 'pid:<pid>'; all bpf progs will be traced if '*' is specified")
-	f.StringSliceVarP(&flags.kfuncs, "kfunc", "k", nil, "filter kernel functions by shell wildcards way")
+	f.StringSliceVarP(&flags.kfuncs, "kfunc", "k", nil, "filter kernel functions")
+	f.StringSliceVarP(&flags.ktps, "tracepoint", "t", nil, "filter kernel tracepoints")
 	f.BoolVar(&kfuncAllKmods, "kfunc-all-kmods", false, "filter functions in all kernel modules")
 	f.StringSliceVar(&kfuncKmods, "kfunc-kmods", nil, "filter functions in specified kernel modules")
 	f.StringVarP(&flags.outputFile, "output", "o", "", "output file for the result, default is stdout")
@@ -93,6 +95,10 @@ func (f *Flags) ParseProgs() ([]ProgFlag, error) {
 
 func (f *Flags) Kfuncs() []string {
 	return f.kfuncs
+}
+
+func (f *Flags) Ktps() []string {
+	return f.ktps
 }
 
 func (f *Flags) OutputFile() string {

@@ -193,6 +193,11 @@ func Run(reader *ringbuf.Reader, progs *bpfProgs, addr2line *Addr2Line, ksyms *K
 				funcArgs = fn.Args
 				funcParams = fn.Prms
 				isRetStr = fn.IsRetStr
+
+				if fn.IsTp {
+					targetName = fn.Func.Name + "[tp]"
+					printRetval = false
+				}
 			}
 		}
 

@@ -23,10 +23,6 @@ import (
 	"github.com/bpfsnoop/bpfsnoop/internal/bpfsnoop"
 )
 
-//go:generate go run github.com/cilium/ebpf/cmd/bpf2go -cc clang bpfsnoop ./bpf/bpfsnoop.c -- -g -D__TARGET_ARCH_x86 -I./bpf -I./bpf/headers -I./lib/libbpf/src -Wall
-//go:generate go run github.com/cilium/ebpf/cmd/bpf2go -cc clang feat ./bpf/feature.c -- -g -D__TARGET_ARCH_x86 -I./bpf/headers -I./lib/libbpf/src -Wall
-//go:generate go run github.com/cilium/ebpf/cmd/bpf2go -cc clang traceable ./bpf/traceable.c -- -g -D__TARGET_ARCH_x86 -I./bpf/headers -I./lib/libbpf/src -Wall
-
 func main() {
 	flags, err := bpfsnoop.ParseFlags()
 	assert.NoErr(err, "Failed to parse flags: %v")
@@ -36,8 +32,11 @@ func main() {
 		return
 	}
 
+	tpSpec, err := loadTracepoint()
+	assert.NoErr(err, "Failed to load tracepoint bpf spec: %v")
+
 	if flags.ShowFuncProto() {
-		bpfsnoop.ShowFuncProto(flags)
+		bpfsnoop.ShowFuncProto(flags, tpSpec)
 		return
 	}
 
@@ -88,6 +87,11 @@ func main() {
 	kfuncs, err = bpfsnoop.DetectTraceable(traceableBPFSpec, kfuncs)
 	assert.NoVerifierErr(err, "Failed to detect traceable for kfuncs: %v")
 
+	ktps, err := bpfsnoop.FindKernelTracepoints(flags.Ktps(), tpSpec, kallsyms)
+	assert.NoVerifierErr(err, "Failed to detect tracepoints: %v")
+
+	bpfsnoop.MergeTracepointsToKfuncs(ktps, kfuncs)
+
 	var addr2line *bpfsnoop.Addr2Line
 
 	vmlinux, err := bpfsnoop.FindVmlinux()
@@ -122,7 +126,7 @@ func main() {
 	tracingTargets := bpfProgs.Tracings()
 	assert.True(len(tracingTargets)+len(kfuncs) != 0, "No tracing target")
 
-	bpfsnoop.VerboseLog("Tracing bpf progs or kernel functions ..")
+	bpfsnoop.VerboseLog("Tracing bpf progs or kernel functions/tracepoints ..")
 
 	bpfsnoop.TrimSpec(bpfSpec)
 
@@ -130,7 +134,7 @@ func main() {
 	defer bpfsnoop.CloseBPFMaps(reusedMaps)
 
 	if len(kfuncs) > 20 {
-		log.Printf("bpfsnoop is tracing %d kernel functions, this may take a while", len(kfuncs))
+		log.Printf("bpfsnoop is tracing %d kernel functions/tracepoints, this may take a while", len(kfuncs))
 	}
 
 	tstarted := time.Now()

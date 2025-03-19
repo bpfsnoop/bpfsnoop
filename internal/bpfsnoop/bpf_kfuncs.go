@@ -112,5 +112,9 @@ func detectTraceables(spec *ebpf.CollectionSpec, kfuncs KFuncs, silent bool) (KF
 }
 
 func DetectTraceable(spec *ebpf.CollectionSpec, kfuncs KFuncs) (KFuncs, error) {
+	if len(kfuncs) == 0 {
+		return kfuncs, nil
+	}
+
 	return detectTraceables(spec, kfuncs, false)
 }

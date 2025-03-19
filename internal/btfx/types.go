@@ -64,6 +64,10 @@ func IsBool(t btf.Type) bool {
 	return ok && i.Name == "_Bool"
 }
 
+func IsStr(t btf.Type) bool {
+	return mybtf.IsConstCharPtr(t) || mybtf.IsCharArray(t)
+}
+
 func IsConst(t btf.Type) bool {
 	for {
 		switch v := t.(type) {

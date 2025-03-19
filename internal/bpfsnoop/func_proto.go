@@ -10,11 +10,13 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/bpfsnoop/bpfsnoop/internal/assert"
-	"github.com/bpfsnoop/bpfsnoop/internal/btfx"
+	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/btf"
 	"github.com/fatih/color"
 	"golang.org/x/exp/maps"
+
+	"github.com/bpfsnoop/bpfsnoop/internal/assert"
+	"github.com/bpfsnoop/bpfsnoop/internal/btfx"
 )
 
 func showFuncProto(w io.Writer, fn *btf.Func) {
@@ -52,10 +54,10 @@ func showFuncProto(w io.Writer, fn *btf.Func) {
 	clr.Fprint(w, ");\n")
 }
 
-func ShowFuncProto(f *Flags) {
+func ShowFuncProto(f *Flags, tpSpec *ebpf.CollectionSpec) {
 	var sb strings.Builder
 
-	haveProg := false
+	printNewline := false
 	if len(f.progs) != 0 {
 		pflags, err := f.ParseProgs()
 		assert.NoErr(err, "Failed to parse bpf prog flags: %v")
@@ -72,7 +74,7 @@ func ShowFuncProto(f *Flags) {
 				showFuncProto(&sb, progs.tracings[k].fn)
 			}
 
-			haveProg = true
+			printNewline = true
 		}
 	}
 
@@ -80,7 +82,7 @@ func ShowFuncProto(f *Flags) {
 		kallsyms, err := NewKallsyms()
 		assert.NoErr(err, "Failed to read /proc/kallsyms: %v")
 
-		if haveProg {
+		if printNewline {
 			fmt.Fprintln(&sb)
 		}
 
@@ -95,6 +97,30 @@ func ShowFuncProto(f *Flags) {
 
 		for _, k := range keys {
 			showFuncProto(&sb, kfuncs[k].Func)
+		}
+
+		printNewline = true
+	}
+
+	if len(f.ktps) != 0 {
+		kallsyms, err := NewKallsyms()
+		assert.NoErr(err, "Failed to read /proc/kallsyms: %v")
+
+		if printNewline {
+			fmt.Fprintln(&sb)
+		}
+
+		ktps, err := findKernelTracepoints(f.ktps, tpSpec, kallsyms, false)
+		assert.NoErr(err, "Failed to find kernel tracepoints: %v")
+
+		fmt.Fprint(&sb, "Kernel tracepoints:")
+		color.New(color.FgGreen).Fprintf(&sb, " (total %d)\n", len(ktps))
+
+		keys := maps.Keys(ktps)
+		slices.Sort(keys)
+
+		for _, k := range keys {
+			showFuncProto(&sb, ktps[k].Func)
 		}
 	}
 

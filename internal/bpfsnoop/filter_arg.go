@@ -101,22 +101,6 @@ func matchFuncArgs(p btf.FuncParam) (*funcArgument, bool) {
 	return nil, false
 }
 
-func (arg *funcArgument) compile(idx int, t btf.Type) (asm.Instructions, error) {
-	insns, err := bice.SimpleCompile(arg.expr, t)
-	if err != nil {
-		return nil, fmt.Errorf("failed to compile expression %s: %v", arg.expr, err)
-	}
-
-	return append(asm.Instructions{
-		asm.Mov.Reg(asm.R3, asm.R10),
-		asm.Add.Imm(asm.R3, -8),
-		asm.Mov.Imm(asm.R2, int32(idx)),
-		// r1 is ctx already
-		asm.FnGetFuncArg.Call(),
-		asm.LoadMem(asm.R1, asm.R10, -8, asm.DWord),
-	}, insns...), nil
-}
-
 func clearFilterArgSubprog(prog *ebpf.ProgramSpec) {
 	clearFilterSubprog(prog, injectStubFilterArg)
 }
@@ -125,7 +109,7 @@ func (arg *funcArgument) clear(prog *ebpf.ProgramSpec) {
 	clearFilterSubprog(prog, injectStubFilterArg)
 }
 
-func (arg *funcArgument) inject(prog *ebpf.ProgramSpec, idx int, t btf.Type) error {
+func (arg *funcArgument) inject(prog *ebpf.ProgramSpec, idx int, t btf.Type, getFuncArg bool) error {
 	if arg.expr == "" {
 		return nil
 	}
@@ -135,9 +119,15 @@ func (arg *funcArgument) inject(prog *ebpf.ProgramSpec, idx int, t btf.Type) err
 		return fmt.Errorf("type of arg is expected as a pointer instead of %s", btfx.Repr(t))
 	}
 
-	insns, err := arg.compile(idx, t)
+	insns, err := bice.SimpleCompile(arg.expr, t)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to compile expression %s: %w", arg.expr, err)
+	}
+
+	if getFuncArg {
+		insns = append(genGetFuncArg(idx, asm.R1), insns...)
+	} else {
+		insns = append(genAccessArg(idx, asm.R1), insns...)
 	}
 
 	injectInsns(prog, injectStubFilterArg, insns)

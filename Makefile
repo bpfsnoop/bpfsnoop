@@ -21,10 +21,19 @@ $(LIBPCAP_OBJ):
 $(VMLINUX_OBJ):
 	$(CMD_BPFTOOL) btf dump file /sys/kernel/btf/vmlinux format c > $(VMLINUX_OBJ)
 
-$(BPF_OBJ): $(BPF_SRC) $(VMLINUX_OBJ)
-	$(GOGEN)
+$(FEAT_BPF_OBJ): $(FEAT_BPF_SRC) $(VMLINUX_OBJ)
+	$(BPF2GO) feat bpf/feature.c -- $(BPF2GO_EXTRA_FLAGS)
 
-$(BPFSNOOP_OBJ): $(BPF_OBJ) $(BPFSNOOP_SRC) $(LIBCAPSTONE_OBJ) $(LIBPCAP_OBJ)
+$(TRACEABLE_BPF_OBJ): $(TRACEABLE_BPF_SRC) $(VMLINUX_OBJ)
+	$(BPF2GO) traceable bpf/traceable.c -- $(BPF2GO_EXTRA_FLAGS)
+
+$(TRACEPOINT_BPF_OBJ): $(TRACEPOINT_BPF_SRC) $(VMLINUX_OBJ)
+	$(BPF2GO) tracepoint bpf/tracepoint.c -- $(BPF2GO_EXTRA_FLAGS)
+
+$(BPFSNOOP_BPF_OBJ): $(BPFSNOOP_BPF_SRC) $(VMLINUX_OBJ)
+	$(BPF2GO) bpfsnoop bpf/bpfsnoop.c -- $(BPF2GO_EXTRA_FLAGS)
+
+$(BPFSNOOP_OBJ): $(BPF_OBJS) $(BPFSNOOP_SRC) $(LIBCAPSTONE_OBJ) $(LIBPCAP_OBJ)
 	$(GOBUILD_CGO_CFLAGS) $(GOBUILD_CGO_LDFLAGS) $(GOBUILD)
 
 .PHONY: local_release
@@ -34,7 +43,7 @@ local_release: $(BPFSNOOP_OBJ)
 
 .PHONY: clean
 clean:
-	rm -f $(BPF_OBJ)
+	rm -f $(BPF_OBJS)
 	rm -f $(BPFSNOOP_OBJ)
 	rm -rf $(DIR_BIN)/*
 	@touch $(DIR_BIN)/.gitkeep
