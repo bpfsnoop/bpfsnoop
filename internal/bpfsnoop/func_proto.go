@@ -54,7 +54,7 @@ func showFuncProto(w io.Writer, fn *btf.Func) {
 	clr.Fprint(w, ");\n")
 }
 
-func ShowFuncProto(f *Flags, tpSpec *ebpf.CollectionSpec) {
+func ShowFuncProto(f *Flags, tpSpec, tpModSpec *ebpf.CollectionSpec) {
 	var sb strings.Builder
 
 	printNewline := false
@@ -110,7 +110,7 @@ func ShowFuncProto(f *Flags, tpSpec *ebpf.CollectionSpec) {
 			fmt.Fprintln(&sb)
 		}
 
-		ktps, err := findKernelTracepoints(f.ktps, tpSpec, kallsyms, false)
+		ktps, err := probeKernelTracepoints(f.ktps, tpSpec, tpModSpec, kallsyms, true)
 		assert.NoErr(err, "Failed to find kernel tracepoints: %v")
 
 		fmt.Fprint(&sb, "Kernel tracepoints:")

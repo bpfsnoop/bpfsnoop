@@ -4,6 +4,7 @@
 package bpfsnoop
 
 import (
+	"fmt"
 	rand "math/rand/v2"
 
 	"github.com/cilium/ebpf"
@@ -14,13 +15,8 @@ import (
 
 type Tracepoints map[string]*KFunc
 
-func findKernelTracepoints(tps []string, spec *ebpf.CollectionSpec, ksyms *Kallsyms, silent bool) (Tracepoints, error) {
+func matchKernelTracepoints(tps []string, tpInfos map[string]tracepointInfo, silent bool) (Tracepoints, error) {
 	matches, err := kfuncFlags2matches(tps)
-	if err != nil {
-		return Tracepoints{}, err
-	}
-
-	tpInfos, err := ProbeTracepoints(spec, ksyms)
 	if err != nil {
 		return Tracepoints{}, err
 	}
@@ -68,12 +64,34 @@ func findKernelTracepoints(tps []string, spec *ebpf.CollectionSpec, ksyms *Kalls
 	return ktps, nil
 }
 
-func FindKernelTracepoints(tps []string, spec *ebpf.CollectionSpec, ksyms *Kallsyms) (Tracepoints, error) {
+func probeKernelTracepoints(tps []string, spec, modSpec *ebpf.CollectionSpec, ksyms *Kallsyms, silent bool) (Tracepoints, error) {
 	if len(tps) == 0 {
 		return Tracepoints{}, nil
 	}
 
-	return findKernelTracepoints(tps, spec, ksyms, false)
+	tpInfos, err := ProbeTracepoints(spec, ksyms)
+	if err != nil {
+		return Tracepoints{}, err
+	}
+
+	kmods, err := ProbeTracepointModuleInfos(modSpec, spec, ksyms)
+	if err != nil {
+		return nil, fmt.Errorf("failed to probe tracepoint module infos: %w", err)
+	}
+
+	for _, mod := range kmods {
+		for _, tp := range mod.tps {
+			if _, ok := tpInfos[tp.name]; !ok {
+				tpInfos[tp.name] = tp
+			}
+		}
+	}
+
+	return matchKernelTracepoints(tps, tpInfos, silent)
+}
+
+func FindKernelTracepoints(tps []string, spec, modSpec *ebpf.CollectionSpec, ksyms *Kallsyms) (Tracepoints, error) {
+	return probeKernelTracepoints(tps, spec, modSpec, ksyms, false)
 }
 
 func MergeTracepointsToKfuncs(tps Tracepoints, kfuncs KFuncs) {

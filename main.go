@@ -35,8 +35,11 @@ func main() {
 	tpSpec, err := loadTracepoint()
 	assert.NoErr(err, "Failed to load tracepoint bpf spec: %v")
 
+	tpModSpec, err := loadTracepoint_module()
+	assert.NoErr(err, "Failed to load tracepoint_module bpf spec: %v")
+
 	if flags.ShowFuncProto() {
-		bpfsnoop.ShowFuncProto(flags, tpSpec)
+		bpfsnoop.ShowFuncProto(flags, tpSpec, tpModSpec)
 		return
 	}
 
@@ -87,8 +90,10 @@ func main() {
 	kfuncs, err = bpfsnoop.DetectTraceable(traceableBPFSpec, kfuncs)
 	assert.NoVerifierErr(err, "Failed to detect traceable for kfuncs: %v")
 
-	ktps, err := bpfsnoop.FindKernelTracepoints(flags.Ktps(), tpSpec, kallsyms)
+	tpTs := time.Now()
+	ktps, err := bpfsnoop.FindKernelTracepoints(flags.Ktps(), tpSpec, tpModSpec, kallsyms)
 	assert.NoVerifierErr(err, "Failed to detect tracepoints: %v")
+	bpfsnoop.DebugLog("Detected %d tracepoints cost %s", len(ktps), time.Since(tpTs))
 
 	bpfsnoop.MergeTracepointsToKfuncs(ktps, kfuncs)
 

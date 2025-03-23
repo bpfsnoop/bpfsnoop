@@ -33,7 +33,10 @@ TRACEABLE_BPF_SRC := bpf/traceable.c
 TRACEPOINT_BPF_OBJ := tracepoint_bpfel.o tracepoint_bpfeb.o
 TRACEPOINT_BPF_SRC := bpf/tracepoint.c
 
-BPF_OBJS := $(BPFSNOOP_BPF_OBJ) $(FEAT_BPF_OBJ) $(TRACEABLE_BPF_OBJ) $(TRACEPOINT_BPF_OBJ)
+TRACEPOINT_MODULE_BPF_OBJ := tracepoint_module_bpfel.o tracepoint_module_bpfeb.o
+TRACEPOINT_MODULE_BPF_SRC := bpf/tracepoint_module.c
+
+BPF_OBJS := $(BPFSNOOP_BPF_OBJ) $(FEAT_BPF_OBJ) $(TRACEABLE_BPF_OBJ) $(TRACEPOINT_BPF_OBJ) $(TRACEPOINT_MODULE_BPF_OBJ)
 
 BPFSNOOP_OBJ := bpfsnoop
 BPFSNOOP_SRC := $(shell find internal -type f -name '*.go') main.go

@@ -88,32 +88,13 @@ func probeTracepointInfos(spec *ebpf.CollectionSpec, start uint64, cnt uint32) (
 	return infos, nil
 }
 
-func ProbeTracepoints(spec *ebpf.CollectionSpec, ksyms *Kallsyms) (map[string]tracepointInfo, error) {
-	if ksyms.bpfRawTpStart == 0 || ksyms.bpfRawTpStop == 0 || ksyms.bpfRawTpStart >= ksyms.bpfRawTpStop {
-		return nil, fmt.Errorf("invalid %s(%d) and %s(%d)", bpfRawTpStart, ksyms.bpfRawTpStart, bpfRawTpStop, ksyms.bpfRawTpStop)
-	}
-
-	kernelSpec, err := btf.LoadKernelSpec()
-	if err != nil {
-		return nil, fmt.Errorf("failed to load kernel btf: %w", err)
-	}
-
-	bpfRawTp, err := kernelSpec.AnyTypeByName("bpf_raw_event_map")
-	if err != nil {
-		return nil, fmt.Errorf("failed to find bpf_raw_event_map btf: %w", err)
-	}
-	size, err := btf.Sizeof(bpfRawTp)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get size of struct bpf_raw_event_map: %w", err)
-	}
+func probeTracepoints(spec *ebpf.CollectionSpec, ksyms *Kallsyms, kernelSpec *btf.Spec, rawEventSz int, start, total uint64) (map[string]tracepointInfo, error) {
+	size := rawEventSz
 	if size == 0 {
 		return nil, errors.New("size of struct bpf_raw_event_map must not be 0")
 	}
 
-	start := ksyms.bpfRawTpStart
-	total := (ksyms.bpfRawTpStop - ksyms.bpfRawTpStart) / uint64(size)
-
-	tps := make(map[string]tracepointInfo)
+	tps := make(map[string]tracepointInfo, total)
 	for total > 0 {
 		cnt := min(total, tpMax)
 
@@ -151,4 +132,32 @@ func ProbeTracepoints(spec *ebpf.CollectionSpec, ksyms *Kallsyms) (map[string]tr
 	}
 
 	return tps, nil
+}
+
+func ProbeTracepoints(spec *ebpf.CollectionSpec, ksyms *Kallsyms) (map[string]tracepointInfo, error) {
+	if ksyms.bpfRawTpStart == 0 || ksyms.bpfRawTpStop == 0 || ksyms.bpfRawTpStart >= ksyms.bpfRawTpStop {
+		return nil, fmt.Errorf("invalid %s(%d) and %s(%d)", bpfRawTpStart, ksyms.bpfRawTpStart, bpfRawTpStop, ksyms.bpfRawTpStop)
+	}
+
+	kernelSpec, err := btf.LoadKernelSpec()
+	if err != nil {
+		return nil, fmt.Errorf("failed to load kernel btf: %w", err)
+	}
+
+	bpfRawTp, err := kernelSpec.AnyTypeByName("bpf_raw_event_map")
+	if err != nil {
+		return nil, fmt.Errorf("failed to find bpf_raw_event_map btf: %w", err)
+	}
+	size, err := btf.Sizeof(bpfRawTp)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get size of struct bpf_raw_event_map: %w", err)
+	}
+	if size == 0 {
+		return nil, errors.New("size of struct bpf_raw_event_map must not be 0")
+	}
+
+	start := ksyms.bpfRawTpStart
+	total := (ksyms.bpfRawTpStop - ksyms.bpfRawTpStart) / uint64(size)
+
+	return probeTracepoints(spec, ksyms, kernelSpec, size, start, total)
 }

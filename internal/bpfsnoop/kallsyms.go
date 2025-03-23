@@ -22,6 +22,8 @@ const (
 
 	bpfRawTpStart = "__start__bpf_raw_tp"
 	bpfRawTpStop  = "__stop__bpf_raw_tp"
+
+	bpfTraceModules = "bpf_trace_modules"
 )
 
 func isKernelBuiltinMod(mod string) bool {
@@ -65,6 +67,8 @@ type Kallsyms struct {
 
 	bpfRawTpStart uint64
 	bpfRawTpStop  uint64
+
+	bpfTraceModules uint64
 }
 
 // NewKallsyms reads /proc/kallsyms and returns a Kallsyms instance.
@@ -120,18 +124,31 @@ func NewKallsyms() (*Kallsyms, error) {
 				ks.sysBPF = entry.addr
 			}
 		} else if fields[1] == "D" || fields[1] == "d" {
+			setAddr := func(s string, addr *uint64) error {
+				var err error
+				*addr, err = strconv.ParseUint(s, 16, 64)
+				if err != nil {
+					return fmt.Errorf("failed to parse addr %s: %w", s, err)
+				}
+				return nil
+			}
+
 			name := fields[2]
 			switch name {
 			case bpfRawTpStart, bpfRawTpStop:
-				addr, err := strconv.ParseUint(fields[0], 16, 64)
+				if name == bpfRawTpStart {
+					err = setAddr(fields[0], &ks.bpfRawTpStart)
+				} else {
+					err = setAddr(fields[0], &ks.bpfRawTpStop)
+				}
 				if err != nil {
-					return nil, fmt.Errorf("failed to parse addr %s: %w", fields[0], err)
+					return nil, err
 				}
 
-				if name == bpfRawTpStart {
-					ks.bpfRawTpStart = addr
-				} else {
-					ks.bpfRawTpStop = addr
+			case bpfTraceModules:
+				err = setAddr(fields[0], &ks.bpfTraceModules)
+				if err != nil {
+					return nil, err
 				}
 			}
 		}
