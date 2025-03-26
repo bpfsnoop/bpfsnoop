@@ -14,8 +14,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/bpfsnoop/gapstone"
 	"github.com/cilium/ebpf/ringbuf"
-	"github.com/knightsc/gapstone"
 	"golang.org/x/sync/errgroup"
 	"golang.org/x/sys/unix"
 

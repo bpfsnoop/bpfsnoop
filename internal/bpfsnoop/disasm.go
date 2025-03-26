@@ -13,8 +13,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/bpfsnoop/gapstone"
 	"github.com/fatih/color"
-	"github.com/knightsc/gapstone"
 
 	"github.com/bpfsnoop/bpfsnoop/internal/assert"
 )

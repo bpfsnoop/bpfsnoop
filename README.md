@@ -17,7 +17,7 @@ Please check [bpfsnoop.com](https://bpfsnoop.com) for more details.
 
 - [cilium/ebpf](https://github.com/cilium/ebpf) for interacting with bpf subsystem.
 - [daludaluking/addr2line](https://github.com/daludaluking/addr2line) for translating addresses to file and line number by parsing debug info from vmlinux.
-- [knightsc/gapstone](https://github.com/knightsc/gapstone) for disassembling machine native instructions.
+- [bpfsnoop/gapstone](https://github.com/bpfsnoop/gapstone) for disassembling machine native instructions.
 - [jschwinger233/elibpcap](github.com/jschwinger233/elibpcap) for injecting pcap-filter expressions to bpf stubs.
 
 ## License

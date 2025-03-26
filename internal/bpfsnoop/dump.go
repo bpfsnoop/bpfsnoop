@@ -10,10 +10,10 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/bpfsnoop/gapstone"
 	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/btf"
 	"github.com/fatih/color"
-	"github.com/knightsc/gapstone"
 
 	"github.com/bpfsnoop/bpfsnoop/internal/assert"
 )
