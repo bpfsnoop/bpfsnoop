@@ -33,6 +33,7 @@ func DetectSupportedMaxArg(traceableSpec, spec *ebpf.CollectionSpec, ksyms *Kall
 	prog := spec.Programs[TracingProgName(mode)]
 	pktFilter.clear(prog)
 	pktOutput.clear(prog)
+	argOutput.clear(prog)
 	clearFilterArgSubprog(prog)
 
 	attachType := ebpf.AttachTraceFExit

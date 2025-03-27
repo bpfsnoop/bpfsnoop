@@ -52,7 +52,7 @@ func NewBPFProgs(pflags []ProgFlag, onlyPrepare, disasm bool) (*bpfProgs, error)
 	}
 
 	for id, prog := range progs.progs {
-		if err := progs.addProg(prog, id, false); err != nil {
+		if err := progs.addProg(prog, id, nil, false); err != nil {
 			return nil, err
 		}
 	}
@@ -60,8 +60,8 @@ func NewBPFProgs(pflags []ProgFlag, onlyPrepare, disasm bool) (*bpfProgs, error)
 	return &progs, nil
 }
 
-func (b *bpfProgs) addProg(prog *ebpf.Program, id ebpf.ProgramID, isBpfsnoop bool) error {
-	progInfo, err := newBPFProgInfo(prog)
+func (b *bpfProgs) addProg(prog *ebpf.Program, id ebpf.ProgramID, info *ebpf.ProgramInfo, isBpfsnoop bool) error {
+	progInfo, err := b.newBPFProgInfo(prog, id, info)
 	if err != nil {
 		return fmt.Errorf("failed to create BPF program info for ID(%d): %w", id, err)
 	}
@@ -85,7 +85,7 @@ func (b *bpfProgs) AddProgs(progs []*ebpf.Program, isBpfsnoop bool) error {
 			return fmt.Errorf("failed to get prog ID")
 		}
 
-		err = b.addProg(prog, id, isBpfsnoop)
+		err = b.addProg(prog, id, info, isBpfsnoop)
 		if err != nil {
 			return fmt.Errorf("failed to add BPF program: %w", err)
 		}

@@ -5,6 +5,7 @@ package bpfsnoop
 
 import (
 	"fmt"
+	"slices"
 
 	"github.com/Asphaltt/mybtf"
 	"github.com/cilium/ebpf"
@@ -78,8 +79,13 @@ func (p *bpfProgs) canTrace(prog *ebpf.Program, id ebpf.ProgramID) bool {
 		return true
 	}
 
-	return link.attachType != ebpf.AttachTraceFEntry &&
-		link.attachType != ebpf.AttachTraceFExit
+	if slices.Contains([]ebpf.AttachType{ebpf.AttachTraceFEntry, ebpf.AttachTraceFExit}, link.attachType) {
+		// fentry/fexit can be traced if not attached to another prog since v6.8
+		// kernel.
+		return link.attachProg == 0
+	}
+
+	return true
 }
 
 func (p *bpfProgs) addTracing(id ebpf.ProgramID, funcName string, prog *ebpf.Program) error {
@@ -115,6 +121,26 @@ func (p *bpfProgs) addTracing(id ebpf.ProgramID, funcName string, prog *ebpf.Pro
 	idx, err := getProgFunc(fns, funcName)
 	if err != nil {
 		return fmt.Errorf("failed to get func for %s: %w", funcName, err)
+	}
+
+	if idx != 0 && !tailcallInfo.fixedTailcallInfiniteLoopCausedByTrampoline {
+		// Skip to trace those tail_call_reachable subprogs. See
+		// https://lore.kernel.org/all/20230912150442.2009-3-hffilwlqm@gmail.com/
+		// for more details.
+
+		jitedInsns, ok := info.JitedInsns()
+		if !ok {
+			return fmt.Errorf("failed to get jited insns for %d", id)
+		}
+
+		// It's unable to check whether the subprog is tail_call_reachable, so
+		// check the entry prog instead.
+
+		insns := jitedInsns
+		if isTailcallReachable(insns) {
+			VerboseLog("Skipped tracing tail_call_reachable subprog %s of prog %s", funcName, fns[0].Func.Name)
+			return nil
+		}
 	}
 
 	params, err := getFuncParams(fns[idx].Func)

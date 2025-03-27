@@ -4,6 +4,7 @@
 #include "vmlinux.h"
 #include "bpf_helpers.h"
 #include "bpf_core_read.h"
+#include "bpf_tracing.h"
 
 #define TP_MAX 256
 
@@ -32,7 +33,7 @@ probe_tp_info(struct bpf_raw_event_map *btp, int i)
 }
 
 SEC("fentry/__x64_sys_nanosleep")
-int probe(struct pt_regs *regs)
+int BPF_PROG(probe, struct pt_regs *regs)
 {
     struct bpf_raw_event_map *btp = (typeof(btp)) __start;
 

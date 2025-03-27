@@ -74,10 +74,17 @@ type bpfProgInfo struct {
 	isBpfsnoopProg bool
 }
 
-func newBPFProgInfo(prog *ebpf.Program) (*bpfProgInfo, error) {
-	pinfo, err := prog.Info()
-	if err != nil {
-		return nil, fmt.Errorf("failed to get prog info: %w", err)
+func (b *bpfProgs) newBPFProgInfo(prog *ebpf.Program, id ebpf.ProgramID, pinfo *ebpf.ProgramInfo) (*bpfProgInfo, error) {
+	if pinfo == nil {
+		var ok bool
+		pinfo, ok = b.infos[id]
+		if !ok {
+			var err error
+			pinfo, err = prog.Info()
+			if err != nil {
+				return nil, fmt.Errorf("failed to get prog info: %w", err)
+			}
+		}
 	}
 
 	funcInfos, err := pinfo.FuncInfos()

@@ -65,7 +65,8 @@ func (p progFlags) allID() bool {
 		len(p.tags) == 0 &&
 		len(p.names) == 0 &&
 		len(p.pinnedPaths) == 0 &&
-		len(p.pids) == 0
+		len(p.pids) == 0 &&
+		!p.all
 }
 
 func (p *bpfProgs) prepareProgInfoByID(id ebpf.ProgramID, funcName string) error {

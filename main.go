@@ -72,9 +72,19 @@ func main() {
 
 	traceableBPFSpec, err := loadTraceable()
 	assert.NoErr(err, "Failed to load traceable bpf spec: %v")
+
 	bpfSpec, err := loadBpfsnoop()
 	assert.NoErr(err, "Failed to load bpf spec: %v")
 	delete(bpfSpec.Programs, bpfsnoop.TracingProgName(flags.OtherMode()))
+
+	readSpec, err := loadRead()
+	assert.NoErr(err, "Failed to load read bpf spec: %v")
+
+	tailcallSpec, err := loadTailcall()
+	assert.NoErr(err, "Failed to load tailcall bpf spec: %v")
+
+	err = bpfsnoop.ProbeTailcallIssue(bpfSpec, tailcallSpec, readSpec)
+	assert.NoVerifierErr(err, "Failed to probe tailcall info: %v")
 
 	err = bpfSpec.Variables["PID"].Set(uint32(os.Getpid()))
 	assert.NoErr(err, "Failed to set PID: %v")

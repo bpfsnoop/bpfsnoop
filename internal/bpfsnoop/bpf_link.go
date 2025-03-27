@@ -13,6 +13,7 @@ import (
 type bpfLinkInfo struct {
 	progID     ebpf.ProgramID
 	attachType ebpf.AttachType
+	attachProg ebpf.ProgramID
 	isTracing  bool
 }
 
@@ -39,6 +40,7 @@ func newBPFLinks() (*bpfLinks, error) {
 		links.links[info.Program] = bpfLinkInfo{
 			progID:     info.Program,
 			attachType: ebpf.AttachType(tracing.AttachType),
+			attachProg: ebpf.ProgramID(tracing.TargetObjId),
 			isTracing:  true,
 		}
 	}

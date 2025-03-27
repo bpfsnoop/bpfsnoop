@@ -4,6 +4,7 @@
 #include "vmlinux.h"
 #include "bpf_helpers.h"
 #include "bpf_core_read.h"
+#include "bpf_tracing.h"
 
 #define TP_MODULE_MAX 256
 
@@ -42,7 +43,7 @@ probe_module_info(struct bpf_trace_module *mod, int i)
 }
 
 SEC("fentry/__x64_sys_nanosleep")
-int probe(struct pt_regs *regs)
+int BPF_PROG(probe, struct pt_regs *regs)
 {
     struct list_head *start = (typeof(start)) __start, *next;
     struct list_head *modules = (typeof(modules)) __head;

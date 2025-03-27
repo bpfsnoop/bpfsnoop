@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"strings"
 	"sync"
 
 	"github.com/Asphaltt/mybtf"
@@ -322,6 +323,10 @@ func (t *bpfTracing) traceProg(spec *ebpf.CollectionSpec, reusedMaps map[string]
 	})
 	if err != nil {
 		_ = prog.Close()
+		if strings.Contains(err.Error(), "Cannot recursively attach") {
+			VerboseLog("Skipped tracing a tracing prog %s", info.fn.Name)
+			return nil
+		}
 		return fmt.Errorf("failed to attach tracing: %w", err)
 	}
 

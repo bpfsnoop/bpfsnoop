@@ -36,7 +36,19 @@ TRACEPOINT_BPF_SRC := bpf/tracepoint.c
 TRACEPOINT_MODULE_BPF_OBJ := tracepoint_module_bpfel.o tracepoint_module_bpfeb.o
 TRACEPOINT_MODULE_BPF_SRC := bpf/tracepoint_module.c
 
-BPF_OBJS := $(BPFSNOOP_BPF_OBJ) $(FEAT_BPF_OBJ) $(TRACEABLE_BPF_OBJ) $(TRACEPOINT_BPF_OBJ) $(TRACEPOINT_MODULE_BPF_OBJ)
+READ_BPF_OBJ := read_bpfel.o read_bpfeb.o
+READ_BPF_SRC := bpf/read.c
+
+TAILCALL_BPF_OBJ := tailcall_bpfel.o tailcall_bpfeb.o
+TAILCALL_BPF_SRC := bpf/tailcall.c
+
+BPF_OBJS := $(BPFSNOOP_BPF_OBJ) \
+			$(READ_BPF_OBJ) \
+			$(FEAT_BPF_OBJ) \
+			$(TAILCALL_BPF_OBJ) \
+			$(TRACEABLE_BPF_OBJ) \
+			$(TRACEPOINT_BPF_OBJ) \
+			$(TRACEPOINT_MODULE_BPF_OBJ)
 
 BPFSNOOP_OBJ := bpfsnoop
 BPFSNOOP_SRC := $(shell find internal -type f -name '*.go') main.go

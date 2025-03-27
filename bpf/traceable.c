@@ -3,6 +3,7 @@
 
 #include "vmlinux.h"
 #include "bpf_helpers.h"
+#include "bpf_tracing.h"
 
 #define ADDR_CAP 1024
 
@@ -29,7 +30,7 @@ is_traceable(u64 addr)
 }
 
 SEC("fentry/__x64_sys_nanosleep")
-int detect(struct pt_regs *regs)
+int BPF_PROG(detect, struct pt_regs *regs)
 {
     if (run)
         return BPF_OK;

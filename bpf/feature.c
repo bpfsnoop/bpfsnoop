@@ -16,7 +16,7 @@ struct bpf_features {
 } features;
 
 SEC("fentry/__x64_sys_nanosleep")
-int detect(struct pt_regs *regs)
+int BPF_PROG(detect, struct pt_regs *regs)
 {
     features.kprobe_happened = true;
 
