@@ -66,7 +66,7 @@ func probeTailcallInfo(prog *ebpf.Program, readSpec *ebpf.CollectionSpec) (Tailc
 	// Check whether there is `pushq %rax` insn in the trampoline. If so, the
 	// kernel has fixed the tailcall infinite loop issue caused by trampoline.
 
-	offset := binary.NativeEndian.Uint32(jitedInsns[1:])
+	offset := binary.NativeEndian.Uint32(jinsns[1:])
 	kaddrTramp := kaddr + 5 /* next insn */ + uintptr(offset) /* callq target */
 
 	data, err := readKernel(readSpec, uint64(kaddrTramp), 512)
