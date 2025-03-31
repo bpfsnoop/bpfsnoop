@@ -18,6 +18,7 @@ volatile const __u32 PID = -1;
 __u32 ready SEC(".data.ready") = 0;
 
 volatile const __u64 FUNC_IP = 0;
+volatile const __u32 CPU_MASK = 0xFFFF;
 
 #define MAX_STACK_DEPTH 50
 struct {
@@ -78,7 +79,7 @@ emit_bpfsnoop_event(void *ctx)
     if (!ready)
         return BPF_OK;
 
-    cpu = bpf_get_smp_processor_id();
+    cpu = bpf_get_smp_processor_id() & CPU_MASK;
     lbr = &bpfsnoop_lbr_buff[cpu];
     pkt = &bpfsnoop_pkt_buff[cpu];
     str = &bpfsnoop_str_buff[cpu];

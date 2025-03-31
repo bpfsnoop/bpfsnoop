@@ -15,12 +15,14 @@ import (
 	"time"
 
 	"github.com/bpfsnoop/gapstone"
+	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/ringbuf"
 	"golang.org/x/sync/errgroup"
 	"golang.org/x/sys/unix"
 
 	"github.com/bpfsnoop/bpfsnoop/internal/assert"
 	"github.com/bpfsnoop/bpfsnoop/internal/bpfsnoop"
+	"github.com/bpfsnoop/bpfsnoop/internal/mathx"
 )
 
 func main() {
@@ -75,6 +77,12 @@ func main() {
 
 	bpfSpec, err := loadBpfsnoop()
 	assert.NoErr(err, "Failed to load bpf spec: %v")
+
+	numCPU, err := ebpf.PossibleCPU()
+	assert.NoErr(err, "Failed to get possible cpu count: %v")
+
+	err = bpfSpec.Variables["CPU_MASK"].Set(uint32(mathx.Mask(numCPU)))
+	assert.NoErr(err, "Failed to set CPU_MASK: %v")
 
 	readSpec, err := loadRead()
 	assert.NoErr(err, "Failed to load read bpf spec: %v")
