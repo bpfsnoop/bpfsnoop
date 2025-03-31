@@ -36,7 +36,7 @@ func preparePacketFilter(expr string) packetFilter {
 	return pf
 }
 
-func (pf *packetFilter) filterSkb(prog *ebpf.ProgramSpec, index int, t btf.Type, getFuncArg bool) error {
+func (pf *packetFilter) filterSkb(prog *ebpf.ProgramSpec, index int, t btf.Type) error {
 	if pf.expr == "" {
 		return nil
 	}
@@ -67,13 +67,7 @@ func (pf *packetFilter) filterSkb(prog *ebpf.ProgramSpec, index int, t btf.Type,
 	pf.clearSpecializedStubs(prog)
 	clearFilterSubprog(prog, filterXdpFunc)
 
-	var insns asm.Instructions
-	if getFuncArg {
-		insns = genGetFuncArg(index, asm.R1) // R1 = skb
-	} else {
-		insns = genAccessArg(index, asm.R1)
-	}
-	insns = append(insns,
+	insns := append(genAccessArg(index, asm.R1),
 		asm.Call.Label(filterSkbFunc),
 		asm.Return(),
 	)
@@ -84,7 +78,7 @@ func (pf *packetFilter) filterSkb(prog *ebpf.ProgramSpec, index int, t btf.Type,
 	return nil
 }
 
-func (pf *packetFilter) filterXdp(prog *ebpf.ProgramSpec, index int, t btf.Type, getFuncArg bool) error {
+func (pf *packetFilter) filterXdp(prog *ebpf.ProgramSpec, index int, t btf.Type) error {
 	if pf.expr == "" {
 		return nil
 	}
@@ -103,13 +97,7 @@ func (pf *packetFilter) filterXdp(prog *ebpf.ProgramSpec, index int, t btf.Type,
 	clearFilterSubprog(prog, filterSkbFunc)
 	clearFilterSubprog(prog, pcapFilterL3Stub)
 
-	var insns asm.Instructions
-	if getFuncArg {
-		insns = genGetFuncArg(index, asm.R1) // R1 = xdp
-	} else {
-		insns = genAccessArg(index, asm.R1)
-	}
-	insns = append(insns,
+	insns := append(genAccessArg(index, asm.R1),
 		asm.Call.Label(filterXdpFunc),
 		asm.Return(),
 	)

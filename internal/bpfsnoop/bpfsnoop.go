@@ -36,7 +36,8 @@ type LbrData struct {
 }
 
 type FnData struct {
-	Args [MAX_BPF_FUNC_ARGS][2]uint64 // raw data + pointed data
+	Retval [2]uint64
+	Args   [MAX_BPF_FUNC_ARGS][2]uint64 // raw data + pointed data
 }
 
 type StrData struct {
@@ -54,7 +55,6 @@ func (s *StrData) ret() string {
 
 type Event struct {
 	SessID  uint64
-	Retval  int64
 	FuncIP  uintptr
 	CPU     uint32
 	Pid     uint32
@@ -171,14 +171,14 @@ func Run(reader *ringbuf.Reader, progs *bpfProgs, addr2line *Addr2Line, ksyms *K
 		var funcProto *btf.Func
 		var funcArgs []funcArgumentOutput
 		var funcParams []FuncParamFlags
-		var isRetStr bool
+		var retParam FuncParamFlags
 
 		if progInfo, ok := progs.funcs[event.FuncIP]; ok {
 			targetName = progInfo.funcName + "[bpf]"
 			funcProto = progInfo.funcProto
 			funcArgs = progInfo.funcArgs
 			funcParams = progInfo.funcParams
-			isRetStr = progInfo.isRetStr
+			retParam = progInfo.retParam
 		} else {
 			ksym, ok := ksyms.find(event.FuncIP)
 			if ok {
@@ -192,7 +192,7 @@ func Run(reader *ringbuf.Reader, progs *bpfProgs, addr2line *Addr2Line, ksyms *K
 				funcProto = fn.Func
 				funcArgs = fn.Args
 				funcParams = fn.Prms
-				isRetStr = fn.IsRetStr
+				retParam = fn.Ret
 
 				if fn.IsTp {
 					targetName = fn.Func.Name + "[tp]"
@@ -210,7 +210,7 @@ func Run(reader *ringbuf.Reader, progs *bpfProgs, addr2line *Addr2Line, ksyms *K
 			}
 		}
 
-		useStrData := isRetStr
+		useStrData := retParam.IsStr
 		if !useStrData {
 			for _, prm := range funcParams {
 				useStrData = useStrData || prm.IsStr
@@ -276,10 +276,12 @@ func Run(reader *ringbuf.Reader, progs *bpfProgs, addr2line *Addr2Line, ksyms *K
 		fmt.Fprintf(&sb, ")")
 
 		if printRetval {
-			retval := fmt.Sprintf("%d/%#x", event.Retval, uint64(event.Retval))
+			retval := fmt.Sprintf("%d/%#x", event.Func.Retval[0], uint64(event.Func.Retval[0]))
 			if funcProto != nil {
 				rettyp := funcProto.Type.(*btf.FuncProto).Return
-				retval = btfx.ReprFuncReturn(rettyp, event.Retval, strData.ret(), findSymbol)
+				retval = btfx.ReprFuncReturn(rettyp, retParam.IsStr,
+					retParam.IsNumberPtr, event.Func.Retval[0], event.Func.Retval[1],
+					strData.ret(), findSymbol)
 			}
 			if colorOutput {
 				color.New(color.FgGreen).Fprintf(&sb, " retval")

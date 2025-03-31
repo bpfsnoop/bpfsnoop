@@ -47,12 +47,12 @@ type FuncParamFlags struct {
 }
 
 type KFunc struct {
-	Ksym     *KsymEntry
-	Func     *btf.Func
-	Args     []funcArgumentOutput
-	Prms     []FuncParamFlags
-	IsRetStr bool
-	IsTp     bool
+	Ksym *KsymEntry
+	Func *btf.Func
+	Args []funcArgumentOutput
+	Prms []FuncParamFlags
+	Ret  FuncParamFlags
+	IsTp bool
 }
 
 func (k *KFunc) Name() string {
@@ -94,7 +94,7 @@ func matchKernelFunc(matches []*kfuncMatch, fn *btf.Func, maxArgs int, ksyms *Ka
 		return nil, false
 	}
 
-	params, err := getFuncParams(fn)
+	params, ret, err := getFuncParams(fn)
 	if err != nil {
 		verboseLogIf(!silent, "Failed to get params for %s: %v", fn.Name, err)
 		return nil, false
@@ -104,7 +104,7 @@ func matchKernelFunc(matches []*kfuncMatch, fn *btf.Func, maxArgs int, ksyms *Ka
 		if MAX_BPF_FUNC_ARGS_PREV < len(funcProto.Params) && len(funcProto.Params) <= MAX_BPF_FUNC_ARGS {
 			kf := KFunc{Ksym: ksym, Func: fn}
 			kf.Prms = params
-			kf.IsRetStr = mybtf.IsConstCharPtr(funcProto.Return)
+			kf.Ret = ret
 			return &kf, true
 		}
 		return nil, false
@@ -113,7 +113,7 @@ func matchKernelFunc(matches []*kfuncMatch, fn *btf.Func, maxArgs int, ksyms *Ka
 	if len(funcProto.Params) <= maxArgs {
 		kf := KFunc{Ksym: ksym, Func: fn}
 		kf.Prms = params
-		kf.IsRetStr = mybtf.IsConstCharPtr(funcProto.Return)
+		kf.Ret = ret
 		return &kf, true
 	}
 

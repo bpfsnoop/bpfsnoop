@@ -8,7 +8,6 @@ const (
 	lbrConfigFlagOutputStackIdx
 	lbrConfigFlagOutputPktIdx
 	lbrConfigFlagOutputArgIdx
-	lbrConfigFlagIsRetStrIdx
 )
 
 type BpfsnoopConfig struct {
@@ -16,6 +15,9 @@ type BpfsnoopConfig struct {
 	FilterPid uint32
 	FnArgs    [MAX_BPF_FUNC_ARGS]ParamFlags
 	FnArgsNr  uint32
+	FnRet     ParamFlags
+	WithRet   bool
+	Pad       uint8
 }
 
 func (cfg *BpfsnoopConfig) SetOutputLbr(v bool) {
@@ -39,11 +41,5 @@ func (cfg *BpfsnoopConfig) SetOutputPktTuple(v bool) {
 func (cfg *BpfsnoopConfig) SetOutputArgData(v bool) {
 	if v {
 		cfg.Flags |= 1 << lbrConfigFlagOutputArgIdx
-	}
-}
-
-func (cfg *BpfsnoopConfig) SetIsRetStr(v bool) {
-	if v {
-		cfg.Flags |= 1 << lbrConfigFlagIsRetStrIdx
 	}
 }

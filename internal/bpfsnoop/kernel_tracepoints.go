@@ -9,8 +9,6 @@ import (
 
 	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/btf"
-
-	"github.com/bpfsnoop/bpfsnoop/internal/btfx"
 )
 
 type Tracepoints map[string]*KFunc
@@ -45,7 +43,7 @@ func matchKernelTracepoints(tps []string, tpInfos map[string]tracepointInfo, sil
 			continue
 		}
 
-		params, err := getFuncParams(&fn)
+		params, ret, err := getFuncParams(&fn)
 		if err != nil {
 			verboseLogIf(!silent, "Failed to prepare params info for tracepoint %s: %w", tpName, err)
 			continue
@@ -53,11 +51,11 @@ func matchKernelTracepoints(tps []string, tpInfos map[string]tracepointInfo, sil
 
 		fn.Name = tpName
 		ktps[tpName] = &KFunc{
-			Ksym:     &KsymEntry{name: tpName},
-			Func:     &fn,
-			Prms:     params,
-			IsRetStr: btfx.IsStr(fp.Return),
-			IsTp:     true,
+			Ksym: &KsymEntry{name: tpName},
+			Func: &fn,
+			Prms: params,
+			Ret:  ret,
+			IsTp: true,
 		}
 	}
 

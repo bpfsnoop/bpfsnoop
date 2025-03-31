@@ -115,12 +115,12 @@ output_xdp_tuple(struct bpfsnoop_pkt_data *pkt, __u64 session_id, void *ptr)
 }
 
 static __noinline void
-output_pkt_tuple(void *ctx, struct bpfsnoop_pkt_data *pkt, __u64 session_id)
+output_pkt_data(__u64 *args, struct bpfsnoop_pkt_data *pkt, __u64 session_id)
 {
     /* This function will be rewrote by Go totally. */
     void *ptr = (void *) session_id;
-
-    return ctx ? output_skb_tuple(pkt, session_id, ptr) : output_xdp_tuple(pkt, session_id, ptr);
+    /* Show in `bpfsnoop -p -d`. */
+    if (args) output_skb_tuple(pkt, session_id, ptr); else output_xdp_tuple(pkt, session_id, ptr);
 }
 
 #endif // __BPFSNOOP_PKT_OUTPUT_H_

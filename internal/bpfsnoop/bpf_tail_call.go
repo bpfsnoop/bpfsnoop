@@ -124,11 +124,10 @@ func ProbeTailcallIssue(spec, tailcallSpec, readSpec *ebpf.CollectionSpec) error
 	tcProg := tcColl.Programs[tcProgName]
 
 	spec = spec.Copy()
-	delete(spec.Programs, TracingTpBtfProgName())
 	reusedMaps := PrepareBPFMaps(spec)
 	defer CloseBPFMaps(reusedMaps)
 
-	prog := spec.Programs[TracingProgName(mode)]
+	prog := spec.Programs[TracingProgName()]
 	pktFilter.clear(prog)
 	pktOutput.clear(prog)
 	argOutput.clear(prog)
@@ -152,11 +151,11 @@ func ProbeTailcallIssue(spec, tailcallSpec, readSpec *ebpf.CollectionSpec) error
 	defer coll.Close()
 
 	l, err := link.AttachTracing(link.TracingOptions{
-		Program:    coll.Programs[TracingProgName(mode)],
+		Program:    coll.Programs[TracingProgName()],
 		AttachType: attachType,
 	})
 	if err != nil {
-		return fmt.Errorf("failed to %s bpf prog: %w", TracingProgName(mode), err)
+		return fmt.Errorf("failed to %s bpf prog: %w", TracingProgName(), err)
 	}
 	defer l.Close()
 

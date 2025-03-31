@@ -85,18 +85,15 @@ func prepareFuncArgOutput(exprs []string) argDataOutput {
 	return arg
 }
 
-func (arg *funcArgumentOutput) compile(idx int, t btf.Type, offset int, ctxStale, getFuncArg bool) (int, error) {
+func (arg *funcArgumentOutput) compile(idx int, t btf.Type, offset int, ctxStale bool) (int, error) {
 	var insns asm.Instructions
 	if ctxStale {
 		insns = append(insns,
 			asm.Mov.Reg(asm.R1, asm.R8), // R1 = ctx
 		)
 	}
-	if getFuncArg {
-		insns = append(insns, genGetFuncArg(idx, asm.R3)...)
-	} else {
-		insns = append(insns, genAccessArg(idx, asm.R3)...)
-	}
+
+	insns = append(insns, genAccessArg(idx, asm.R3)...)
 
 	res, err := bice.Access(bice.AccessOptions{
 		Insns:     insns,
@@ -189,7 +186,7 @@ func (arg *argDataOutput) correctArgType(t btf.Type) (btf.Type, error) {
 	return t, nil
 }
 
-func (arg *argDataOutput) matchParams(params []btf.FuncParam, checkArgType, getFuncArg bool) ([]funcArgumentOutput, error) {
+func (arg *argDataOutput) matchParams(params []btf.FuncParam, checkArgType bool) ([]funcArgumentOutput, error) {
 	args := make([]funcArgumentOutput, 0, maxOutputArgCnt)
 
 	ctxStale := false
@@ -213,7 +210,7 @@ func (arg *argDataOutput) matchParams(params []btf.FuncParam, checkArgType, getF
 			}
 
 			a := a
-			size, err := a.compile(i, t, offset, ctxStale, getFuncArg)
+			size, err := a.compile(i, t, offset, ctxStale)
 			if err != nil {
 				return nil, fmt.Errorf("failed to compile arg %s with expr %s: %w", p.Name, a.expr, err)
 			}

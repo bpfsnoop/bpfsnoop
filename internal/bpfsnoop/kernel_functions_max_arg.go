@@ -26,11 +26,10 @@ func DetectSupportedMaxArg(traceableSpec, spec *ebpf.CollectionSpec, ksyms *Kall
 	}
 
 	spec = spec.Copy()
-	delete(spec.Programs, TracingTpBtfProgName())
 	reusedMaps := PrepareBPFMaps(spec)
 	defer CloseBPFMaps(reusedMaps)
 
-	prog := spec.Programs[TracingProgName(mode)]
+	prog := spec.Programs[TracingProgName()]
 	pktFilter.clear(prog)
 	pktOutput.clear(prog)
 	argOutput.clear(prog)

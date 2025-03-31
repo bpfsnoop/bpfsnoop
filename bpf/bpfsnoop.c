@@ -6,9 +6,10 @@
 #include "bpf_map_helpers.h"
 
 #include "bpfsnoop.h"
-#include "bpfsnoop_arg.h"
+#include "bpfsnoop_arg_filter.h"
+#include "bpfsnoop_arg_output.h"
+#include "bpfsnoop_fn_data_output.h"
 #include "bpfsnoop_lbr.h"
-#include "bpfsnoop_str.h"
 #include "bpfsnoop_pkt_filter.h"
 #include "bpfsnoop_pkt_output.h"
 
@@ -34,9 +35,9 @@ struct {
 struct event bpfsnoop_evt_buff[1] SEC(".data.events");
 
 static __always_inline bool
-filter(void *ctx, __u64 session_id)
+filter(__u64 *args, __u64 session_id)
 {
-    return filter_fnarg(ctx) && filter_pkt(ctx, session_id);
+    return filter_arg(args) && filter_pkt(args, session_id);
 }
 
 static __always_inline __u64
@@ -61,12 +62,13 @@ gen_session_id(void)
 }
 
 static __always_inline int
-emit_bpfsnoop_event(void *ctx, volatile __u64 *args, const bool use_args)
+emit_bpfsnoop_event(void *ctx)
 {
     struct bpfsnoop_lbr_data *lbr;
     struct bpfsnoop_str_data *str;
     struct bpfsnoop_pkt_data *pkt;
     struct bpfsnoop_arg_data *arg;
+    __u64 args[MAX_FN_ARGS];
     struct event *evt;
     __u64 retval = 0;
     __u64 session_id;
@@ -89,6 +91,9 @@ emit_bpfsnoop_event(void *ctx, volatile __u64 *args, const bool use_args)
     /* Other filters must be after bpf_get_branch_snapshot() to avoid polluting
      * LBR entries.
      */
+    (void) bpf_probe_read_kernel(args, 8*cfg->fn_args.nr_fn_args, ctx);
+    if (cfg->fn_args.with_retval)
+        (void) bpf_probe_read_kernel(&retval, sizeof(retval), ctx + 8*cfg->fn_args.nr_fn_args);
 
     pid = bpf_get_current_pid_tgid() >> 32;
     if (pid == PID)
@@ -97,15 +102,11 @@ emit_bpfsnoop_event(void *ctx, volatile __u64 *args, const bool use_args)
         return BPF_OK;
 
     session_id = gen_session_id();
-    if (!filter(use_args ? (void *) args : ctx, session_id))
+    if (!filter(args, session_id))
         return BPF_OK;
 
     evt->session_id = session_id;
-    if (!use_args) {
-        bpf_get_func_ret(ctx, (void *) &retval); /* required 5.17 kernel. */
-        evt->func_ret = retval;
-    }
-    evt->func_ip = FUNC_IP ? FUNC_IP : bpf_get_func_ip(ctx); /* required 5.17 kernel. */
+    evt->func_ip = FUNC_IP;
     evt->cpu = cpu;
     evt->pid = pid;
     bpf_get_current_comm(evt->comm, sizeof(evt->comm));
@@ -114,21 +115,13 @@ emit_bpfsnoop_event(void *ctx, volatile __u64 *args, const bool use_args)
         evt->func_stack_id = bpf_get_stackid(ctx, &bpfsnoop_stacks, BPF_F_FAST_STACK_CMP);
     if (cfg->output_lbr)
         output_lbr_data(lbr, session_id);
-    if (use_args) {
-        output_fn_data_vol(evt, str, args);
-        if (cfg->output_pkt)
-            output_pkt_tuple((void *) args, pkt, session_id);
-        if (cfg->output_arg)
-            output_arg_data((void *) args, arg, session_id);
-    } else {
-        output_fn_data(evt, ctx, (void *) retval, str);
-        if (cfg->output_pkt)
-            output_pkt_tuple(ctx, pkt, session_id);
-        if (cfg->output_arg)
-            output_arg_data(ctx, arg, session_id);
-    }
+    output_fn_data(evt, str, args, retval);
+    if (cfg->output_pkt)
+        output_pkt_data(args, pkt, session_id);
+    if (cfg->output_arg)
+        output_arg_data(args, arg, session_id);
 
-    event_sz  = offsetof(struct event, fn_data);
+    event_sz  = offsetof(struct event, fn_data) + sizeof(struct bpfsnoop_fn_arg_data);
     event_sz += sizeof(struct bpfsnoop_fn_arg_data) * cfg->fn_args.nr_fn_args;
     bpf_ringbuf_output(&bpfsnoop_events, evt, event_sz, 0);
 
@@ -136,30 +129,9 @@ emit_bpfsnoop_event(void *ctx, volatile __u64 *args, const bool use_args)
 }
 
 SEC("fexit")
-int BPF_PROG(fexit_fn)
+int BPF_PROG(bpfsnoop_fn)
 {
-    return emit_bpfsnoop_event(ctx, NULL, false);
-}
-
-SEC("fentry")
-int BPF_PROG(fentry_fn)
-{
-    return emit_bpfsnoop_event(ctx, NULL, false);
-}
-
-static __noinline int
-handle_tp_event(void *ctx, volatile __u64 *args)
-{
-    return emit_bpfsnoop_event(ctx, args, true);
-}
-
-SEC("tp_btf")
-int BPF_PROG(tp_btf_fn)
-{
-    /* This function will be rewrote by Go totally. */
-    volatile __u64 args[MAX_FN_ARGS] = {};
-
-    return handle_tp_event(ctx, args);
+    return emit_bpfsnoop_event(ctx);
 }
 
 char __license[] SEC("license") = "GPL";

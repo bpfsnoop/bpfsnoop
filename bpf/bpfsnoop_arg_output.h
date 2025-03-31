@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: GPL-2.0 OR Apache-2.0
 /* Copyright 2025 Leon Hwang */
 
-#ifndef __BPFSNOOP_ARG_H_
-#define __BPFSNOOP_ARG_H_
+#ifndef __BPFSNOOP_ARG_OUTPUT_H_
+#define __BPFSNOOP_ARG_OUTPUT_H_
 
 #include "vmlinux.h"
 
@@ -31,11 +31,11 @@ __output_arg_data(struct bpfsnoop_arg_data *data, __u64 session_id)
 }
 
 static __noinline void
-output_arg_data(void *ctx, struct bpfsnoop_arg_data *data, __u64 session_id)
+output_arg_data(__u64 *args, struct bpfsnoop_arg_data *data, __u64 session_id)
 {
     /* This function will be rewrote by Go totally. */
     /* Keeping one line is to show in `bpfsnoop -d -p`. */
-    if (ctx) __output_arg_data(data, session_id);
+    if (args) __output_arg_data(data, session_id);
 }
 
-#endif // __BPFSNOOP_ARG_H_
+#endif // __BPFSNOOP_ARG_OUTPUT_H_

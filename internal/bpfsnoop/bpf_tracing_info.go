@@ -20,12 +20,14 @@ type bpfTracingInfo struct {
 	funcIP   uintptr
 	funcName string
 	params   []FuncParamFlags
+	ret      FuncParamFlags
 }
 
-func getFuncParams(fn *btf.Func) ([]FuncParamFlags, error) {
+func getFuncParams(fn *btf.Func) ([]FuncParamFlags, FuncParamFlags, error) {
 	strUsed := false // Only one string is allowed
 	fnParams := fn.Type.(*btf.FuncProto).Params
 	params := make([]FuncParamFlags, 0, len(fnParams))
+	ret := FuncParamFlags{}
 	for _, p := range fnParams {
 		v := mybtf.IsConstCharPtr(p.Type)
 		isStr := v && !strUsed
@@ -33,11 +35,11 @@ func getFuncParams(fn *btf.Func) ([]FuncParamFlags, error) {
 
 		size, err := btf.Sizeof(p.Type)
 		if err != nil {
-			return nil, fmt.Errorf("failed to get size of type %v: %w", p.Type, err)
+			return nil, ret, fmt.Errorf("failed to get size of type %v: %w", p.Type, err)
 		}
 
 		if size > 16 {
-			return nil, fmt.Errorf("size of type %v is too large: %d", p.Type, size)
+			return nil, ret, fmt.Errorf("size of type %v is too large: %d", p.Type, size)
 		}
 		if size > 8 {
 			// struct arg occupies 2 regs
@@ -56,7 +58,12 @@ func getFuncParams(fn *btf.Func) ([]FuncParamFlags, error) {
 			},
 		})
 	}
-	return params, nil
+
+	rettype := fn.Type.(*btf.FuncProto).Return
+	ret.IsStr = mybtf.IsConstCharPtr(rettype)
+	ret.IsNumberPtr = btfx.IsNumberPointer(rettype)
+
+	return params, ret, nil
 }
 
 func getProgFunc(fns btf.FuncOffsets, funcName string) (int, error) {
@@ -143,7 +150,7 @@ func (p *bpfProgs) addTracing(id ebpf.ProgramID, funcName string, prog *ebpf.Pro
 		}
 	}
 
-	params, err := getFuncParams(fns[idx].Func)
+	params, ret, err := getFuncParams(fns[idx].Func)
 	if err != nil {
 		return fmt.Errorf("failed to get func params for %s: %w", funcName, err)
 	}
@@ -166,6 +173,7 @@ func (p *bpfProgs) addTracing(id ebpf.ProgramID, funcName string, prog *ebpf.Pro
 		funcIP:   jitedKsymAddrs[idx],
 		funcName: funcName,
 		params:   params,
+		ret:      ret,
 	}
 
 	return nil

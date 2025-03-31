@@ -14,11 +14,9 @@ import (
 var hasEndbr bool
 
 type BPFFeatures struct {
-	KprobeHappened    bool
+	Run               bool
 	HasRingbuf        bool
 	HasBranchSnapshot bool
-	HasFuncRet        bool
-	HasFuncIP         bool
 	HasGetStackID     bool
 }
 
@@ -43,7 +41,7 @@ func DetectBPFFeatures(spec *ebpf.CollectionSpec) error {
 		return fmt.Errorf("failed to lookup .bss: %w", err)
 	}
 
-	if !feat.KprobeHappened {
+	if !feat.Run {
 		return errors.New("detection not happened")
 	}
 
@@ -53,14 +51,6 @@ func DetectBPFFeatures(spec *ebpf.CollectionSpec) error {
 
 	if !feat.HasBranchSnapshot && outputLbr {
 		return errors.New("bpf_get_branch_snapshot() helper not supported")
-	}
-
-	if !feat.HasFuncRet {
-		return errors.New("bpf_get_func_ret() helper not supported")
-	}
-
-	if !feat.HasFuncIP {
-		return errors.New("bpf_get_func_ip() helper not supported")
 	}
 
 	if outputFuncStack && !feat.HasGetStackID {

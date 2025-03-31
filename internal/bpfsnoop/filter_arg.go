@@ -19,7 +19,7 @@ import (
 )
 
 const (
-	injectStubFilterArg = "filter_fnarg"
+	injectStubFilterArg = "filter_arg"
 )
 
 var argFilter []funcArgument
@@ -109,7 +109,7 @@ func (arg *funcArgument) clear(prog *ebpf.ProgramSpec) {
 	clearFilterSubprog(prog, injectStubFilterArg)
 }
 
-func (arg *funcArgument) inject(prog *ebpf.ProgramSpec, idx int, t btf.Type, getFuncArg bool) error {
+func (arg *funcArgument) inject(prog *ebpf.ProgramSpec, idx int, t btf.Type) error {
 	if arg.expr == "" {
 		return nil
 	}
@@ -124,11 +124,7 @@ func (arg *funcArgument) inject(prog *ebpf.ProgramSpec, idx int, t btf.Type, get
 		return fmt.Errorf("failed to compile expression %s: %w", arg.expr, err)
 	}
 
-	if getFuncArg {
-		insns = append(genGetFuncArg(idx, asm.R1), insns...)
-	} else {
-		insns = append(genAccessArg(idx, asm.R1), insns...)
-	}
+	insns = append(genAccessArg(idx, asm.R1), insns...)
 
 	injectInsns(prog, injectStubFilterArg, insns)
 

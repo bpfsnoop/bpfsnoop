@@ -75,7 +75,6 @@ func main() {
 
 	bpfSpec, err := loadBpfsnoop()
 	assert.NoErr(err, "Failed to load bpf spec: %v")
-	delete(bpfSpec.Programs, bpfsnoop.TracingProgName(flags.OtherMode()))
 
 	readSpec, err := loadRead()
 	assert.NoErr(err, "Failed to load read bpf spec: %v")

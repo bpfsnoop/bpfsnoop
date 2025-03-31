@@ -26,6 +26,7 @@ type bpfProgFuncInfo struct {
 	funcName   string
 	funcProto  *btf.Func
 	funcParams []FuncParamFlags
+	retParam   FuncParamFlags
 	funcArgs   []funcArgumentOutput
 	isRetStr   bool
 
@@ -120,7 +121,7 @@ func (b *bpfProgs) newBPFProgInfo(prog *ebpf.Program, id ebpf.ProgramID, pinfo *
 		info.kaddrRange.end = info.kaddrRange.start + uintptr(funcLen)
 		info.funcName = strings.TrimSpace(funcInfos[i].Func.Name)
 		info.funcProto = funcInfos[i].Func
-		info.funcParams, _ /* won't fail for bpf progs */ = getFuncParams(funcInfos[i].Func)
+		info.funcParams, info.retParam, _ /* won't fail for bpf progs */ = getFuncParams(funcInfos[i].Func)
 		info.isRetStr = mybtf.IsConstCharPtr(funcInfos[i].Func.Type.(*btf.FuncProto).Return)
 
 		for i, kaddr := range jitedLineInfos {

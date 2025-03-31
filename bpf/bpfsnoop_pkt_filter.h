@@ -47,12 +47,12 @@ filter_xdp(struct xdp_buff *xdp)
 }
 
 static __noinline bool
-filter_pkt(void *ctx, __u64 aux /* auxiliary */)
+filter_pkt(__u64 *args, __u64 aux /* auxiliary */)
 {
     /* This function will be rewrote by Go totally. */
     void *ptr = (void *) aux;
 
-    return ctx ? filter_skb((struct sk_buff *) ptr) : filter_xdp((struct xdp_buff *) ptr);
+    return args ? filter_skb((struct sk_buff *) ptr) : filter_xdp((struct xdp_buff *) ptr);
 }
 
 #endif // __BPFSNOOP_PKT_FILTER_H_

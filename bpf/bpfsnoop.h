@@ -17,6 +17,9 @@ struct bpfsnoop_fn_arg_flags {
 struct bpfsnoop_fn_args {
     struct bpfsnoop_fn_arg_flags args[MAX_FN_ARGS];
     __u32 nr_fn_args;
+    struct bpfsnoop_fn_arg_flags ret;
+    bool with_retval;
+    __u8 pad;
 } __attribute__((packed));
 
 struct bpfsnoop_config {
@@ -24,8 +27,7 @@ struct bpfsnoop_config {
     __u32 output_stack:1;
     __u32 output_pkt:1;
     __u32 output_arg:1;
-    __u32 is_ret_str:1;
-    __u32 pad:27;
+    __u32 pad:28;
     __u32 pid;
 
     struct bpfsnoop_fn_args fn_args;
@@ -40,12 +42,12 @@ struct bpfsnoop_fn_arg_data {
 };
 
 struct bpfsnoop_fn_data {
+    struct bpfsnoop_fn_arg_data retval;
     struct bpfsnoop_fn_arg_data args[MAX_FN_ARGS];
 };
 
 struct event {
     __u64 session_id;
-    __s64 func_ret;
     __u64 func_ip;
     __u32 cpu;
     __u32 pid;
@@ -56,6 +58,6 @@ struct event {
      * demand.
      */
     struct bpfsnoop_fn_data fn_data;
-} __attribute__((packed));
+};
 
 #endif // __BPFSNOOP_H_
