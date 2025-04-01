@@ -236,9 +236,9 @@ func (t *bpfTracing) injectPktFilter(prog *ebpf.ProgramSpec, params []btf.FuncPa
 	return nil
 }
 
-func (t *bpfTracing) injectPktOutput(prog *ebpf.ProgramSpec, params []btf.FuncParam, fnName string) {
+func (t *bpfTracing) injectPktOutput(prog *ebpf.ProgramSpec, params []btf.FuncParam, fnName string) bool {
 	if !outputPkt {
-		return
+		return false
 	}
 
 	for i, p := range params {
@@ -257,16 +257,18 @@ func (t *bpfTracing) injectPktOutput(prog *ebpf.ProgramSpec, params []btf.FuncPa
 		case "sk_buff", "__sk_buff":
 			pktOutput.outputSkb(prog, i)
 			DebugLog("Injected --output-pkt to %dth param %s of %s", i, p.Name, fnName)
-			return
+			return true
 
 		case "xdp_buff", "xdp_md":
 			pktOutput.outputXdp(prog, i)
 			DebugLog("Injected --output-pkt to %dth param %s of %s", i, p.Name, fnName)
-			return
+			return true
 		}
 	}
 
 	pktOutput.clear(prog)
+
+	return false
 }
 
 func (t *bpfTracing) traceProg(spec *ebpf.CollectionSpec, reusedMaps map[string]*ebpf.Map, info bpfTracingInfo, bprogs *bpfProgs) error {
@@ -280,7 +282,7 @@ func (t *bpfTracing) traceProg(spec *ebpf.CollectionSpec, reusedMaps map[string]
 	tracingFuncName := TracingProgName()
 	progSpec := spec.Programs[tracingFuncName]
 	params := info.fn.Type.(*btf.FuncProto).Params
-	t.injectPktOutput(progSpec, params, traceeName)
+	bprogs.funcs[info.funcIP].pktOutput = t.injectPktOutput(progSpec, params, traceeName)
 	if err := t.injectPktFilter(progSpec, params, traceeName); err != nil {
 		return err
 	}
@@ -351,7 +353,7 @@ func (t *bpfTracing) traceFunc(spec *ebpf.CollectionSpec, reusedMaps map[string]
 	progSpec := spec.Programs[tracingFuncName]
 	funcProto := fn.Func.Type.(*btf.FuncProto)
 	params := funcProto.Params
-	t.injectPktOutput(progSpec, params, traceeName)
+	fn.Pkt = t.injectPktOutput(progSpec, params, traceeName)
 	if err := t.injectPktFilter(progSpec, params, traceeName); err != nil {
 		return err
 	}

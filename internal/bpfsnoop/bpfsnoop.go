@@ -145,17 +145,6 @@ func Run(reader *ringbuf.Reader, progs *bpfProgs, addr2line *Addr2Line, ksyms *K
 			}
 		}
 
-		hasPktTuple := false
-		if outputPkt {
-			b := ptr2bytes(unsafe.Pointer(&pktData), int(unsafe.Sizeof(pktData)))
-			err := pkts.LookupAndDelete(event.SessID, b)
-			if err != nil && !errors.Is(err, ebpf.ErrKeyNotExist) {
-				return fmt.Errorf("failed to lookup pkt data: %w", err)
-			}
-
-			hasPktTuple = !pktData.zero()
-		}
-
 		if useLbr {
 			b := ptr2bytes(unsafe.Pointer(&lbrData), int(unsafe.Sizeof(lbrData)))
 			err := lbrs.LookupAndDelete(event.SessID, b)
@@ -172,6 +161,7 @@ func Run(reader *ringbuf.Reader, progs *bpfProgs, addr2line *Addr2Line, ksyms *K
 		var funcArgs []funcArgumentOutput
 		var funcParams []FuncParamFlags
 		var retParam FuncParamFlags
+		var hasPktTuple bool
 
 		if progInfo, ok := progs.funcs[event.FuncIP]; ok {
 			targetName = progInfo.funcName + "[bpf]"
@@ -179,6 +169,7 @@ func Run(reader *ringbuf.Reader, progs *bpfProgs, addr2line *Addr2Line, ksyms *K
 			funcArgs = progInfo.funcArgs
 			funcParams = progInfo.funcParams
 			retParam = progInfo.retParam
+			hasPktTuple = progInfo.pktOutput
 		} else {
 			ksym, ok := ksyms.find(event.FuncIP)
 			if ok {
@@ -193,12 +184,23 @@ func Run(reader *ringbuf.Reader, progs *bpfProgs, addr2line *Addr2Line, ksyms *K
 				funcArgs = fn.Args
 				funcParams = fn.Prms
 				retParam = fn.Ret
+				hasPktTuple = fn.Pkt
 
 				if fn.IsTp {
 					targetName = fn.Func.Name + "[tp]"
 					printRetval = false
 				}
 			}
+		}
+
+		if hasPktTuple {
+			b := ptr2bytes(unsafe.Pointer(&pktData), int(unsafe.Sizeof(pktData)))
+			err := pkts.LookupAndDelete(event.SessID, b)
+			if err != nil && !errors.Is(err, ebpf.ErrKeyNotExist) {
+				return fmt.Errorf("failed to lookup pkt data: %w", err)
+			}
+
+			hasPktTuple = !pktData.zero() && err == nil
 		}
 
 		hasArgOutput := len(funcArgs) != 0

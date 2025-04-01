@@ -29,6 +29,7 @@ type bpfProgFuncInfo struct {
 	retParam   FuncParamFlags
 	funcArgs   []funcArgumentOutput
 	isRetStr   bool
+	pktOutput  bool
 
 	jitedLineInfo []uintptr        // ordered
 	lineInfos     []btf.LineOffset // mapping 1:1 with jitedLineInfo

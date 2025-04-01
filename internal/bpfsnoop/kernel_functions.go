@@ -53,6 +53,7 @@ type KFunc struct {
 	Prms []FuncParamFlags
 	Ret  FuncParamFlags
 	IsTp bool
+	Pkt  bool
 }
 
 func (k *KFunc) Name() string {
