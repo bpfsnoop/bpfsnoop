@@ -6,16 +6,20 @@ package bpfsnoop
 import (
 	"bytes"
 	"encoding/binary"
+	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/bpfsnoop/gapstone"
 	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/link"
+	"golang.org/x/sys/unix"
 )
 
 var tailcallInfo TailcallInfo
 
 type TailcallInfo struct {
+	supportTailcallInBpf2bpf                    bool
 	fixedTailcallInfiniteLoopCausedByTrampoline bool
 }
 
@@ -116,6 +120,12 @@ func probeTailcallInfo(prog *ebpf.Program, readSpec *ebpf.CollectionSpec) (Tailc
 func ProbeTailcallIssue(spec, tailcallSpec, readSpec *ebpf.CollectionSpec) error {
 	tcColl, err := ebpf.NewCollection(tailcallSpec)
 	if err != nil {
+		if errors.Is(err, unix.EINVAL) &&
+			strings.Contains(err.Error(), "tail_calls are not allowed in programs with bpf-to-bpf calls") {
+			// It will return -EINVAL from kernel. Please check:
+			// https://elixir.bootlin.com/linux/v5.9/source/kernel/bpf/verifier.c#L4255
+			return nil
+		}
 		return fmt.Errorf("failed to create tailcall collection: %w", err)
 	}
 	defer tcColl.Close()
@@ -170,6 +180,12 @@ func ProbeTailcallIssue(spec, tailcallSpec, readSpec *ebpf.CollectionSpec) error
 		"Current kernel does not have fixed tailcall infinite loop issue caused by trampoline")
 
 	tailcallInfo = info
+	tailcallInfo.supportTailcallInBpf2bpf = true
 
 	return nil
+}
+
+func haveTailcallInfiniteLoopIssue() bool {
+	return tailcallInfo.supportTailcallInBpf2bpf &&
+		!tailcallInfo.fixedTailcallInfiniteLoopCausedByTrampoline
 }

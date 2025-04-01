@@ -130,7 +130,7 @@ func (p *bpfProgs) addTracing(id ebpf.ProgramID, funcName string, prog *ebpf.Pro
 		return fmt.Errorf("failed to get func for %s: %w", funcName, err)
 	}
 
-	if idx != 0 && !tailcallInfo.fixedTailcallInfiniteLoopCausedByTrampoline {
+	if idx != 0 && haveTailcallInfiniteLoopIssue() {
 		// Skip to trace those tail_call_reachable subprogs. See
 		// https://lore.kernel.org/all/20230912150442.2009-3-hffilwlqm@gmail.com/
 		// for more details.
