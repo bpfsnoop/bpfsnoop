@@ -69,7 +69,7 @@ output_tuple(struct bpfsnoop_pkt_data *pkt, __u64 session_id, struct iphdr *iph)
 }
 
 static __noinline void
-output_skb_tuple(struct bpfsnoop_pkt_data *pkt, __u64 session_id, void *ptr)
+output_skb_tuple(void *ptr, struct bpfsnoop_pkt_data *pkt, __u64 session_id)
 {
     struct sk_buff *skb;
     struct iphdr *iph;
@@ -83,7 +83,7 @@ output_skb_tuple(struct bpfsnoop_pkt_data *pkt, __u64 session_id, void *ptr)
 }
 
 static __noinline void
-output_xdp_tuple(struct bpfsnoop_pkt_data *pkt, __u64 session_id, void *ptr)
+output_xdp_tuple(void *ptr, struct bpfsnoop_pkt_data *pkt, __u64 session_id)
 {
     struct xdp_buff *xdp;
     struct vlan_hdr *vh;
@@ -120,7 +120,7 @@ output_pkt_data(__u64 *args, struct bpfsnoop_pkt_data *pkt, __u64 session_id)
     /* This function will be rewrote by Go totally. */
     void *ptr = (void *) session_id;
     /* Show in `bpfsnoop -p -d`. */
-    if (args) output_skb_tuple(pkt, session_id, ptr); else output_xdp_tuple(pkt, session_id, ptr);
+    if (args) output_skb_tuple(ptr, pkt, session_id); else output_xdp_tuple(ptr, pkt, session_id);
 }
 
 #endif // __BPFSNOOP_PKT_OUTPUT_H_

@@ -21,19 +21,14 @@ type packetOutput struct{}
 func (p *packetOutput) injectStub(prog *ebpf.ProgramSpec, index int, stub, other string) {
 	clearOutputSubprog(prog, other)
 
-	// R1: ctx
+	// R1: args
 	// R2: pkt data
 	// R3: session ID
 
-	insns := asm.Instructions{
-		asm.Mov.Reg(asm.R6, asm.R2), // R6 = pkt data
-		asm.Mov.Reg(asm.R7, asm.R3), // R7 = session ID
-	}
-	insns = append(insns, genAccessArg(index, asm.R3)...)
+	var insns asm.Instructions
+	insns = append(insns, genAccessArg(index, asm.R1)...)
 	insns = append(insns, asm.Instructions{
-		asm.Mov.Reg(asm.R2, asm.R7), // R2 = session ID
-		asm.Mov.Reg(asm.R1, asm.R6), // R1 = pkt data
-		asm.Call.Label(stub),        // call stub()
+		asm.Call.Label(stub), // call stub()
 		asm.Return(),
 	}...)
 
