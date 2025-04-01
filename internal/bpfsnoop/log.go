@@ -22,3 +22,9 @@ func DebugLog(format string, args ...any) {
 		log.Printf(format, args...)
 	}
 }
+
+func debugLogIf(cond bool, format string, args ...interface{}) {
+	if cond && debugLog {
+		log.Printf(format, args...)
+	}
+}

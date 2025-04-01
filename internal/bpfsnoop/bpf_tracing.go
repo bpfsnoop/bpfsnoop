@@ -157,7 +157,7 @@ func (t *bpfTracing) injectArgOutput(prog *ebpf.ProgramSpec, params []btf.FuncPa
 
 	argOutput.inject(prog, args)
 
-	DebugLog("Injected --output-arg expr to func %s", fnName)
+	debugLogIf(len(args) != 0, "Injected --output-arg expr to func %s", fnName)
 
 	return args, nil
 }
@@ -409,7 +409,8 @@ func (t *bpfTracing) traceFunc(spec *ebpf.CollectionSpec, reusedMaps map[string]
 		return fmt.Errorf("failed to attach tracing: %w", err)
 	}
 
-	VerboseLog("Tracing kernel function %s", fnName)
+	verboseLogIf(!isTracepoint, "Tracing kernel function %s", fnName)
+	verboseLogIf(isTracepoint, "Tracing kernel tracepoint %s", fnName)
 
 	t.llock.Lock()
 	t.progs = append(t.progs, prog)
