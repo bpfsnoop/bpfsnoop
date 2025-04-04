@@ -4,9 +4,12 @@
 package bpfsnoop
 
 import (
+	"errors"
 	"fmt"
-	"io"
+	"strings"
+	"unsafe"
 
+	"github.com/cilium/ebpf"
 	"github.com/fatih/color"
 
 	"github.com/bpfsnoop/bpfsnoop/internal/btfx"
@@ -27,21 +30,45 @@ func (a *ArgData) str() string {
 	return strx.NullTerminated(a.Str[:])
 }
 
-func (a *ArgData) repr(w io.Writer, args []funcArgumentOutput, ksyms *Kallsyms) {
+func (a *ArgData) repr(sb *strings.Builder, args []funcArgumentOutput, f btfx.FindSymbol) {
 	idx := 0
 	str := a.str()
 	for i, arg := range args {
 		if i != 0 {
-			fmt.Fprint(w, ", ")
+			fmt.Fprint(sb, ", ")
 		}
 
 		data := a.Args[idx]
-		s := btfx.ReprValueType(arg.last, arg.t, arg.isStr, arg.isNumPtr, data[0], data[1], 0, str, ksyms.findSymbol)
-		color.RGB(0x88, 0x88, 0x88 /* gray */).Fprint(w, s)
+		s := btfx.ReprValueType(arg.last, arg.t, arg.isStr, arg.isNumPtr, data[0], data[1], 0, str, f)
+		if !noColorOutput {
+			color.RGB(0x88, 0x88, 0x88 /* gray */).Fprint(sb, s)
+		} else {
+			fmt.Fprint(sb, s)
+		}
 
 		if !arg.isStr {
 			idx++
 		}
 	}
-	fmt.Fprintln(w)
+	fmt.Fprintln(sb)
+}
+
+func outputFuncArgAttrs(sb *strings.Builder, info *funcInfo, argData *ArgData, args *ebpf.Map, event *Event, f btfx.FindSymbol) error {
+	if len(info.args) == 0 {
+		return nil
+	}
+
+	b := ptr2bytes(unsafe.Pointer(argData), int(unsafe.Sizeof(*argData)))
+	err := args.LookupAndDelete(event.SessID, b)
+	if err != nil {
+		if errors.Is(err, ebpf.ErrKeyNotExist) {
+			return nil
+		}
+		return fmt.Errorf("failed to lookup arg data: %w", err)
+	}
+
+	fmt.Fprint(sb, "Arg attrs: ")
+	argData.repr(sb, info.args, f)
+
+	return nil
 }

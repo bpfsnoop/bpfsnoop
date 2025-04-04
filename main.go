@@ -208,7 +208,13 @@ func main() {
 	})
 
 	errg.Go(func() error {
-		return bpfsnoop.Run(reader, bpfProgs, addr2line, kallsyms, kfuncs, reusedMaps, w)
+		helpers := bpfsnoop.Helpers{
+			Progs:     bpfProgs,
+			Addr2line: addr2line,
+			Ksyms:     kallsyms,
+			Kfuncs:    kfuncs,
+		}
+		return bpfsnoop.Run(reader, &helpers, reusedMaps, w)
 	})
 
 	err = errg.Wait()

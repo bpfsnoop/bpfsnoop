@@ -5,10 +5,14 @@ package bpfsnoop
 
 import (
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"net/netip"
 	"strings"
+	"unsafe"
 
+	"github.com/cilium/ebpf"
+	"github.com/fatih/color"
 	"golang.org/x/sys/unix"
 )
 
@@ -82,4 +86,32 @@ func (p *PktData) repr() string {
 	}
 
 	return sb.String()
+}
+
+func outputPktTuple(sb *strings.Builder, info *funcInfo, pktData *PktData, pkts *ebpf.Map, event *Event) error {
+	if !info.pktTuple {
+		return nil
+	}
+
+	b := ptr2bytes(unsafe.Pointer(pktData), int(unsafe.Sizeof(*pktData)))
+	err := pkts.LookupAndDelete(event.SessID, b)
+	if err != nil {
+		if errors.Is(err, ebpf.ErrKeyNotExist) {
+			return nil
+		}
+		return fmt.Errorf("failed to lookup pkt data: %w", err)
+	}
+
+	if pktData.zero() {
+		return nil
+	}
+
+	fmt.Fprint(sb, "Pkt tuple: ")
+	if !noColorOutput {
+		color.New(color.FgGreen).Fprintln(sb, pktData.repr())
+	} else {
+		fmt.Fprintln(sb, pktData.repr())
+	}
+
+	return nil
 }
