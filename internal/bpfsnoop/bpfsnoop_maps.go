@@ -59,6 +59,9 @@ func PrepareBPFMaps(spec *ebpf.CollectionSpec) map[string]*ebpf.Map {
 	stacks, err := ebpf.NewMap(spec.Maps["bpfsnoop_stacks"])
 	assert.NoErr(err, "Failed to create bpfsnoop_stacks map: %v")
 
+	sessions, err := ebpf.NewMap(spec.Maps["bpfsnoop_sessions"])
+	assert.NoErr(err, "Failed to create bpfsnoop_sessions map: %v")
+
 	readyDataMapSpec := spec.Maps[".data.ready"]
 	readyDataMapSpec.Flags |= unix.BPF_F_MMAPABLE
 	readyData, err := ebpf.NewMap(readyDataMapSpec)
@@ -75,6 +78,8 @@ func PrepareBPFMaps(spec *ebpf.CollectionSpec) map[string]*ebpf.Map {
 	assert.NoErr(err, "Failed to create events map: %v")
 
 	return map[string]*ebpf.Map{
+		"bpfsnoop_sessions": sessions,
+
 		"bpfsnoop_events": events,
 		"bpfsnoop_lbrs":   lbrs,
 		"bpfsnoop_strs":   strs,

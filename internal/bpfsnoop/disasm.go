@@ -4,16 +4,15 @@
 package bpfsnoop
 
 import (
-	"debug/elf"
 	"errors"
 	"fmt"
 	"log"
-	"os"
 	"runtime"
 	"strconv"
 	"strings"
 
 	"github.com/bpfsnoop/gapstone"
+	"github.com/cilium/ebpf"
 	"github.com/fatih/color"
 
 	"github.com/bpfsnoop/bpfsnoop/internal/assert"
@@ -23,7 +22,7 @@ const (
 	kcorePath = "/proc/kcore"
 )
 
-func Disasm(f *Flags) {
+func Disasm(f *Flags, readSpec *ebpf.CollectionSpec) {
 	assert.False(len(f.progs) != 0 && len(f.kfuncs) != 0, "progs %v or kfuncs %v to be disassembled?", f.progs, f.kfuncs)
 
 	if len(f.progs) != 0 {
@@ -38,30 +37,9 @@ func Disasm(f *Flags) {
 	if len(f.kfuncs) != 0 {
 		assert.SliceLen(f.kfuncs, 1, "Only one --kfunc is allowed for --disasm")
 
-		dumpKfunc(f.kfuncs[0], kfuncKmods, f.disasmBytes)
+		dumpKfunc(f.kfuncs[0], kfuncKmods, f.disasmBytes, readSpec)
 		return
 	}
-}
-
-func readKcore(kaddr uint64, bytes uint) ([]byte, bool) {
-	fd, err := os.Open(kcorePath)
-	assert.NoErr(err, "Failed to open %s: %v", kcorePath)
-	defer fd.Close()
-
-	kcoreElf, err := elf.NewFile(fd)
-	assert.NoErr(err, "Failed to read %s: %v", kcorePath)
-
-	for _, prog := range kcoreElf.Progs {
-		if prog.Vaddr <= kaddr && kaddr < prog.Vaddr+prog.Memsz {
-			remain := uint(prog.Memsz + prog.Vaddr - kaddr)
-			data := make([]byte, min(bytes, remain))
-			n, err := fd.ReadAt(data, int64(prog.Off+kaddr-prog.Vaddr))
-			assert.NoErr(err, "Failed to read %s: %v", kcorePath)
-			return data[:n], true
-		}
-	}
-
-	return nil, false
 }
 
 func guessBytes(kaddr uintptr, ks *Kallsyms, bytes uint) uint {
@@ -92,7 +70,7 @@ func trimTailingInsns(b []byte) []byte {
 	return b[:i+1]
 }
 
-func dumpKfunc(kfunc string, kmods []string, bytes uint) {
+func dumpKfunc(kfunc string, kmods []string, bytes uint, readSpec *ebpf.CollectionSpec) {
 	assert.True(runtime.GOARCH == "amd64", "Only support amd64 arch")
 
 	VerboseLog("Reading /proc/kallsyms ..")
@@ -182,21 +160,18 @@ func dumpKfunc(kfunc string, kmods []string, bytes uint) {
 	}
 
 	bytes = guessBytes(uintptr(kaddr), kallsyms, bytes)
-	data, ok := readKcore(kaddr, bytes)
-	assert.True(ok, "Failed to read kcore for %s", kfunc)
+	assert.False(bytes > readLimit, "Disasm bytes %d is larger than limit %d", bytes, readLimit)
+	data, err := readKernel(readSpec, kaddr, uint32(bytes))
+	assert.NoErr(err, "Failed to read kernel memory: %v", err)
+
 	data = trimTailingInsns(data)
 	log.Printf("Disassembling %s at %s (%d bytes) ..",
 		color.New(color.FgYellow, color.Bold).Sprint(kfunc),
 		color.New(color.FgBlue).Sprintf("%#x", kaddr), len(data))
 
-	engine, err := gapstone.New(int(gapstone.CS_ARCH_X86), int(gapstone.CS_MODE_64))
-	assert.NoErr(err, "Failed to create engine: %v")
+	engine, err := createGapstoneEngine()
+	assert.NoErr(err, "Failed to create gapstone engine: %v", err)
 	defer engine.Close()
-
-	if !disasmIntelSyntax {
-		err = engine.SetOption(uint(gapstone.CS_OPT_SYNTAX), uint(gapstone.CS_OPT_SYNTAX_ATT))
-		assert.NoErr(err, "Failed to set syntax: %v")
-	}
 
 	VerboseLog("Disassembling bpf progs ..")
 	bpfProgs, err := NewBPFProgs([]ProgFlag{{all: true}}, false, true)

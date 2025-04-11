@@ -18,6 +18,24 @@ import (
 	"github.com/bpfsnoop/bpfsnoop/internal/assert"
 )
 
+func printInsnInfo(pc uint64, insn gapstone.Instruction) string {
+	var opcodes []string
+	for _, insn := range insn.Bytes {
+		opcodes = append(opcodes, fmt.Sprintf("%02x", insn))
+	}
+	opcode := strings.Join(opcodes, " ")
+	opstr := insn.OpStr
+	mnemonic := insn.Mnemonic
+
+	if noColorOutput {
+		return fmt.Sprintf("%#x: %-19s\t%s\t%s",
+			pc, opcode, mnemonic, opstr)
+	}
+	return fmt.Sprintf("%s: %-19s\t%s\t%s",
+		color.New(color.FgBlue).Sprintf("%#x", pc), opcode,
+		color.GreenString(mnemonic), color.RedString(opstr))
+}
+
 func DumpProg(pf []ProgFlag) {
 	progs, err := NewBPFProgs(pf, true, true)
 	assert.NoErr(err, "Failed to get bpf progs: %v")
@@ -59,7 +77,7 @@ func DumpProg(pf []ProgFlag) {
 		assert.NoErr(err, "Failed to create addr2line: %v")
 	}
 
-	engine, err := gapstone.New(int(gapstone.CS_ARCH_X86), int(gapstone.CS_MODE_64))
+	engine, err := createGapstoneEngine()
 	assert.NoErr(err, "Failed to create engine: %v")
 	defer engine.Close()
 
@@ -98,11 +116,6 @@ func DumpProg(pf []ProgFlag) {
 		jited2LineInfos[kaddr] = lines[i]
 	}
 
-	if !disasmIntelSyntax {
-		err = engine.SetOption(uint(gapstone.CS_OPT_SYNTAX), uint(gapstone.CS_OPT_SYNTAX_ATT))
-		assert.NoErr(err, "Failed to set syntax: %v")
-	}
-
 	var sb strings.Builder
 
 	printLineInfo := func(li *branchEndpoint) {
@@ -118,12 +131,6 @@ func DumpProg(pf []ProgFlag) {
 			gray.Fprint(&sb, " [bpf]")
 		}
 		fmt.Fprintln(&sb)
-	}
-
-	printInsnInfo := func(pc uint64, opcode string, mnemonic string, opstr string) {
-		fmt.Fprintf(&sb, "%s: %-19s\t%s\t%s",
-			color.New(color.FgBlue).Sprintf("%#x", pc), opcode,
-			color.GreenString(mnemonic), color.RedString(opstr))
 	}
 
 	insns := jitedInsns
@@ -147,14 +154,9 @@ func DumpProg(pf []ProgFlag) {
 			inst, err := engine.Disasm(fnInsns, kaddr, 1)
 			assert.NoErr(err, "Failed to disasm instruction: %v")
 
-			var opcodes []string
-			for _, insn := range inst[0].Bytes {
-				opcodes = append(opcodes, fmt.Sprintf("%02x", insn))
-			}
-			opcode := strings.Join(opcodes, " ")
-			opstr := inst[0].OpStr
-			printInsnInfo(kaddr, opcode, inst[0].Mnemonic, opstr)
+			fmt.Fprint(&sb, printInsnInfo(kaddr, inst[0]))
 
+			opstr := inst[0].OpStr
 			var endpoint *branchEndpoint
 			if strings.HasPrefix(opstr, "0x") {
 				n, err := strconv.ParseUint(opstr, 0, 64)

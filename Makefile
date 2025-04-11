@@ -39,6 +39,9 @@ $(READ_BPF_OBJ): $(READ_BPF_SRC) $(VMLINUX_OBJ)
 $(TAILCALL_BPF_OBJ): $(TAILCALL_BPF_SRC) $(VMLINUX_OBJ)
 	$(BPF2GO) tailcall bpf/tailcall.c -- $(BPF2GO_EXTRA_FLAGS)
 
+$(INSN_BPF_OBJ): $(INSN_BPF_SRC) $(VMLINUX_OBJ)
+	$(BPF2GO) insn bpf/bpfsnoop_insn.c -- $(BPF2GO_EXTRA_FLAGS)
+
 $(BPFSNOOP_BPF_OBJ): $(BPFSNOOP_BPF_SRC) $(VMLINUX_OBJ)
 	$(BPF2GO) bpfsnoop bpf/bpfsnoop.c -- $(BPF2GO_EXTRA_FLAGS)
 
@@ -62,4 +65,4 @@ publish: local_release
 	@if [ -z "$(VERSION)" ]; then echo "VERSION is not set"; exit 1; fi
 	$(CMD_TAR) -czf $(DIR_BIN)/$(BPFSNOOP_OBJ)-$(VERSION)-linux-amd64.tar.gz $(DIR_BIN)/$(BPFSNOOP_OBJ) $(DIR_BIN)/$(BPFSNOOP_CSM)
 	@$(CMD_MV) $(RELEASE_NOTES) $(DIR_BIN)/$(RELEASE_NOTES)
-	$(CMD_GH) release create $(VERSION) $(DIR_BIN)/$(BPFSNOOP_OBJ)-$(VERSION)-linux-amd64.tar.gz --title "BPFSNOOP $(VERSION)" --notes-file $(DIR_BIN)/$(RELEASE_NOTES)
+	$(CMD_GH) release create $(VERSION) $(DIR_BIN)/$(BPFSNOOP_OBJ)-$(VERSION)-linux-amd64.tar.gz --title "bpfsnoop $(VERSION)" --notes-file $(DIR_BIN)/$(RELEASE_NOTES)

@@ -24,6 +24,9 @@ BPF2GO_EXTRA_FLAGS := -g -D__TARGET_ARCH_x86 -I./bpf -I./bpf/headers -I./lib/lib
 BPFSNOOP_BPF_OBJ := bpfsnoop_bpfel.o bpfsnoop_bpfeb.o
 BPFSNOOP_BPF_SRC := bpf/bpfsnoop.c $(wildcard bpf/*.h) $(wildcard bpf/headers/*.h)
 
+INSN_BPF_OBJ := insn_bpfel.o insn_bpfeb.o
+INSN_BPF_SRC := bpf/bpfsnoop_insn.c
+
 FEAT_BPF_OBJ := feat_bpfel.o feat_bpfeb.o
 FEAT_BPF_SRC := bpf/feature.c
 
@@ -43,6 +46,7 @@ TAILCALL_BPF_OBJ := tailcall_bpfel.o tailcall_bpfeb.o
 TAILCALL_BPF_SRC := bpf/tailcall.c
 
 BPF_OBJS := $(BPFSNOOP_BPF_OBJ) \
+			$(INSN_BPF_OBJ) \
 			$(READ_BPF_OBJ) \
 			$(FEAT_BPF_OBJ) \
 			$(TAILCALL_BPF_OBJ) \
