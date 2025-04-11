@@ -53,7 +53,7 @@ type Helpers struct {
 func Run(reader *ringbuf.Reader, helpers *Helpers, maps map[string]*ebpf.Map, w io.Writer) error {
 	lbrStack := newLBRStack()
 	fnStack := newFnStack()
-	sess := NewSessions()
+	sessions := NewSessions()
 
 	stacks := maps["bpfsnoop_stacks"]
 	lbrs := maps["bpfsnoop_lbrs"]
@@ -96,10 +96,8 @@ func Run(reader *ringbuf.Reader, helpers *Helpers, maps map[string]*ebpf.Map, w 
 		typ := *(*uint16)(unsafe.Pointer(&record.RawSample[0]))
 		if typ == eventTypeInsn {
 			event := (*InsnEvent)(unsafe.Pointer(&record.RawSample[0]))
-			if ok := outputInsnEvent(&sb, sess, helpers.Insns, event); ok {
-				fmt.Fprintln(w, sb.String())
-				sb.Reset()
-			}
+			outputInsnEvent(&sb, sessions, helpers.Insns, event)
+			sb.Reset()
 			continue
 		}
 
@@ -110,14 +108,16 @@ func Run(reader *ringbuf.Reader, helpers *Helpers, maps map[string]*ebpf.Map, w 
 		event := (*Event)(unsafe.Pointer(&record.RawSample[0]))
 		fnInfo := getFuncInfo(event, helpers)
 
+		var sess *Session
 		var duration time.Duration
 		withDuration := fnInfo.insnMode
 		if withDuration {
 			if event.Type == eventTypeFuncEntry {
-				sess.Add(event.SessID, event.KernNs)
+				sess = sessions.Add(event.SessID, event.KernNs)
 			} else {
-				s, ok := sess.GetAndDel(event.SessID + 1)
+				s, ok := sessions.GetAndDel(event.SessID + 1)
 				if ok {
+					sess = s
 					duration = time.Duration(event.KernNs - s.started)
 				}
 			}
@@ -169,10 +169,19 @@ func Run(reader *ringbuf.Reader, helpers *Helpers, maps map[string]*ebpf.Map, w 
 			return fmt.Errorf("failed to output function stack: %w", err)
 		}
 
-		if !withDuration || event.Type == eventTypeFuncExit {
+		if sess == nil || event.Type == eventTypeFuncExit {
 			fmt.Fprintln(&sb)
 		}
-		fmt.Fprint(w, sb.String())
+		if sess != nil {
+			sess.outputs = append(sess.outputs, sb.String())
+			if event.Type == eventTypeFuncExit {
+				for _, output := range sess.outputs {
+					fmt.Fprint(w, output)
+				}
+			}
+		} else {
+			fmt.Fprint(w, sb.String())
+		}
 
 		sb.Reset()
 		lbrStack.reset()
