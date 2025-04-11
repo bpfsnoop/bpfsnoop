@@ -22,8 +22,8 @@ github.com/ianlancetaylor/demangle v0.0.0-20240912202439-0a2b6291aafd h1:EVX1s+X
 github.com/ianlancetaylor/demangle v0.0.0-20240912202439-0a2b6291aafd/go.mod h1:gx7rwoVhcfuVKG5uya9Hs3Sxj7EIvldVofAWIUtGouw=
 github.com/josharian/native v1.1.0 h1:uuaP0hAbW7Y4l0ZRQ6C9zfb7Mg1mbFKry/xzDAfmtLA=
 github.com/josharian/native v1.1.0/go.mod h1:7X/raswPFr05uY3HiLlYeyQntB6OO7E/d2Cu7qoaN2w=
-github.com/jschwinger233/elibpcap v1.0.0 h1:UQuP3XT9orz26lW6DPTu9B9OBYirB57LmhPNGxQqU2U=
-github.com/jschwinger233/elibpcap v1.0.0/go.mod h1:fUmq00C6Pechtr089JDPhvIc6TxrbUHDlZ5QCYc9tJQ=
+github.com/jschwinger233/elibpcap v1.0.1 h1:VK2nupxq9eLry2shRw4ujvCOQ/MW42ZhDyiQEcL0qlk=
+github.com/jschwinger233/elibpcap v1.0.1/go.mod h1:fUmq00C6Pechtr089JDPhvIc6TxrbUHDlZ5QCYc9tJQ=
 github.com/jsimonetti/rtnetlink/v2 v2.0.1 h1:xda7qaHDSVOsADNouv7ukSuicKZO7GgVUCXxpaIEIlM=
 github.com/jsimonetti/rtnetlink/v2 v2.0.1/go.mod h1:7MoNYNbb3UaDHtF8udiJo/RH6VsTKP1pqKLUTVCvToE=
 github.com/klauspost/compress v1.17.11 h1:In6xLpyWOi1+C7tXUUWv2ot1QvBjxevKAaI6IXrJmUc=
