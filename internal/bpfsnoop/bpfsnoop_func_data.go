@@ -55,7 +55,7 @@ func outputFnRetval(sb *strings.Builder, s string, info *funcInfo, event *Event,
 	}
 }
 
-func outputFnArgs(sb *strings.Builder, info *funcInfo, helpers *Helpers, strData *StrData, strs *ebpf.Map, event *Event, f btfx.FindSymbol) error {
+func outputFnArgs(sb *strings.Builder, info *funcInfo, helpers *Helpers, strData *StrData, strs *ebpf.Map, event *Event, f btfx.FindSymbol, retval bool) error {
 	if info.proto == nil {
 		fmt.Fprint(sb, "args=(..UNK..)")
 		outputFnRetval(sb, "", info, event, f)
@@ -142,7 +142,7 @@ func outputFnArgs(sb *strings.Builder, info *funcInfo, helpers *Helpers, strData
 	}
 	fmt.Fprintf(sb, ")")
 
-	if mode == TracingModeExit && !info.isTp {
+	if retval {
 		outputFnRetval(sb, retStr, info, event, f)
 	}
 

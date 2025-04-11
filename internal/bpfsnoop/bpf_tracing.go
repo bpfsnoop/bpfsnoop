@@ -25,18 +25,21 @@ type bpfTracing struct {
 	progs []*ebpf.Program
 	links []link.Link
 	klnks []link.Link
+	ilnks []link.Link
 }
 
 func (t *bpfTracing) Progs() []*ebpf.Program {
 	return t.progs
 }
 
-func setBpfsnoopConfig(spec *ebpf.CollectionSpec, funcIP uint64, args []FuncParamFlags, ret FuncParamFlags, withRet bool) error {
+func setBpfsnoopConfig(spec *ebpf.CollectionSpec, funcIP uint64, args []FuncParamFlags, ret FuncParamFlags, bothEntryExit, withRet bool) error {
 	var cfg BpfsnoopConfig
 	cfg.SetOutputLbr(outputLbr)
 	cfg.SetOutputStack(outputFuncStack)
 	cfg.SetOutputPktTuple(outputPkt)
 	cfg.SetOutputArgData(len(argOutput.args) != 0)
+	cfg.SetBothEntryExit(bothEntryExit)
+	cfg.SetIsEntry(!withRet)
 	cfg.FilterPid = filterPid
 	cfg.FnArgsNr = uint32(len(args))
 	for i, arg := range args {
@@ -55,7 +58,7 @@ func setBpfsnoopConfig(spec *ebpf.CollectionSpec, funcIP uint64, args []FuncPara
 	return nil
 }
 
-func NewBPFTracing(spec *ebpf.CollectionSpec, reusedMaps map[string]*ebpf.Map, bprogs *bpfProgs, kfuncs KFuncs) (*bpfTracing, error) {
+func NewBPFTracing(spec, insnSpec *ebpf.CollectionSpec, reusedMaps map[string]*ebpf.Map, bprogs *bpfProgs, kfuncs KFuncs, insns *FuncInsns) (*bpfTracing, error) {
 	var t bpfTracing
 	t.links = make([]link.Link, 0, len(bprogs.tracings))
 
@@ -69,9 +72,24 @@ func NewBPFTracing(spec *ebpf.CollectionSpec, reusedMaps map[string]*ebpf.Map, b
 	}
 
 	for _, fn := range kfuncs {
+		bothEntryExit := fn.Insn
 		fn := fn
+
 		errg.Go(func() error {
-			return t.traceFunc(spec, reusedMaps, fn)
+			return t.traceFunc(spec, reusedMaps, fn, bothEntryExit, mode == TracingModeExit)
+		})
+
+		if bothEntryExit {
+			errg.Go(func() error {
+				return t.traceFunc(spec, reusedMaps, fn, bothEntryExit, mode != TracingModeExit)
+			})
+		}
+	}
+
+	for _, insn := range insns.Insns {
+		insn := insn
+		errg.Go(func() error {
+			return t.traceInsn(insnSpec, reusedMaps, insn)
 		})
 	}
 
@@ -108,6 +126,22 @@ func (t *bpfTracing) Close() {
 		l := l
 		errg.Go(func() error {
 			_ = l.Close()
+			return nil
+		})
+	}
+
+	for _, l := range t.ilnks {
+		l := l
+		errg.Go(func() error {
+			_ = l.Close()
+			return nil
+		})
+	}
+
+	for _, prog := range t.progs {
+		prog := prog
+		errg.Go(func() error {
+			_ = prog.Close()
 			return nil
 		})
 	}
@@ -274,7 +308,7 @@ func (t *bpfTracing) injectPktOutput(prog *ebpf.ProgramSpec, params []btf.FuncPa
 func (t *bpfTracing) traceProg(spec *ebpf.CollectionSpec, reusedMaps map[string]*ebpf.Map, info bpfTracingInfo, bprogs *bpfProgs) error {
 	spec = spec.Copy()
 
-	if err := setBpfsnoopConfig(spec, uint64(info.funcIP), info.params, info.ret, mode == TracingModeExit); err != nil {
+	if err := setBpfsnoopConfig(spec, uint64(info.funcIP), info.params, info.ret, false, mode == TracingModeExit); err != nil {
 		return fmt.Errorf("failed to set bpfsnoop config: %w", err)
 	}
 
@@ -338,14 +372,14 @@ func (t *bpfTracing) traceProg(spec *ebpf.CollectionSpec, reusedMaps map[string]
 	return nil
 }
 
-func (t *bpfTracing) traceFunc(spec *ebpf.CollectionSpec, reusedMaps map[string]*ebpf.Map, fn *KFunc) error {
+func (t *bpfTracing) traceFunc(spec *ebpf.CollectionSpec, reusedMaps map[string]*ebpf.Map, fn *KFunc, bothEntryExit, isExit bool) error {
 	spec = spec.Copy()
 
 	isTracepoint := fn.IsTp
 	tracingFuncName := TracingProgName()
 
-	withRet := !isTracepoint && mode == TracingModeExit
-	if err := setBpfsnoopConfig(spec, fn.Ksym.addr, fn.Prms, fn.Ret, withRet); err != nil {
+	withRet := !isTracepoint && isExit
+	if err := setBpfsnoopConfig(spec, fn.Ksym.addr, fn.Prms, fn.Ret, bothEntryExit, withRet); err != nil {
 		return fmt.Errorf("failed to set bpfsnoop config: %w", err)
 	}
 
@@ -366,9 +400,9 @@ func (t *bpfTracing) traceFunc(spec *ebpf.CollectionSpec, reusedMaps map[string]
 	}
 	fn.Args = args
 
-	attachType := ebpf.AttachTraceFExit
-	if mode == TracingModeEntry {
-		attachType = ebpf.AttachTraceFEntry
+	attachType := ebpf.AttachTraceFEntry
+	if isExit {
+		attachType = ebpf.AttachTraceFExit
 	}
 	if isTracepoint {
 		attachType = ebpf.AttachTraceRawTp
@@ -409,12 +443,56 @@ func (t *bpfTracing) traceFunc(spec *ebpf.CollectionSpec, reusedMaps map[string]
 		return fmt.Errorf("failed to attach tracing: %w", err)
 	}
 
-	verboseLogIf(!isTracepoint, "Tracing kernel function %s", fnName)
+	verboseLogIf(!isTracepoint && isExit, "Tracing(fexit) kernel function %s", fnName)
+	verboseLogIf(!isTracepoint && !isExit, "Tracing(fentry) kernel function %s", fnName)
 	verboseLogIf(isTracepoint, "Tracing kernel tracepoint %s", fnName)
 
 	t.llock.Lock()
 	t.progs = append(t.progs, prog)
 	t.klnks = append(t.klnks, l)
+	t.llock.Unlock()
+
+	return nil
+}
+
+func (t *bpfTracing) traceInsn(spec *ebpf.CollectionSpec, reusedMaps map[string]*ebpf.Map, insn FuncInsn) error {
+	spec = spec.Copy()
+
+	if err := spec.Variables["INSN_IP"].Set(insn.IP); err != nil {
+		return fmt.Errorf("failed to set INSN_IP: %w", err)
+	}
+
+	coll, err := ebpf.NewCollectionWithOptions(spec, ebpf.CollectionOptions{
+		MapReplacements: map[string]*ebpf.Map{
+			".data.ready":       reusedMaps[".data.ready"],
+			"bpfsnoop_events":   reusedMaps["bpfsnoop_events"],
+			"bpfsnoop_sessions": reusedMaps["bpfsnoop_sessions"],
+		},
+	})
+	if err != nil {
+		return fmt.Errorf("failed to create bpf collection for tracing insn '%s': %w", insn.Desc, err)
+	}
+	defer coll.Close()
+
+	prog := coll.Programs["k_insn"]
+	delete(coll.Programs, "k_insn")
+	l, err := link.Kprobe(insn.Func, prog, &link.KprobeOptions{
+		Offset: insn.Off,
+	})
+	if err != nil {
+		_ = prog.Close()
+		DebugLog("Failed to attach kprobe %s insn '%s': %v", insn.Func, insn.Desc, err)
+		if errors.Is(err, unix.ENOENT) || errors.Is(err, unix.EINVAL) || errors.Is(err, unix.EADDRNOTAVAIL) {
+			return nil
+		}
+		return fmt.Errorf("failed to attach kprobe %s insn '%s': %w", insn.Func, insn.Desc, err)
+	}
+
+	VerboseLog("Tracing func %s insn '%s'", insn.Func, insn.Desc)
+
+	t.llock.Lock()
+	t.progs = append(t.progs, prog)
+	t.ilnks = append(t.ilnks, l)
 	t.llock.Unlock()
 
 	return nil

@@ -4,10 +4,12 @@
 package bpfsnoop
 
 const (
-	lbrConfigFlagOutputLbrIdx = 0 + iota
-	lbrConfigFlagOutputStackIdx
-	lbrConfigFlagOutputPktIdx
-	lbrConfigFlagOutputArgIdx
+	configFlagOutputLbrIdx = 0 + iota
+	configFlagOutputStackIdx
+	configFlagOutputPktIdx
+	configFlagOutputArgIdx
+	configFlagBothEntryExitIdx
+	configFlagIsEntryIdx
 )
 
 type BpfsnoopConfig struct {
@@ -22,24 +24,36 @@ type BpfsnoopConfig struct {
 
 func (cfg *BpfsnoopConfig) SetOutputLbr(v bool) {
 	if v {
-		cfg.Flags |= 1 << lbrConfigFlagOutputLbrIdx
+		cfg.Flags |= 1 << configFlagOutputLbrIdx
 	}
 }
 
 func (cfg *BpfsnoopConfig) SetOutputStack(v bool) {
 	if v {
-		cfg.Flags |= 1 << lbrConfigFlagOutputStackIdx
+		cfg.Flags |= 1 << configFlagOutputStackIdx
 	}
 }
 
 func (cfg *BpfsnoopConfig) SetOutputPktTuple(v bool) {
 	if v {
-		cfg.Flags |= 1 << lbrConfigFlagOutputPktIdx
+		cfg.Flags |= 1 << configFlagOutputPktIdx
 	}
 }
 
 func (cfg *BpfsnoopConfig) SetOutputArgData(v bool) {
 	if v {
-		cfg.Flags |= 1 << lbrConfigFlagOutputArgIdx
+		cfg.Flags |= 1 << configFlagOutputArgIdx
+	}
+}
+
+func (cfg *BpfsnoopConfig) SetBothEntryExit(v bool) {
+	if v {
+		cfg.Flags |= 1 << configFlagBothEntryExitIdx
+	}
+}
+
+func (cfg *BpfsnoopConfig) SetIsEntry(v bool) {
+	if v {
+		cfg.Flags |= 1 << configFlagIsEntryIdx
 	}
 }

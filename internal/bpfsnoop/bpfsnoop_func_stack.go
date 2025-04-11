@@ -13,6 +13,10 @@ import (
 	"github.com/fatih/color"
 )
 
+const (
+	MAX_STACK_DEPTH = 50
+)
+
 type FuncStack struct {
 	IPs [MAX_STACK_DEPTH]uint64
 }

@@ -33,6 +33,8 @@ var (
 	kfuncKmods      []string
 	noColorOutput   bool
 	limitEvents     uint
+
+	debugTraceInsnCnt uint
 )
 
 type Flags struct {
@@ -53,7 +55,7 @@ func ParseFlags() (*Flags, error) {
 
 	f := flag.NewFlagSet("bpfsnoop", flag.ExitOnError)
 	f.StringSliceVarP(&flags.progs, "prog", "p", nil, "bpf prog info for bpfsnoop in format PROG[,PROG,..], PROG: PROGID[:<prog function name>], PROGID: <prog ID> or 'i/id:<prog ID>' or 'p/pinned:<pinned file>' or 't/tag:<prog tag>' or 'n/name:<prog full name>' or 'pid:<pid>'; all bpf progs will be traced if '*' is specified")
-	f.StringSliceVarP(&flags.kfuncs, "kfunc", "k", nil, "filter kernel functions")
+	f.StringSliceVarP(&flags.kfuncs, "kfunc", "k", nil, "filter kernel functions, '(i)' prefix means insn tracing, '<kfunc>[:<arg>][:<type>]' format, e.g. 'tcp_v4_connect:(sk):struct sock *', '*:(struct sk_buff *)skb'")
 	f.StringSliceVarP(&flags.ktps, "tracepoint", "t", nil, "filter kernel tracepoints")
 	f.BoolVar(&kfuncAllKmods, "kfunc-all-kmods", false, "filter functions in all kernel modules")
 	f.StringSliceVar(&kfuncKmods, "kfunc-kmods", nil, "filter functions in specified kernel modules")
@@ -74,6 +76,7 @@ func ParseFlags() (*Flags, error) {
 	f.StringVar(&filterPkt, "filter-pkt", "", "filter packet with pcap-filter(7) expr if function argument is skb or xdp, e.g. 'icmp and host 1.1.1.1'")
 	f.UintVar(&limitEvents, "limit-events", 0, "limited number events to output, 0 to output all events")
 	f.BoolVar(&flags.showFuncProto, "show-func-proto", false, "show function prototype of -p,-k")
+	f.UintVar(&debugTraceInsnCnt, "trace-insn-debug-cnt", 0, "trace insn count for debug")
 
 	f.BoolVarP(&flags.showFuncProto, "show-func-proto-internal", "S", false, "show function prototype of -p,-k")
 	f.UintVarP(&limitEvents, "limit-events-internal", "E", 0, "limited number events to output, 0 to output all events")
@@ -82,6 +85,7 @@ func ParseFlags() (*Flags, error) {
 	f.MarkHidden("output-flamegraph")
 	f.MarkHidden("show-func-proto-internal")
 	f.MarkHidden("limit-events-internal")
+	f.MarkHidden("trace-insn-debug-cnt")
 
 	err := f.Parse(os.Args)
 

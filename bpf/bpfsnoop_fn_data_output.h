@@ -9,6 +9,8 @@
 #include "bpf_helpers.h"
 
 #include "bpfsnoop.h"
+#include "bpfsnoop_cfg.h"
+#include "bpfsnoop_event.h"
 
 struct bpfsnoop_str_data {
     __u8 arg[32];

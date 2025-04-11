@@ -12,10 +12,16 @@ type KfuncFlag struct {
 	name string
 	arg  string
 	typ  string
+	insn bool
 }
 
 func parseKfuncFlag(k string) (KfuncFlag, error) {
 	var kf KfuncFlag
+
+	if strings.HasPrefix(k, "(i)") {
+		kf.insn = true
+		k = k[3:]
+	}
 
 	fields := strings.Split(k, ":")
 	switch len(fields) {

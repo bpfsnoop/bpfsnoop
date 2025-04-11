@@ -52,6 +52,7 @@ type KFunc struct {
 	Args []funcArgumentOutput
 	Prms []FuncParamFlags
 	Ret  FuncParamFlags
+	Insn bool
 	IsTp bool
 	Pkt  bool
 }
@@ -71,7 +72,8 @@ func matchKernelFunc(matches []*kfuncMatch, fn *btf.Func, maxArgs int, ksyms *Ka
 	}
 
 	funcProto := fn.Type.(*btf.FuncProto)
-	if !matchKfunc(fn.Name, funcProto, matches) {
+	insnMode, matched := matchKfunc(fn.Name, funcProto, matches)
+	if !matched {
 		return nil, false
 	}
 
@@ -105,6 +107,7 @@ func matchKernelFunc(matches []*kfuncMatch, fn *btf.Func, maxArgs int, ksyms *Ka
 		if MAX_BPF_FUNC_ARGS_PREV < len(funcProto.Params) && len(funcProto.Params) <= MAX_BPF_FUNC_ARGS {
 			kf := KFunc{Ksym: ksym, Func: fn}
 			kf.Prms = params
+			kf.Insn = insnMode
 			kf.Ret = ret
 			return &kf, true
 		}
@@ -114,6 +117,7 @@ func matchKernelFunc(matches []*kfuncMatch, fn *btf.Func, maxArgs int, ksyms *Ka
 	if len(funcProto.Params) <= maxArgs {
 		kf := KFunc{Ksym: ksym, Func: fn}
 		kf.Prms = params
+		kf.Insn = insnMode
 		kf.Ret = ret
 		return &kf, true
 	}

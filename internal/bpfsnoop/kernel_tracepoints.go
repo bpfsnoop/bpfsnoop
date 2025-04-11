@@ -38,7 +38,7 @@ func matchKernelTracepoints(tps []string, tpInfos map[string]tracepointInfo, sil
 			continue
 		}
 
-		ok := matchKfunc(tpName, &fp, matches)
+		_, ok := matchKfunc(tpName, &fp, matches)
 		if !ok {
 			continue
 		}

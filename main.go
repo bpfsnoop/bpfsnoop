@@ -14,7 +14,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/bpfsnoop/gapstone"
 	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/ringbuf"
 	"golang.org/x/sync/errgroup"
@@ -29,8 +28,11 @@ func main() {
 	flags, err := bpfsnoop.ParseFlags()
 	assert.NoErr(err, "Failed to parse flags: %v")
 
+	readSpec, err := loadRead()
+	assert.NoErr(err, "Failed to load read bpf spec: %v")
+
 	if flags.Disasm() {
-		bpfsnoop.Disasm(flags)
+		bpfsnoop.Disasm(flags, readSpec)
 		return
 	}
 
@@ -84,9 +86,6 @@ func main() {
 	err = bpfSpec.Variables["CPU_MASK"].Set(uint32(mathx.Mask(numCPU)))
 	assert.NoErr(err, "Failed to set CPU_MASK: %v")
 
-	readSpec, err := loadRead()
-	assert.NoErr(err, "Failed to load read bpf spec: %v")
-
 	tailcallSpec, err := loadTailcall()
 	assert.NoErr(err, "Failed to load tailcall bpf spec: %v")
 
@@ -136,9 +135,11 @@ func main() {
 		assert.NoErr(err, "Failed to create addr2line: %v")
 	}
 
-	engine, err := gapstone.New(int(gapstone.CS_ARCH_X86), int(gapstone.CS_MODE_64))
-	assert.NoErr(err, "Failed to create capstone engine: %v")
-	defer engine.Close()
+	insnSpec, err := loadInsn()
+	assert.NoErr(err, "Failed to load insn bpf spec: %v")
+
+	insns, err := bpfsnoop.NewFuncInsns(kfuncs, kallsyms, readSpec)
+	assert.NoErr(err, "Failed to create func insns: %v")
 
 	bpfsnoop.VerboseLog("Disassembling bpf progs ..")
 	bpfProgs, err := bpfsnoop.NewBPFProgs(progs, false, false)
@@ -146,7 +147,7 @@ func main() {
 	defer bpfProgs.Close()
 
 	tracingTargets := bpfProgs.Tracings()
-	assert.True(len(tracingTargets)+len(kfuncs) != 0, "No tracing target")
+	assert.True(len(tracingTargets)+len(kfuncs)+len(insns.Insns) != 0, "No tracing target")
 
 	bpfsnoop.VerboseLog("Tracing bpf progs or kernel functions/tracepoints ..")
 
@@ -160,7 +161,7 @@ func main() {
 	}
 
 	tstarted := time.Now()
-	tracings, err := bpfsnoop.NewBPFTracing(bpfSpec, reusedMaps, bpfProgs, kfuncs)
+	tracings, err := bpfsnoop.NewBPFTracing(bpfSpec, insnSpec, reusedMaps, bpfProgs, kfuncs, insns)
 	assert.NoVerifierErr(err, "Failed to trace: %v")
 	bpfsnoop.DebugLog("Tracing %d tracees cost %s", len(tracings.Progs()), time.Since(tstarted))
 	var tended time.Time
@@ -213,6 +214,7 @@ func main() {
 			Addr2line: addr2line,
 			Ksyms:     kallsyms,
 			Kfuncs:    kfuncs,
+			Insns:     insns,
 		}
 		return bpfsnoop.Run(reader, &helpers, reusedMaps, w)
 	})
