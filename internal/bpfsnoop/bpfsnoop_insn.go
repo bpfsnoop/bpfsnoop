@@ -20,17 +20,18 @@ type InsnEvent struct {
 	CPU    uint32
 }
 
-func outputInsnEvent(sb *strings.Builder, sess *Sessions, insns *FuncInsns, event *InsnEvent) bool {
+func outputInsnEvent(sb *strings.Builder, sess *Sessions, insns *FuncInsns, event *InsnEvent) {
 	insn, ok := insns.Insns[event.InsnIP]
 	if !ok {
-		return false
+		return
 	}
 
-	var duration time.Duration
-	if s, ok := sess.Get(event.SessID); ok {
-		duration = time.Duration(event.KernNs - s.started)
+	s, ok := sess.Get(event.SessID)
+	if !ok {
+		return
 	}
 
+	duration := time.Duration(event.KernNs - s.started)
 	if !noColorOutput {
 		color.New(color.FgYellow).Fprint(sb, insn.Func)
 		color.New(color.FgCyan).Fprintf(sb, " cpu=%-2d", event.CPU)
@@ -38,7 +39,8 @@ func outputInsnEvent(sb *strings.Builder, sess *Sessions, insns *FuncInsns, even
 	} else {
 		fmt.Fprintf(sb, "%s cpu=%-2d duration=%-12s", insn.Func, event.CPU, duration)
 	}
-	fmt.Fprintf(sb, " insn=%s", insn.Desc)
+	fmt.Fprintf(sb, " insn=%s\n", insn.Desc)
 
-	return true
+	s.outputs = append(s.outputs, sb.String())
+	sb.Reset()
 }
