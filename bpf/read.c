@@ -7,7 +7,7 @@
 
 volatile const __u64 __addr;
 volatile const __u32 __size = 0;
-__u8 buff[4096];
+__u8 buff[4096] SEC(".data.buff");
 bool run SEC(".data.run");
 
 SEC("fentry/__x64_sys_nanosleep")

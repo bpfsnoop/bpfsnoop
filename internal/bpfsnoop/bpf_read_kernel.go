@@ -11,14 +11,17 @@ import (
 	"github.com/cilium/ebpf/link"
 )
 
-const readMax = 4096
-
 func readKernel(spec *ebpf.CollectionSpec, addr uint64, size uint32) ([]byte, error) {
-	if size > readMax {
-		return nil, fmt.Errorf("size %d is larger than limit %d", size, readMax)
+	readSize := (size + 7) & (^uint32(7)) // round up to 8-times bytes
+	if readSize > 65536 {
+		return nil, fmt.Errorf("read size %d is too large", readSize)
 	}
 
 	spec = spec.Copy()
+
+	buff := make([]byte, readSize)
+	spec.Maps[".data.buff"].ValueSize = readSize
+	spec.Maps[".data.buff"].Contents[0].Value = buff
 
 	if err := spec.Variables["__addr"].Set(addr); err != nil {
 		return nil, fmt.Errorf("failed to set __addr: %w", err)
@@ -54,7 +57,6 @@ func readKernel(spec *ebpf.CollectionSpec, addr uint64, size uint32) ([]byte, er
 		return nil, errors.New("reading kernel was not triggered")
 	}
 
-	var buff [readMax]byte
 	if err := coll.Variables["buff"].Get(&buff); err != nil {
 		return nil, fmt.Errorf("failed to get buff: %w", err)
 	}
