@@ -16,44 +16,70 @@ import (
 	"github.com/cilium/ebpf"
 )
 
+type progFlagInfo struct {
+	funcName string
+	insnMode bool
+}
+
 type progFlags struct {
 	all         bool
-	ids         map[uint32]string // progID -> funcName
-	tags        map[string]string // tag -> funcName
-	names       map[string]string // entryFuncName -> funcName
-	pinnedPaths map[string]string // pinnedPath -> funcName
-	pids        map[uint32]string // pid -> funcName
+	ids         map[uint32]progFlagInfo
+	tags        map[string]progFlagInfo
+	names       map[string]progFlagInfo
+	pinnedPaths map[string]progFlagInfo
+	pids        map[uint32]progFlagInfo
 }
 
 func newProgFlags(pflags []ProgFlag) progFlags {
 	var pf progFlags
-	pf.ids = make(map[uint32]string)
-	pf.tags = make(map[string]string)
-	pf.names = make(map[string]string)
-	pf.pinnedPaths = make(map[string]string)
-	pf.pids = make(map[uint32]string)
+	pf.ids = make(map[uint32]progFlagInfo)
+	pf.tags = make(map[string]progFlagInfo)
+	pf.names = make(map[string]progFlagInfo)
+	pf.pinnedPaths = make(map[string]progFlagInfo)
+	pf.pids = make(map[uint32]progFlagInfo)
 
 	for _, f := range pflags {
 		if f.all {
 			pf.all = true
+
+			clear(pf.ids)
+			clear(pf.tags)
+			clear(pf.names)
+			clear(pf.pinnedPaths)
+			clear(pf.pids)
 			return pf
 		}
 
 		switch f.descriptor {
 		case progFlagDescriptorID:
-			pf.ids[f.progID] = f.funcName
+			pf.ids[f.progID] = progFlagInfo{
+				funcName: f.funcName,
+				insnMode: f.insn,
+			}
 
 		case progFlagDescriptorTag:
-			pf.tags[f.tag] = f.funcName
+			pf.tags[f.tag] = progFlagInfo{
+				funcName: f.funcName,
+				insnMode: f.insn,
+			}
 
 		case progFlagDescriptorName:
-			pf.names[f.name] = f.funcName
+			pf.names[f.name] = progFlagInfo{
+				funcName: f.funcName,
+				insnMode: f.insn,
+			}
 
 		case progFlagDescriptorPinned:
-			pf.pinnedPaths[f.pinned] = f.funcName
+			pf.pinnedPaths[f.pinned] = progFlagInfo{
+				funcName: f.funcName,
+				insnMode: f.insn,
+			}
 
 		case progFlagDescriptorPid:
-			pf.pids[f.pid] = f.funcName
+			pf.pids[f.pid] = progFlagInfo{
+				funcName: f.funcName,
+				insnMode: f.insn,
+			}
 		}
 	}
 
@@ -69,7 +95,7 @@ func (p progFlags) allID() bool {
 		!p.all
 }
 
-func (p *bpfProgs) prepareProgInfoByID(id ebpf.ProgramID, funcName string) error {
+func (p *bpfProgs) prepareProgInfoByID(id ebpf.ProgramID, funcName string, insnMode bool) error {
 	prog, err := ebpf.NewProgramFromID(id)
 	if err != nil {
 		return fmt.Errorf("failed to load prog %d: %w", id, err)
@@ -88,14 +114,15 @@ func (p *bpfProgs) prepareProgInfoByID(id ebpf.ProgramID, funcName string) error
 		}
 	}
 
-	return p.addTracing(id, funcName, prog)
+	return p.addTracing(id, funcName, prog, insnMode)
 }
 
 func (p *bpfProgs) prepareProgInfosByIDs(pflags []ProgFlag) error {
 	for i := range pflags {
 		id := ebpf.ProgramID(pflags[i].progID)
 		funcName := pflags[i].funcName
-		if err := p.prepareProgInfoByID(id, funcName); err != nil {
+		insnMode := pflags[i].insn
+		if err := p.prepareProgInfoByID(id, funcName, insnMode); err != nil {
 			return err
 		}
 	}
@@ -125,10 +152,10 @@ func (p *bpfProgs) prepareProgInfoByPinnedPath(pflag ProgFlag) error {
 		return fmt.Errorf("failed to get prog ID")
 	}
 
-	return p.addTracing(id, funcName, prog)
+	return p.addTracing(id, funcName, prog, pflag.insn)
 }
 
-func (p *bpfProgs) addProgByID(id ebpf.ProgramID, funcName string) error {
+func (p *bpfProgs) addProgByID(id ebpf.ProgramID, funcName string, insnMode bool) error {
 	prog, err := ebpf.NewProgramFromID(id)
 	if err != nil {
 		return fmt.Errorf("failed to load prog from ID %d: %w", id, err)
@@ -145,7 +172,7 @@ func (p *bpfProgs) addProgByID(id ebpf.ProgramID, funcName string) error {
 		return fmt.Errorf("failed to get prog func name: %w", err)
 	}
 
-	return p.addTracing(id, funcName, prog)
+	return p.addTracing(id, funcName, prog, insnMode)
 }
 
 func (p *bpfProgs) prepareProgInfoByPid(pflag ProgFlag) error {
@@ -185,7 +212,7 @@ func (p *bpfProgs) prepareProgInfoByPid(pflag ProgFlag) error {
 				return fmt.Errorf("failed to parse progID %s from %s: %w", progID, fdinfoPath, err)
 			}
 
-			err = p.addProgByID(ebpf.ProgramID(id), pflag.funcName)
+			err = p.addProgByID(ebpf.ProgramID(id), pflag.funcName, pflag.insn)
 			if err != nil {
 				return err
 			}
@@ -224,34 +251,37 @@ func (p *bpfProgs) prepareProgInfo(progID ebpf.ProgramID, pflags progFlags) erro
 	}
 
 	if pflags.all {
-		return p.addTracing(progID, entryFuncName, prog)
+		return p.addTracing(progID, entryFuncName, prog, false)
 	}
 
 	tag := info.Tag
 
-	if funcName, ok := pflags.ids[uint32(progID)]; ok {
+	if pflag, ok := pflags.ids[uint32(progID)]; ok {
+		funcName := pflag.funcName
 		if funcName == "" {
 			funcName = entryFuncName
 		}
-		if err := p.addTracing(progID, funcName, prog); err != nil {
+		if err := p.addTracing(progID, funcName, prog, pflag.insnMode); err != nil {
 			return err
 		}
 	}
 
-	if funcName, ok := pflags.tags[tag]; ok {
+	if pflag, ok := pflags.tags[tag]; ok {
+		funcName := pflag.funcName
 		if funcName == "" {
 			funcName = entryFuncName
 		}
-		if err := p.addTracing(progID, funcName, prog); err != nil {
+		if err := p.addTracing(progID, funcName, prog, pflag.insnMode); err != nil {
 			return err
 		}
 	}
 
-	if funcName, ok := pflags.names[entryFuncName]; ok {
+	if pflag, ok := pflags.names[entryFuncName]; ok {
+		funcName := pflag.funcName
 		if funcName == "" {
 			funcName = entryFuncName
 		}
-		if err := p.addTracing(progID, funcName, prog); err != nil {
+		if err := p.addTracing(progID, funcName, prog, pflag.insnMode); err != nil {
 			return err
 		}
 	}

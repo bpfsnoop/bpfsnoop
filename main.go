@@ -138,15 +138,15 @@ func main() {
 	insnSpec, err := loadInsn()
 	assert.NoErr(err, "Failed to load insn bpf spec: %v")
 
-	insns, err := bpfsnoop.NewFuncInsns(kfuncs, kallsyms, readSpec)
-	assert.NoErr(err, "Failed to create func insns: %v")
-
 	bpfsnoop.VerboseLog("Disassembling bpf progs ..")
 	bpfProgs, err := bpfsnoop.NewBPFProgs(progs, false, false)
 	assert.NoErr(err, "Failed to get bpf progs: %v")
 	defer bpfProgs.Close()
 
 	tracingTargets := bpfProgs.Tracings()
+	insns, err := bpfsnoop.NewFuncInsns(kfuncs, bpfProgs.Tracings(), kallsyms, readSpec)
+	assert.NoErr(err, "Failed to create func insns: %v")
+
 	assert.True(len(tracingTargets)+len(kfuncs)+len(insns.Insns) != 0, "No tracing target")
 
 	bpfsnoop.VerboseLog("Tracing bpf progs or kernel functions/tracepoints ..")

@@ -21,6 +21,8 @@ type bpfTracingInfo struct {
 	funcName string
 	params   []FuncParamFlags
 	ret      FuncParamFlags
+	insnData []byte
+	insnMode bool
 }
 
 func getFuncParams(fn *btf.Func) ([]FuncParamFlags, FuncParamFlags, error) {
@@ -95,7 +97,7 @@ func (p *bpfProgs) canTrace(prog *ebpf.Program, id ebpf.ProgramID) bool {
 	return true
 }
 
-func (p *bpfProgs) addTracing(id ebpf.ProgramID, funcName string, prog *ebpf.Program) error {
+func (p *bpfProgs) addTracing(id ebpf.ProgramID, funcName string, prog *ebpf.Program, insnMode bool) error {
 	if !p.canTrace(prog, id) && !p.disasm {
 		return nil
 	}
@@ -120,6 +122,16 @@ func (p *bpfProgs) addTracing(id ebpf.ProgramID, funcName string, prog *ebpf.Pro
 		return fmt.Errorf("failed to get jited ksym addrs for %d", id)
 	}
 
+	jitedInsns, ok := info.JitedInsns()
+	if !ok {
+		return fmt.Errorf("failed to get jited insns for %d", id)
+	}
+
+	jitedFuncLens, ok := info.JitedFuncLens()
+	if !ok {
+		return fmt.Errorf("failed to get jited func lens for %d", id)
+	}
+
 	fns, err := info.FuncInfos()
 	if err != nil {
 		return fmt.Errorf("failed to get func infos for %d: %w", id, err)
@@ -135,11 +147,6 @@ func (p *bpfProgs) addTracing(id ebpf.ProgramID, funcName string, prog *ebpf.Pro
 		// https://lore.kernel.org/all/20230912150442.2009-3-hffilwlqm@gmail.com/
 		// for more details.
 
-		jitedInsns, ok := info.JitedInsns()
-		if !ok {
-			return fmt.Errorf("failed to get jited insns for %d", id)
-		}
-
 		// It's unable to check whether the subprog is tail_call_reachable, so
 		// check the entry prog instead.
 
@@ -153,6 +160,12 @@ func (p *bpfProgs) addTracing(id ebpf.ProgramID, funcName string, prog *ebpf.Pro
 	params, ret, err := getFuncParams(fns[idx].Func)
 	if err != nil {
 		return fmt.Errorf("failed to get func params for %s: %w", funcName, err)
+	}
+
+	insns, b := jitedInsns[:jitedFuncLens[0]], jitedInsns[jitedFuncLens[0]:]
+	for i := 1; i < idx; i++ {
+		insns = b[:jitedFuncLens[i]]
+		b = b[jitedFuncLens[i]:]
 	}
 
 	if prev, ok := p.progs[id]; !ok {
@@ -174,6 +187,8 @@ func (p *bpfProgs) addTracing(id ebpf.ProgramID, funcName string, prog *ebpf.Pro
 		funcName: funcName,
 		params:   params,
 		ret:      ret,
+		insnData: insns,
+		insnMode: insnMode,
 	}
 
 	return nil

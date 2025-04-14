@@ -28,11 +28,17 @@ type ProgFlag struct {
 	descriptor string
 	funcName   string
 
-	all bool
+	insn bool
+	all  bool
 }
 
 func parseProgFlag(p string) (ProgFlag, error) {
 	var pf ProgFlag
+
+	if strings.HasPrefix(p, "(i)") {
+		pf.insn = true
+		p = p[3:]
+	}
 
 	if p == "*" {
 		pf.all = true
