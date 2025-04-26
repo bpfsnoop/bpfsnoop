@@ -95,7 +95,7 @@ func NewBPFTracing(spec, insnSpec *ebpf.CollectionSpec, reusedMaps map[string]*e
 
 	if err := errg.Wait(); err != nil {
 		t.Close()
-		return nil, fmt.Errorf("failed to trace bpf progs: %w", err)
+		return nil, fmt.Errorf("failed to trace targets %w", err)
 	}
 
 	return &t, nil
@@ -154,27 +154,16 @@ func TracingProgName() string {
 }
 
 func (t *bpfTracing) injectArgFilter(prog *ebpf.ProgramSpec, params []btf.FuncParam, fnName string) error {
-	if len(argFilter) == 0 {
-		return nil
+	i, err := argFilter.inject(prog, params)
+	if err != nil {
+		if err == errSkipped {
+			clearFilterArgSubprog(prog)
+			return nil
+		}
+		return fmt.Errorf("failed to inject func arg filter expr: %w", err)
 	}
 
-	for i, p := range params {
-		arg, ok := matchFuncArgs(p)
-		if !ok {
-			continue
-		}
-
-		err := arg.inject(prog, i, p.Type)
-		if err != nil {
-			return fmt.Errorf("failed to inject func arg filter expr: %w", err)
-		}
-
-		DebugLog("Injected --filter-arg expr to %dth param %s of func %s", i, p.Name, fnName)
-
-		return nil
-	}
-
-	clearFilterArgSubprog(prog)
+	DebugLog("Injected --filter-arg '%s' to func %s", argFilter.args[i].expr, fnName)
 
 	return nil
 }

@@ -18,6 +18,7 @@ require (
 	github.com/spf13/pflag v1.0.5
 	golang.org/x/exp v0.0.0-20241009180824-f66d83c29e7c
 	golang.org/x/sync v0.8.0
+	rsc.io/c2go v0.0.0-20170620140410-520c22818a08
 )
 
 require (
@@ -26,7 +27,6 @@ require (
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	golang.org/x/net v0.33.0 // indirect
-	rsc.io/c2go v0.0.0-20170620140410-520c22818a08 // indirect
 )
 
 require (
