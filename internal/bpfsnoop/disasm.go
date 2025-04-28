@@ -196,8 +196,11 @@ func dumpKfunc(kfunc string, kmods []string, bytes uint, readSpec *ebpf.Collecti
 	}
 
 	printInsnInfo := func(pc uint64, opcode string, mnemonic string, opstr string) {
-		fmt.Fprintf(&sb, "%s: %-19s\t%s\t%s",
-			color.New(color.FgBlue).Sprintf("%#x", pc), opcode,
+		offset := pc - uint64(kaddr)
+		fmt.Fprintf(&sb, "%s %-14s %-19s\t%s\t%s",
+			color.New(color.FgBlue).Sprintf("%#x", pc),
+			fmt.Sprintf("<+%d/%#x>:", offset, offset),
+			opcode,
 			color.GreenString(mnemonic), color.RedString(opstr))
 	}
 
