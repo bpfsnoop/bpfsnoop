@@ -10,7 +10,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/bpfsnoop/gapstone"
 	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/btf"
 	"github.com/fatih/color"
@@ -18,21 +17,20 @@ import (
 	"github.com/bpfsnoop/bpfsnoop/internal/assert"
 )
 
-func printInsnInfo(pc uint64, insn gapstone.Instruction) string {
+func printInsnInfo(pc, offset uint64, bytes []byte, mnemonic, opstr string) string {
 	var opcodes []string
-	for _, insn := range insn.Bytes {
+	for _, insn := range bytes {
 		opcodes = append(opcodes, fmt.Sprintf("%02x", insn))
 	}
 	opcode := strings.Join(opcodes, " ")
-	opstr := insn.OpStr
-	mnemonic := insn.Mnemonic
+	off := fmt.Sprintf("<+%d/%#x>:", offset, offset)
 
 	if noColorOutput {
-		return fmt.Sprintf("%#x: %-19s\t%s\t%s",
-			pc, opcode, mnemonic, opstr)
+		return fmt.Sprintf("%#x %-14s %-19s\t%s\t%s",
+			pc, off, opcode, mnemonic, opstr)
 	}
-	return fmt.Sprintf("%s: %-19s\t%s\t%s",
-		color.New(color.FgBlue).Sprintf("%#x", pc), opcode,
+	return fmt.Sprintf("%s %-14s %-19s\t%s\t%s",
+		color.New(color.FgBlue).Sprintf("%#x", pc), off, opcode,
 		color.GreenString(mnemonic), color.RedString(opstr))
 }
 
@@ -154,7 +152,7 @@ func DumpProg(pf []ProgFlag) {
 			inst, err := engine.Disasm(fnInsns, kaddr, 1)
 			assert.NoErr(err, "Failed to disasm instruction: %v")
 
-			fmt.Fprint(&sb, printInsnInfo(kaddr, inst[0]))
+			fmt.Fprint(&sb, printInsnInfo(kaddr, pc, inst[0].Bytes, inst[0].Mnemonic, inst[0].OpStr))
 
 			opstr := inst[0].OpStr
 			var endpoint *branchEndpoint

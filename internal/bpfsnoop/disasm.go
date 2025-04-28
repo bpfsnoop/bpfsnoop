@@ -195,15 +195,6 @@ func dumpKfunc(kfunc string, kmods []string, bytes uint, readSpec *ebpf.Collecti
 		fmt.Fprintln(&sb)
 	}
 
-	printInsnInfo := func(pc uint64, opcode string, mnemonic string, opstr string) {
-		offset := pc - uint64(kaddr)
-		fmt.Fprintf(&sb, "%s %-14s %-19s\t%s\t%s",
-			color.New(color.FgBlue).Sprintf("%#x", pc),
-			fmt.Sprintf("<+%d/%#x>:", offset, offset),
-			opcode,
-			color.GreenString(mnemonic), color.RedString(opstr))
-	}
-
 	li := getLineInfo(uintptr(kaddr), bpfProgs, addr2line, kallsyms)
 	printLineInfo(li)
 
@@ -217,7 +208,7 @@ func dumpKfunc(kfunc string, kmods []string, bytes uint, readSpec *ebpf.Collecti
 		}
 		if err != nil {
 			if b[0] == 0x82 {
-				printInsnInfo(pc, "82", "(bad)", "")
+				fmt.Fprint(&sb, printInsnInfo(pc, pc-kaddr, b[:1], "(bad)", ""))
 
 				pc++
 				b = b[1:]
@@ -240,14 +231,8 @@ func dumpKfunc(kfunc string, kmods []string, bytes uint, readSpec *ebpf.Collecti
 		}
 
 		inst := insts[0]
-
-		var opcodes []string
-		for _, insn := range inst.Bytes {
-			opcodes = append(opcodes, fmt.Sprintf("%02x", insn))
-		}
-		opcode := strings.Join(opcodes, " ")
 		opstr := inst.OpStr
-		printInsnInfo(pc, opcode, inst.Mnemonic, opstr)
+		fmt.Fprint(&sb, printInsnInfo(pc, pc-kaddr, inst.Bytes, inst.Mnemonic, opstr))
 
 		var endpoint *branchEndpoint
 		if strings.HasPrefix(opstr, "0x") {

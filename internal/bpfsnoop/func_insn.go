@@ -57,7 +57,7 @@ func (f *FuncInsns) parseFuncInsns(kfunc *KFunc, engine *gapstone.Engine, ksyms 
 			Off:  offset,
 			IP:   uint64(insn.Address),
 			Insn: insn,
-			Desc: fmt.Sprintf("+%#-6x  %s", offset, printInsnInfo(uint64(insn.Address), insn)),
+			Desc: printInsnInfo(uint64(insn.Address), offset, insn.Bytes, insn.Mnemonic, insn.OpStr),
 		}
 	}
 
