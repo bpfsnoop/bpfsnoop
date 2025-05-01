@@ -21,6 +21,13 @@ func parseUnsigned(text string) (uint64, error) {
 	if strings.HasPrefix(text, "0") && len(text) > 1 {
 		return strconv.ParseUint(text[1:], 8, 64)
 	}
+	if strings.HasPrefix(text, "'") {
+		if len(text) != 3 || text[2] != '\'' {
+			return 0, strconv.ErrSyntax
+		}
+
+		return uint64(text[1]), nil
+	}
 	return strconv.ParseUint(text, 10, 64)
 }
 

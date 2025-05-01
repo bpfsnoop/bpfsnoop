@@ -33,3 +33,4 @@ go.work
 /bpf/headers/vmlinux.h
 
 /bin/*
+coverage.txt

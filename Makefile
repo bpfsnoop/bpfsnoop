@@ -66,3 +66,11 @@ publish: local_release
 	$(CMD_TAR) -czf $(DIR_BIN)/$(BPFSNOOP_OBJ)-$(VERSION)-linux-amd64.tar.gz $(DIR_BIN)/$(BPFSNOOP_OBJ) $(DIR_BIN)/$(BPFSNOOP_CSM)
 	@$(CMD_MV) $(RELEASE_NOTES) $(DIR_BIN)/$(RELEASE_NOTES)
 	$(CMD_GH) release create $(VERSION) $(DIR_BIN)/$(BPFSNOOP_OBJ)-$(VERSION)-linux-amd64.tar.gz --title "bpfsnoop $(VERSION)" --notes-file $(DIR_BIN)/$(RELEASE_NOTES)
+
+.PHONY: test
+test:
+	@go clean -testcache
+	GOEXPERIMENT=nocoverageredesign go test -race -timeout 60s -coverpkg=./internal/cc -coverprofile=coverage.txt -covermode atomic ./internal/cc
+	go tool cover -func=coverage.txt
+	@rm -f coverage.txt
+	@go clean -testcache
