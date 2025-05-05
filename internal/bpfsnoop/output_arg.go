@@ -6,15 +6,16 @@ package bpfsnoop
 import (
 	"fmt"
 	"log"
+	"slices"
 	"strings"
 
 	"github.com/Asphaltt/mybtf"
 	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/asm"
 	"github.com/cilium/ebpf/btf"
-	"github.com/leonhwangprojects/bice"
 
 	"github.com/bpfsnoop/bpfsnoop/internal/btfx"
+	"github.com/bpfsnoop/bpfsnoop/internal/cc"
 )
 
 const (
@@ -22,17 +23,22 @@ const (
 	outputFuncArgDataInternal = "__output_arg_data"
 
 	outputFuncArgDataLabelExit = "__output_arg_data_fail"
+
+	dataReg = asm.R8
+	argsReg = asm.R9
+
+	argOutputStackOff = 16
 )
 
 var argOutput argDataOutput
 
 type funcArgumentOutput struct {
 	expr string
-	typ  string
-	name string
-	last string
 	t    btf.Type
+	mem  *btf.Member
 	insn asm.Instructions
+
+	vars []string
 
 	isNumPtr bool
 	isStr    bool
@@ -42,36 +48,20 @@ type argDataOutput struct {
 	args []funcArgumentOutput
 }
 
-func prepareArgOutput(expr string) funcArgumentOutput {
+func prepareArgOutput(expr string) (funcArgumentOutput, error) {
 	var arg funcArgumentOutput
-
-	typ, err := getTypeDescFrom(expr)
-	if err != nil {
-		log.Fatalf("Failed to get type description for function argument: %v", err)
-	}
-
-	arg.typ = strings.TrimSpace(typ)
 	arg.expr = strings.TrimSpace(expr)
-	if arg.typ != "" {
-		arg.expr = strings.TrimSpace(expr[len(arg.typ)+2:])
+
+	var err error
+	arg.vars, err = cc.ExtractVarNames(arg.expr)
+	if err != nil {
+		return arg, fmt.Errorf("failed to extract var names from '%s': %w", arg.expr, err)
+	}
+	if len(arg.vars) == 0 {
+		return arg, fmt.Errorf("'%s' has no var names", arg.expr)
 	}
 
-	expr = arg.expr
-	for i := 0; i < len(expr); i++ {
-		if !isValidChar(expr[i]) {
-			arg.name = expr[:i]
-			break
-		}
-	}
-
-	for i := len(expr) - 1; i >= 0; i-- {
-		if !isValidChar(expr[i]) {
-			arg.last = expr[i+1:]
-			break
-		}
-	}
-
-	return arg
+	return arg, nil
 }
 
 func prepareFuncArgOutput(exprs []string) argDataOutput {
@@ -79,59 +69,76 @@ func prepareFuncArgOutput(exprs []string) argDataOutput {
 	arg.args = make([]funcArgumentOutput, 0, len(exprs))
 
 	for _, expr := range exprs {
-		arg.args = append(arg.args, prepareArgOutput(expr))
+		a, err := prepareArgOutput(expr)
+		if err != nil {
+			log.Fatalf("failed to prepare arg output: %v", err)
+		}
+
+		arg.args = append(arg.args, a)
 	}
 
 	return arg
 }
 
-func (arg *funcArgumentOutput) compile(idx int, t btf.Type, offset int, ctxStale bool) (int, error) {
+func (arg *funcArgumentOutput) compile(params []btf.FuncParam, spec *btf.Spec, offset int) (int, error) {
 	var insns asm.Instructions
-	if ctxStale {
-		insns = append(insns,
-			asm.Mov.Reg(asm.R1, asm.R8), // R1 = ctx
-		)
-	}
 
-	insns = append(insns, genAccessArg(idx, asm.R3)...)
-
-	res, err := bice.Access(bice.AccessOptions{
-		Insns:     insns,
-		Expr:      arg.expr,
-		Type:      t,
-		Src:       asm.R3, // R3 = the idx-th argument
-		Dst:       asm.R3,
-		LabelExit: outputFuncArgDataLabelExit,
+	res, err := cc.EvalExpr(cc.CompileExprOptions{
+		Expr:          arg.expr,
+		Params:        params,
+		Spec:          spec,
+		LabelExit:     outputFuncArgDataLabelExit,
+		ReservedStack: argOutputStackOff,
+		UsedRegisters: []asm.Register{dataReg, argsReg},
 	})
 	if err != nil {
-		return 0, fmt.Errorf("failed to compile expr %s: %w", arg.expr, err)
+		return 0, fmt.Errorf("failed to compile expr '%s': %w", arg.expr, err)
+	}
+	size, err := btf.Sizeof(res.Btf)
+	if err != nil {
+		return 0, fmt.Errorf("failed to get size of btf type %v: %w", res.Btf, err)
 	}
 
-	arg.t = res.LastField
-	arg.isNumPtr = btfx.IsNumberPointer(res.LastField)
-	arg.isStr = mybtf.IsConstCharPtr(res.LastField) || mybtf.IsCharArray(res.LastField)
+	arg.t = res.Btf
+	arg.mem = res.Mem
+	arg.isNumPtr = btfx.IsNumberPointer(res.Btf)
+	arg.isStr = mybtf.IsConstCharPtr(res.Btf) || mybtf.IsCharArray(res.Btf)
+
+	if !arg.isStr && (size == 0 || size > 8 || (res.Mem != nil && res.Mem.BitfieldSize > 64)) {
+		return 0, fmt.Errorf("invalid size of btf type %v: %d", res.Btf, size)
+	}
 
 	dataSize := 16
 	if !arg.isStr {
 		insns = append(res.Insns,
-			asm.StoreMem(asm.R6, int16(offset), asm.R3, asm.DWord),
+			asm.StoreMem(dataReg, int16(offset), res.Reg, asm.DWord),
 		)
 
 		if arg.isNumPtr {
+			if res.Reg != asm.R3 {
+				insns = append(insns,
+					asm.Mov.Reg(asm.R3, res.Reg),
+				)
+			}
 			insns = append(insns,
 				// R3 is ready to be used as a pointer to the data
 				asm.Mov.Imm(asm.R2, 8),
-				asm.Mov.Reg(asm.R1, asm.R6),
+				asm.Mov.Reg(asm.R1, dataReg),
 				asm.Add.Imm(asm.R1, int32(offset)),
 				asm.FnProbeReadKernel.Call(),
 			)
 		}
 	} else {
+		if res.Reg != asm.R3 {
+			insns = append(insns,
+				asm.Mov.Reg(asm.R3, res.Reg),
+			)
+		}
 		offset = 2 * maxOutputArgCnt * 8
 		insns = append(res.Insns,
 			// R3 is ready to be used as a pointer to the string
 			asm.Mov.Imm(asm.R2, maxOutputStrLen),
-			asm.Mov.Reg(asm.R1, asm.R6),
+			asm.Mov.Reg(asm.R1, dataReg),
 			asm.Add.Imm(asm.R1, int32(offset)),
 			asm.FnProbeReadKernelStr.Call(),
 		)
@@ -143,18 +150,14 @@ func (arg *funcArgumentOutput) compile(idx int, t btf.Type, offset int, ctxStale
 	return dataSize, nil
 }
 
-func (arg *funcArgumentOutput) match(p btf.FuncParam) bool {
-	if arg.expr == "" {
-		return false
-	}
-	if arg.name != p.Name {
-		return false
-	}
-	if arg.typ != "" && arg.typ != btfx.Repr(p.Type) {
-		return false
+func (arg *funcArgumentOutput) match(params []btf.FuncParam) bool {
+	for _, p := range params {
+		if slices.Contains(arg.vars, p.Name) {
+			return true
+		}
 	}
 
-	return true
+	return false
 }
 
 func (arg *argDataOutput) correctArgType(t btf.Type) (btf.Type, error) {
@@ -189,48 +192,51 @@ func (arg *argDataOutput) correctArgType(t btf.Type) (btf.Type, error) {
 func (arg *argDataOutput) matchParams(params []btf.FuncParam, checkArgType bool) ([]funcArgumentOutput, error) {
 	args := make([]funcArgumentOutput, 0, maxOutputArgCnt)
 
-	ctxStale := false
 	strUsed := false
 	dataCnt := 0
 	offset := 0
 
-	for i, p := range params {
-		for _, a := range arg.args {
-			if !a.match(p) {
-				continue
-			}
+	spec, err := btf.LoadKernelSpec()
+	if err != nil {
+		return nil, fmt.Errorf("failed to load kernel spec: %w", err)
+	}
 
-			t := p.Type
-			if checkArgType {
-				var err error
-				t, err = arg.correctArgType(p.Type)
-				if err != nil {
-					return nil, fmt.Errorf("failed to correct arg type: %w", err)
-				}
-			}
-
-			a := a
-			size, err := a.compile(i, t, offset, ctxStale)
+	params = slices.Clone(params)
+	if checkArgType {
+		for i, p := range params {
+			t, err := arg.correctArgType(p.Type)
 			if err != nil {
-				return nil, fmt.Errorf("failed to compile arg %s with expr %s: %w", p.Name, a.expr, err)
+				return nil, fmt.Errorf("failed to correct arg type: %w", err)
 			}
 
-			if strUsed && a.isStr {
-				return nil, fmt.Errorf("only one string data is allowed")
-			}
-			strUsed = strUsed || a.isStr
-			if !a.isStr {
-				dataCnt++
-			}
-			if dataCnt > maxOutputArgCnt {
-				return nil, fmt.Errorf("up-to-%d arg-data is allowed", maxOutputArgCnt)
-			}
-
-			offset += size
-
-			args = append(args, a)
-			ctxStale = true
+			params[i].Type = t
 		}
+	}
+
+	for _, a := range arg.args {
+		if !a.match(params) {
+			continue
+		}
+
+		a := a
+		size, err := a.compile(params, spec, offset)
+		if err != nil {
+			return nil, fmt.Errorf("failed to compile expr '%s': %w", a.expr, err)
+		}
+
+		if strUsed && a.isStr {
+			return nil, fmt.Errorf("only one string data is allowed")
+		}
+		strUsed = strUsed || a.isStr
+		if !a.isStr {
+			dataCnt++
+		}
+		if dataCnt > maxOutputArgCnt {
+			return nil, fmt.Errorf("up-to-%d arg-data is allowed", maxOutputArgCnt)
+		}
+
+		offset += size
+		args = append(args, a)
 	}
 
 	return args, nil
@@ -238,28 +244,22 @@ func (arg *argDataOutput) matchParams(params []btf.FuncParam, checkArgType bool)
 
 func (arg *argDataOutput) injectArgs(args []funcArgumentOutput) asm.Instructions {
 	var insns asm.Instructions
-	if len(args) > 1 {
-		insns = append(insns,
-			asm.Mov.Reg(asm.R8, asm.R1), // R8 = ctx
-		)
-	}
 	insns = append(insns,
-		asm.Mov.Reg(asm.R6, asm.R2), // R6 = data
-		asm.Mov.Reg(asm.R7, asm.R3), // R7 = session_id
+		asm.Mov.Reg(argsReg, asm.R1),                                 // R9 = args
+		asm.Mov.Reg(dataReg, asm.R2),                                 // R8 = data
+		asm.StoreMem(asm.RFP, -argOutputStackOff, asm.R3, asm.DWord), // R10-16 = session_id
 	)
 
-	for i, a := range args {
-		if i != 0 {
-			insns = append(insns,
-				asm.Mov.Reg(asm.R1, asm.R8), // R1 = ctx
-			)
-		}
-		insns = append(insns, a.insn...)
+	argsInsns := make([]asm.Instructions, 0, len(args)+1)
+	argsInsns = append(argsInsns, insns)
+	for _, a := range args {
+		argsInsns = append(argsInsns, a.insn)
 	}
+	insns = slices.Concat(argsInsns...)
 
 	insns = append(insns,
-		asm.Mov.Reg(asm.R2, asm.R7), // R2 = session_id
-		asm.Mov.Reg(asm.R1, asm.R6), // R1 = data
+		asm.LoadMem(asm.R2, asm.RFP, -argOutputStackOff, asm.DWord), // R2 = session_id
+		asm.Mov.Reg(asm.R1, dataReg),                                // R1 = data
 		asm.Call.Label(outputFuncArgDataInternal),
 		asm.Return().WithSymbol(outputFuncArgDataLabelExit),
 	)

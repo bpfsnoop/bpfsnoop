@@ -39,7 +39,7 @@ func (a *ArgData) repr(sb *strings.Builder, args []funcArgumentOutput, f btfx.Fi
 		}
 
 		data := a.Args[idx]
-		s := btfx.ReprValueType(arg.last, arg.t, arg.isStr, arg.isNumPtr, data[0], data[1], 0, str, f)
+		s := btfx.ReprExprType(arg.expr, arg.t, arg.mem, arg.isStr, arg.isNumPtr, data[0], data[1], 0, str, f)
 		if !noColorOutput {
 			color.RGB(0x88, 0x88, 0x88 /* gray */).Fprint(sb, s)
 		} else {

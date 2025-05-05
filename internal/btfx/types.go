@@ -212,9 +212,9 @@ func reprMember(sb *strings.Builder, m *btf.Member, data []byte, find FindSymbol
 		fmt.Fprintf(sb, "%s=", m.Name)
 	}
 	if m.BitfieldSize != 0 {
-		fmt.Fprintf(sb, mybtf.DumpBitfield(m.Offset, m.BitfieldSize, data))
+		fmt.Fprint(sb, mybtf.DumpBitfield(m.Offset, m.BitfieldSize, data))
 	} else {
-		fmt.Fprintf(sb, "%s", ReprValue(m.Type, *(*uint64)(unsafe.Pointer(&data[m.Offset])), *(*uint64)(unsafe.Pointer(&data[m.Offset+8])), find))
+		fmt.Fprint(sb, ReprValue(m.Type, *(*uint64)(unsafe.Pointer(&data[m.Offset])), *(*uint64)(unsafe.Pointer(&data[m.Offset+8])), find))
 	}
 }
 
@@ -324,6 +324,23 @@ func reprValue(sb *strings.Builder, t btf.Type, isStr, isNumberPtr bool, data, d
 	} else {
 		fmt.Fprint(sb, ReprValue(t, data, dataNext, f))
 	}
+}
+
+func ReprExprType(expr string, t btf.Type, mem *btf.Member, isStr, isNumberPtr bool, data, data2, dataNext uint64, s string, f FindSymbol) string {
+	var sb strings.Builder
+
+	fmt.Fprintf(&sb, "(%v)'%s'=", Repr(t), expr)
+
+	if mem != nil {
+		var memData [24]byte
+		*(*uint64)(unsafe.Pointer(&memData[0])) = data
+		*(*uint64)(unsafe.Pointer(&memData[8])) = data2
+		reprMember(&sb, mem, memData[:], f)
+	} else {
+		reprValue(&sb, t, isStr, isNumberPtr, data, data2, dataNext, s, f)
+	}
+
+	return sb.String()
 }
 
 func ReprValueType(name string, t btf.Type, isStr, isNumberPtr bool, data, data2, dataNext uint64, s string, f FindSymbol) string {
