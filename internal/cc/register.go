@@ -37,3 +37,11 @@ func (ra *RegisterAllocator) IsUsed(reg asm.Register) bool {
 
 	panic(fmt.Sprintf("register %d is out of range", reg))
 }
+
+func (ra *RegisterAllocator) MarkUsed(reg asm.Register) {
+	if reg >= asm.R0 && reg <= asm.R9 {
+		ra.registers[reg] = true
+	} else {
+		panic(fmt.Sprintf("register %d is out of range", reg))
+	}
+}

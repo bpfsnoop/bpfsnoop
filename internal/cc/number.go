@@ -22,11 +22,12 @@ func parseUnsigned(text string) (uint64, error) {
 		return strconv.ParseUint(text[1:], 8, 64)
 	}
 	if strings.HasPrefix(text, "'") {
-		if len(text) != 3 || text[2] != '\'' {
+		if len(text) != 3 || text[len(text)-1] != '\'' {
 			return 0, strconv.ErrSyntax
 		}
 
-		return uint64(text[1]), nil
+		r := []rune((text[1 : len(text)-1]))
+		return uint64(r[0]), nil
 	}
 	return strconv.ParseUint(text, 10, 64)
 }

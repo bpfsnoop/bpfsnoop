@@ -42,4 +42,19 @@ func TestRegister(t *testing.T) {
 			ra.IsUsed(asm.R10)
 		})
 	})
+
+	t.Run("MarkUsed", func(t *testing.T) {
+		defer ra.reset()
+
+		ra.MarkUsed(asm.R9)
+		test.AssertTrue(t, ra.registers[asm.R9])
+	})
+
+	t.Run("MarkUsed panic", func(t *testing.T) {
+		defer ra.reset()
+
+		test.AssertPanic(t, func() {
+			ra.MarkUsed(asm.R10)
+		})
+	})
 }

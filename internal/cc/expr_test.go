@@ -282,3 +282,96 @@ func TestCompile(t *testing.T) {
 		})
 	})
 }
+
+func TestEvalExpr(t *testing.T) {
+	t.Run("empty expr", func(t *testing.T) {
+		_, err := EvalExpr(CompileExprOptions{})
+		test.AssertHaveErr(t, err)
+		test.AssertStrPrefix(t, err.Error(), "expression and label exit cannot be empty")
+	})
+
+	t.Run("empty btf spec", func(t *testing.T) {
+		_, err := EvalExpr(CompileExprOptions{
+			Expr:      "skb->len == 0",
+			LabelExit: "__label_exit",
+			Spec:      nil,
+		})
+		test.AssertHaveErr(t, err)
+		test.AssertStrPrefix(t, err.Error(), "btf spec cannot be empty")
+	})
+
+	t.Run("compile expr failed", func(t *testing.T) {
+		_, err := EvalExpr(CompileExprOptions{
+			Expr:      "a ^^ b",
+			LabelExit: "__label_exit",
+			Spec:      testBtf,
+			Params: []btf.FuncParam{
+				{
+					Name: "skb",
+					Type: getSkbBtf(t),
+				},
+				{
+					Name: "prog",
+					Type: getBpfProgBtf(t),
+				},
+			},
+		})
+		test.AssertHaveErr(t, err)
+		test.AssertStrPrefix(t, err.Error(), "failed to parse expr")
+	})
+
+	t.Run("eval failed", func(t *testing.T) {
+		_, err := EvalExpr(CompileExprOptions{
+			Expr:      "not_found->xxx == 0",
+			LabelExit: "__label_exit",
+			Spec:      testBtf,
+			Params: []btf.FuncParam{
+				{
+					Name: "skb",
+					Type: getSkbBtf(t),
+				},
+				{
+					Name: "prog",
+					Type: getBpfProgBtf(t),
+				},
+			},
+		})
+		test.AssertHaveErr(t, err)
+		test.AssertTrue(t, errors.Is(err, ErrVarNotFound))
+		test.AssertStrPrefix(t, err.Error(), "failed to evaluate expression")
+	})
+
+	t.Run("constant value", func(t *testing.T) {
+		_, err := EvalExpr(CompileExprOptions{
+			Expr:          "1 > 2",
+			LabelExit:     "__label_exit",
+			Spec:          testBtf,
+			ReservedStack: 9,
+		})
+		test.AssertHaveErr(t, err)
+		test.AssertStrPrefix(t, err.Error(), "disallow constant value")
+	})
+
+	t.Run("skb->len", func(t *testing.T) {
+		res, err := EvalExpr(CompileExprOptions{
+			Expr:          "skb->len",
+			LabelExit:     "__label_exit",
+			Spec:          testBtf,
+			Params:        []btf.FuncParam{{Name: "skb", Type: getSkbBtf(t)}},
+			UsedRegisters: []asm.Register{asm.R8, asm.R9},
+		})
+		test.AssertNoErr(t, err)
+		test.AssertEqualSlice(t, res.Insns, []asm.Instruction{
+			asm.LoadMem(asm.R7, asm.R9, 0, asm.DWord),
+			asm.Mov.Reg(asm.R3, asm.R7),
+			asm.Add.Imm(asm.R3, 112),
+			asm.Mov.Imm(asm.R2, 8),
+			asm.Mov.Reg(asm.R1, asm.RFP),
+			asm.Add.Imm(asm.R1, -8),
+			asm.FnProbeReadKernel.Call(),
+			asm.LoadMem(asm.R7, asm.RFP, -8, asm.DWord),
+			asm.LSh.Imm(asm.R7, 32),
+			asm.RSh.Imm(asm.R7, 32),
+		})
+	})
+}

@@ -37,6 +37,7 @@ type CompileExprOptions struct {
 	Spec          *btf.Spec
 	LabelExit     string
 	ReservedStack int
+	UsedRegisters []asm.Register
 }
 
 func CompileFilterExpr(opts CompileExprOptions) (asm.Instructions, error) {
@@ -116,6 +117,72 @@ func (c *compiler) compile(expr string) error {
 	}
 
 	return nil
+}
+
+type EvalResult struct {
+	Insns asm.Instructions
+	Reg   asm.Register
+	Btf   btf.Type
+	Mem   *btf.Member
+
+	LabelUsed bool
+}
+
+func EvalExpr(opts CompileExprOptions) (EvalResult, error) {
+	var res EvalResult
+
+	if opts.Expr == "" || opts.LabelExit == "" {
+		return res, fmt.Errorf("expression and label exit cannot be empty")
+	}
+	if opts.Spec == nil {
+		return res, fmt.Errorf("btf spec cannot be empty")
+	}
+
+	e, err := cc.ParseExpr(opts.Expr)
+	if err != nil {
+		return res, fmt.Errorf("failed to parse expression: %w", err)
+	}
+
+	c := &compiler{
+		kernelBtf:     opts.Spec,
+		labelExit:     opts.LabelExit,
+		reservedStack: opts.ReservedStack,
+	}
+
+	c.vars = make([]string, len(opts.Params))
+	c.btfs = make([]btf.Type, len(opts.Params))
+	for i := range opts.Params {
+		c.vars[i] = opts.Params[i].Name
+		c.btfs[i] = opts.Params[i].Type
+	}
+
+	if c.reservedStack <= 0 {
+		c.reservedStack = 8
+	} else {
+		c.reservedStack = (c.reservedStack + 7) & -8 // align to 8 bytes
+	}
+
+	// r9 must be used as args
+
+	for _, reg := range opts.UsedRegisters {
+		c.regalloc.MarkUsed(reg)
+	}
+
+	val, err := c.eval(e)
+	if err != nil {
+		return res, fmt.Errorf("failed to evaluate expression: %w", err)
+	}
+	if val.typ == evalValueTypeNum {
+		return res, fmt.Errorf("disallow constant value (%d) expression: '%s'", val.num, opts.Expr)
+	}
+
+	res.Insns = c.insns
+	res.Reg = val.reg
+	res.Btf = val.btf
+	res.Mem = val.mem
+	res.LabelUsed = c.labelExitUsed
+
+	return res, nil
 }
 
 func (c *compiler) emit(insn asm.Instruction) {

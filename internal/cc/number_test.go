@@ -23,6 +23,8 @@ func TestParseUnsigned(t *testing.T) {
 		{"1", 1},
 		{"'a'", 97},
 		{"'A'", 65},
+		{"'\n'", 10},
+		{"'\\'", 92},
 	}
 
 	for _, tt := range tests {
