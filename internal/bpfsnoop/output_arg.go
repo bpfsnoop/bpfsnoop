@@ -81,8 +81,6 @@ func prepareFuncArgOutput(exprs []string) argDataOutput {
 }
 
 func (arg *funcArgumentOutput) compile(params []btf.FuncParam, spec *btf.Spec, offset int) (int, error) {
-	var insns asm.Instructions
-
 	res, err := cc.CompileEvalExpr(cc.CompileExprOptions{
 		Expr:          arg.expr,
 		Params:        params,
@@ -109,8 +107,9 @@ func (arg *funcArgumentOutput) compile(params []btf.FuncParam, spec *btf.Spec, o
 	}
 
 	dataSize := 16
+	insns := res.Insns
 	if !arg.isStr {
-		insns = append(res.Insns,
+		insns = append(insns,
 			asm.StoreMem(dataReg, int16(offset), res.Reg, asm.DWord),
 		)
 
@@ -135,7 +134,7 @@ func (arg *funcArgumentOutput) compile(params []btf.FuncParam, spec *btf.Spec, o
 			)
 		}
 		offset = 2 * maxOutputArgCnt * 8
-		insns = append(res.Insns,
+		insns = append(insns,
 			// R3 is ready to be used as a pointer to the string
 			asm.Mov.Imm(asm.R2, maxOutputStrLen),
 			asm.Mov.Reg(asm.R1, dataReg),
