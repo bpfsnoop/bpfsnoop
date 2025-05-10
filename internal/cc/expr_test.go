@@ -285,13 +285,13 @@ func TestCompile(t *testing.T) {
 
 func TestEvalExpr(t *testing.T) {
 	t.Run("empty expr", func(t *testing.T) {
-		_, err := EvalExpr(CompileExprOptions{})
+		_, err := CompileEvalExpr(CompileExprOptions{})
 		test.AssertHaveErr(t, err)
 		test.AssertStrPrefix(t, err.Error(), "expression and label exit cannot be empty")
 	})
 
 	t.Run("empty btf spec", func(t *testing.T) {
-		_, err := EvalExpr(CompileExprOptions{
+		_, err := CompileEvalExpr(CompileExprOptions{
 			Expr:      "skb->len == 0",
 			LabelExit: "__label_exit",
 			Spec:      nil,
@@ -301,7 +301,7 @@ func TestEvalExpr(t *testing.T) {
 	})
 
 	t.Run("compile expr failed", func(t *testing.T) {
-		_, err := EvalExpr(CompileExprOptions{
+		_, err := CompileEvalExpr(CompileExprOptions{
 			Expr:      "a ^^ b",
 			LabelExit: "__label_exit",
 			Spec:      testBtf,
@@ -321,7 +321,7 @@ func TestEvalExpr(t *testing.T) {
 	})
 
 	t.Run("eval failed", func(t *testing.T) {
-		_, err := EvalExpr(CompileExprOptions{
+		_, err := CompileEvalExpr(CompileExprOptions{
 			Expr:      "not_found->xxx == 0",
 			LabelExit: "__label_exit",
 			Spec:      testBtf,
@@ -342,7 +342,7 @@ func TestEvalExpr(t *testing.T) {
 	})
 
 	t.Run("constant value", func(t *testing.T) {
-		_, err := EvalExpr(CompileExprOptions{
+		_, err := CompileEvalExpr(CompileExprOptions{
 			Expr:          "1 > 2",
 			LabelExit:     "__label_exit",
 			Spec:          testBtf,
@@ -353,7 +353,7 @@ func TestEvalExpr(t *testing.T) {
 	})
 
 	t.Run("skb->len", func(t *testing.T) {
-		res, err := EvalExpr(CompileExprOptions{
+		res, err := CompileEvalExpr(CompileExprOptions{
 			Expr:          "skb->len",
 			LabelExit:     "__label_exit",
 			Spec:          testBtf,

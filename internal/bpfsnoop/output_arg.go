@@ -83,7 +83,7 @@ func prepareFuncArgOutput(exprs []string) argDataOutput {
 func (arg *funcArgumentOutput) compile(params []btf.FuncParam, spec *btf.Spec, offset int) (int, error) {
 	var insns asm.Instructions
 
-	res, err := cc.EvalExpr(cc.CompileExprOptions{
+	res, err := cc.CompileEvalExpr(cc.CompileExprOptions{
 		Expr:          arg.expr,
 		Params:        params,
 		Spec:          spec,

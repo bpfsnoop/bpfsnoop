@@ -128,7 +128,7 @@ type EvalResult struct {
 	LabelUsed bool
 }
 
-func EvalExpr(opts CompileExprOptions) (EvalResult, error) {
+func CompileEvalExpr(opts CompileExprOptions) (EvalResult, error) {
 	var res EvalResult
 
 	if opts.Expr == "" || opts.LabelExit == "" {
