@@ -33,6 +33,18 @@ func AssertEqualSlice[T comparable](t *testing.T, got, want []T) {
 	}
 }
 
+func AssertEqualSliceFn[T any](t *testing.T, got, want []T, fn func(t *testing.T, got, want T)) {
+	t.Helper()
+	if len(got) != len(want) {
+		t.Errorf("got %v, want %v", got, want)
+		return
+	}
+
+	for i := range got {
+		fn(t, got[i], want[i])
+	}
+}
+
 func AssertEmptySlice[T any](t *testing.T, got []T) {
 	t.Helper()
 	if len(got) != 0 {
@@ -86,4 +98,18 @@ func AssertPanic(t *testing.T, f func()) {
 	}()
 
 	f()
+}
+
+func AssertNil(t *testing.T, got any) {
+	t.Helper()
+	if got != nil {
+		t.Errorf("got %v, want nil", got)
+	}
+}
+
+func AssertNotNil(t *testing.T, got any) {
+	t.Helper()
+	if got == nil {
+		t.Errorf("got nil, want not nil")
+	}
 }

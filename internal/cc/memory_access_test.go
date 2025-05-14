@@ -5,14 +5,24 @@ package cc
 
 import (
 	"errors"
+	"fmt"
 	"reflect"
 	"testing"
+	"unsafe"
 
 	"github.com/bpfsnoop/bpfsnoop/internal/test"
 	"github.com/cilium/ebpf/asm"
 	"github.com/cilium/ebpf/btf"
 	"rsc.io/c2go/cc"
 )
+
+func equalsOffset(t *testing.T, a, b accessOffset) {
+	t.Helper()
+	test.AssertEqual(t, a.offset, b.offset)
+	test.AssertEqual(t, a.address, b.address)
+	test.AssertEqual(t, fmt.Sprintf("%v", a.btf), fmt.Sprintf("%v", b.btf))
+	test.AssertEqual(t, fmt.Sprintf("%v", a.prev), fmt.Sprintf("%v", b.prev))
+}
 
 func TestAccessMemory(t *testing.T) {
 	c := prepareCompiler(t)
@@ -94,40 +104,71 @@ func TestAccessMemory(t *testing.T) {
 			expr, err := cc.ParseExpr("skb->len")
 			test.AssertNoErr(t, err)
 
+			skb := getSkbBtf(t)
+			unsignedInt, err := testBtf.AnyTypeByName("unsigned int")
+			test.AssertNoErr(t, err)
+
 			res, err := c.accessMemory(expr)
 			test.AssertNoErr(t, err)
 			test.AssertEqual(t, res.idx, 0)
-			test.AssertEqualSlice(t, res.offsets, []accessOffset{{offset: 112}})
+			test.AssertEqualSliceFn(t, res.offsets,
+				[]accessOffset{{prev: skb, offset: 112, btf: unsignedInt}},
+				equalsOffset)
 		})
 
 		t.Run("skb->users.refs.counter", func(t *testing.T) {
 			expr, err := cc.ParseExpr("skb->users.refs.counter")
 			test.AssertNoErr(t, err)
 
+			skb := getSkbBtf(t)
+			intTyp, err := testBtf.AnyTypeByName("int")
+			test.AssertNoErr(t, err)
+
 			res, err := c.accessMemory(expr)
 			test.AssertNoErr(t, err)
 			test.AssertEqual(t, res.idx, 0)
-			test.AssertEqualSlice(t, res.offsets, []accessOffset{{offset: 220}})
+			test.AssertEqualSliceFn(t, res.offsets,
+				[]accessOffset{{prev: skb, btf: intTyp, offset: 220}},
+				equalsOffset)
 		})
 
 		t.Run("skb->cb", func(t *testing.T) {
 			expr, err := cc.ParseExpr("skb->cb")
 			test.AssertNoErr(t, err)
 
+			skb := getSkbBtf(t)
+			intTyp, err := testBtf.AnyTypeByName("int")
+			test.AssertNoErr(t, err)
+			char, err := testBtf.AnyTypeByName("char")
+			test.AssertNoErr(t, err)
+			cb := &btf.Array{
+				Type:   char,
+				Index:  intTyp,
+				Nelems: 48,
+			}
+
 			res, err := c.accessMemory(expr)
 			test.AssertNoErr(t, err)
 			test.AssertEqual(t, res.idx, 0)
-			test.AssertEqualSlice(t, res.offsets, []accessOffset{{offset: 40, address: true}})
+			test.AssertEqualSliceFn(t, res.offsets,
+				[]accessOffset{{prev: skb, btf: cb, offset: 40, address: true}},
+				equalsOffset)
 		})
 
 		t.Run("attr->map_type", func(t *testing.T) {
 			expr, err := cc.ParseExpr("attr->map_type")
 			test.AssertNoErr(t, err)
 
+			attr := getBpfAttrBtf(t)
+			u32, err := testBtf.AnyTypeByName("__u32")
+			test.AssertNoErr(t, err)
+
 			res, err := c.accessMemory(expr)
 			test.AssertNoErr(t, err)
 			test.AssertEqual(t, res.idx, 3)
-			test.AssertEqualSlice(t, res.offsets, []accessOffset{{offset: 0}})
+			test.AssertEqualSliceFn(t, res.offsets,
+				[]accessOffset{{prev: attr, btf: u32, offset: 0}},
+				equalsOffset)
 		})
 	})
 
@@ -254,34 +295,76 @@ func TestAccessMemory(t *testing.T) {
 			test.AssertStrPrefix(t, err.Error(), "disallow using non-{pointer,array} for add")
 		})
 
-		t.Run("skb + 1", func(t *testing.T) {
-			expr, err := cc.ParseExpr("skb + 1")
+		t.Run("skb + 0", func(t *testing.T) {
+			expr, err := cc.ParseExpr("skb + 0")
 			test.AssertNoErr(t, err)
+
+			skb := getSkbBtf(t)
 
 			res, err := c.accessMemory(expr)
 			test.AssertNoErr(t, err)
 			test.AssertEqual(t, res.idx, 0)
-			test.AssertEqualSlice(t, res.offsets, []accessOffset{{offset: 232, address: true}})
+			test.AssertEqual(t, fmt.Sprintf("%v", res.btf), fmt.Sprintf("%v", skb))
+		})
+
+		t.Run("skb + 1", func(t *testing.T) {
+			expr, err := cc.ParseExpr("skb + 1")
+			test.AssertNoErr(t, err)
+
+			skb := getSkbBtf(t)
+
+			res, err := c.accessMemory(expr)
+			test.AssertNoErr(t, err)
+			test.AssertEqual(t, res.idx, 0)
+			test.AssertEqualSliceFn(t, res.offsets,
+				[]accessOffset{{btf: skb, offset: 232, address: true}},
+				equalsOffset)
 		})
 
 		t.Run("prog->aux->jit_data + 1", func(t *testing.T) {
 			expr, err := cc.ParseExpr("prog->aux->jit_data + 1")
 			test.AssertNoErr(t, err)
 
+			prog := getBpfProgBtf(t)
+			aux := getBpfProgAuxBtf(t)
+			vptr := &btf.Pointer{Target: &btf.Void{}}
+
 			res, err := c.accessMemory(expr)
 			test.AssertNoErr(t, err)
 			test.AssertEqual(t, res.idx, 1)
-			test.AssertEqualSlice(t, res.offsets, []accessOffset{{offset: 56}, {offset: 176}, {offset: 1, address: true}})
+			test.AssertEqualSliceFn(t, res.offsets,
+				[]accessOffset{
+					{prev: prog, btf: aux, offset: 56},
+					{prev: aux, btf: vptr, offset: 176},
+					{prev: aux, btf: vptr, offset: 1, address: true},
+				},
+				equalsOffset)
 		})
 
 		t.Run("skb->cb + 1", func(t *testing.T) {
 			expr, err := cc.ParseExpr("skb->cb + 1")
 			test.AssertNoErr(t, err)
 
+			skb := getSkbBtf(t)
+			char, err := testBtf.AnyTypeByName("char")
+			test.AssertNoErr(t, err)
+			intTyp, err := testBtf.AnyTypeByName("int")
+			test.AssertNoErr(t, err)
+			cb := &btf.Array{
+				Type:   char,
+				Index:  intTyp,
+				Nelems: 48,
+			}
+			charPtr := &btf.Pointer{Target: char}
+
 			res, err := c.accessMemory(expr)
 			test.AssertNoErr(t, err)
 			test.AssertEqual(t, res.idx, 0)
-			test.AssertEqualSlice(t, res.offsets, []accessOffset{{offset: 40, address: true}, {offset: 1, address: true}})
+			test.AssertEqualSliceFn(t, res.offsets,
+				[]accessOffset{
+					{prev: skb, btf: cb, offset: 40, address: true},
+					{prev: skb, btf: charPtr, offset: 1, address: true},
+				}, equalsOffset)
 		})
 	})
 
@@ -312,10 +395,18 @@ func TestAccessMemory(t *testing.T) {
 			expr, err := cc.ParseExpr("&skb->len")
 			test.AssertNoErr(t, err)
 
+			skb := getSkbBtf(t)
+			intTyp, err := testBtf.AnyTypeByName("unsigned int")
+			test.AssertNoErr(t, err)
+			intPtr := &btf.Pointer{Target: intTyp}
+
 			res, err := c.accessMemory(expr)
 			test.AssertNoErr(t, err)
 			test.AssertEqual(t, res.idx, 0)
-			test.AssertEqualSlice(t, res.offsets, []accessOffset{{offset: 112, address: true}})
+			test.AssertEqualSliceFn(t, res.offsets,
+				[]accessOffset{{prev: skb, btf: intPtr, offset: 112, address: true}},
+				equalsOffset,
+			)
 		})
 	})
 
@@ -382,27 +473,34 @@ func TestAccessMemory(t *testing.T) {
 			expr, err := cc.ParseExpr("(struct ethhdr *)(skb->head)")
 			test.AssertNoErr(t, err)
 
+			skb := getSkbBtf(t)
 			eth, err := testBtf.AnyTypeByName("ethhdr")
 			test.AssertNoErr(t, err)
+			ethPtr := &btf.Pointer{Target: eth}
 
 			res, err := c.accessMemory(expr)
 			test.AssertNoErr(t, err)
 			test.AssertEqual(t, res.idx, 0)
-			test.AssertEqualSlice(t, res.offsets, []accessOffset{{offset: 200}})
-			test.AssertTrue(t, reflect.DeepEqual(res.btf, &btf.Pointer{Target: eth}))
+			test.AssertEqualSliceFn(t, res.offsets,
+				[]accessOffset{{prev: skb, btf: ethPtr, offset: 200}},
+				equalsOffset)
+			test.AssertTrue(t, reflect.DeepEqual(res.btf, ethPtr))
 		})
 
 		t.Run("(int)(skb->head)", func(t *testing.T) {
 			expr, err := cc.ParseExpr("(int)(skb->head)")
 			test.AssertNoErr(t, err)
 
+			skb := getSkbBtf(t)
 			u64, err := testBtf.AnyTypeByName("int")
 			test.AssertNoErr(t, err)
 
 			res, err := c.accessMemory(expr)
 			test.AssertNoErr(t, err)
 			test.AssertEqual(t, res.idx, 0)
-			test.AssertEqualSlice(t, res.offsets, []accessOffset{{offset: 200}})
+			test.AssertEqualSliceFn(t, res.offsets,
+				[]accessOffset{{prev: skb, btf: u64, offset: 200}},
+				equalsOffset)
 			test.AssertTrue(t, reflect.DeepEqual(res.btf, u64))
 		})
 	})
@@ -482,31 +580,51 @@ func TestAccessMemory(t *testing.T) {
 			test.AssertStrPrefix(t, err.Error(), "disallow indexing pointer of type")
 		})
 
-		t.Run("prog->aux->used_maps[1]", func(t *testing.T) {
-			expr, err := cc.ParseExpr("prog->aux->used_maps[1]")
+		t.Run("prog->aux->used_maps[1]->map_type", func(t *testing.T) {
+			expr, err := cc.ParseExpr("prog->aux->used_maps[1]->map_type")
 			test.AssertNoErr(t, err)
 
-			bpfMap, err := c.kernelBtf.AnyTypeByName("bpf_map")
+			prog := getBpfProgBtf(t)
+			bpfMap := getBpfMapBtf(t)
+			aux := getBpfProgAuxBtf(t)
+
+			bpfMapType, err := testBtf.AnyTypeByName("bpf_map_type")
 			test.AssertNoErr(t, err)
 
 			res, err := c.accessMemory(expr)
 			test.AssertNoErr(t, err)
 			test.AssertEqual(t, res.idx, 1)
-			test.AssertEqualSlice(t, res.offsets, []accessOffset{{offset: 56}, {offset: 824}, {offset: 8}})
-			test.AssertTrue(t, reflect.DeepEqual(res.btf, &btf.Pointer{Target: bpfMap}))
+			test.AssertEqualSliceFn(t, res.offsets,
+				[]accessOffset{
+					{prev: prog, btf: aux, offset: 56},
+					{prev: aux, btf: &btf.Pointer{Target: bpfMap}, offset: 824},
+					{prev: aux, btf: bpfMap, offset: 8},
+					{prev: bpfMap, btf: bpfMapType, offset: 24},
+				}, equalsOffset)
 		})
 
 		t.Run("skb->cb[3]", func(t *testing.T) {
 			expr, err := cc.ParseExpr("skb->cb[3]")
 			test.AssertNoErr(t, err)
 
+			skb := getSkbBtf(t)
+			intTyp, err := testBtf.AnyTypeByName("int")
+			test.AssertNoErr(t, err)
 			char, err := testBtf.AnyTypeByName("char")
 			test.AssertNoErr(t, err)
+			arr := &btf.Array{
+				Type:   char,
+				Index:  intTyp,
+				Nelems: 48,
+			}
 
 			res, err := c.accessMemory(expr)
 			test.AssertNoErr(t, err)
 			test.AssertEqual(t, res.idx, 0)
-			test.AssertEqualSlice(t, res.offsets, []accessOffset{{offset: 40, address: true}, {offset: 3}})
+			test.AssertEqualSliceFn(t, res.offsets, []accessOffset{
+				{prev: skb, btf: arr, offset: 40, address: true},
+				{prev: skb, btf: char, offset: 3},
+			}, equalsOffset)
 			test.AssertTrue(t, reflect.DeepEqual(res.btf, char))
 		})
 	})
@@ -547,13 +665,18 @@ func TestAccessMemory(t *testing.T) {
 			expr, err := cc.ParseExpr("*(skb->sk)")
 			test.AssertNoErr(t, err)
 
+			skb := getSkbBtf(t)
 			sk, err := testBtf.AnyTypeByName("sock")
 			test.AssertNoErr(t, err)
+			skPtr := &btf.Pointer{Target: sk}
 
 			res, err := c.accessMemory(expr)
 			test.AssertNoErr(t, err)
 			test.AssertEqual(t, res.idx, 0)
-			test.AssertEqualSlice(t, res.offsets, []accessOffset{{offset: 24}, {offset: 0}})
+			test.AssertEqualSliceFn(t, res.offsets, []accessOffset{
+				{prev: skb, btf: skPtr, offset: 24},
+				{prev: skPtr, btf: sk, offset: 0},
+			}, equalsOffset)
 			test.AssertTrue(t, reflect.DeepEqual(res.btf, sk))
 		})
 	})
@@ -628,34 +751,67 @@ func TestAccessMemory(t *testing.T) {
 			expr, err := cc.ParseExpr("prog->aux->jit_data - 1")
 			test.AssertNoErr(t, err)
 
+			prog := getBpfProgBtf(t)
+			aux, err := testBtf.AnyTypeByName("bpf_prog_aux")
+			test.AssertNoErr(t, err)
+			auxPtr := &btf.Pointer{Target: aux}
+			vptr := &btf.Pointer{Target: &btf.Void{}}
+
 			res, err := c.accessMemory(expr)
 			test.AssertNoErr(t, err)
 			test.AssertEqual(t, res.idx, 1)
-			test.AssertEqualSlice(t, res.offsets, []accessOffset{{offset: 56}, {offset: 176}, {offset: -1, address: true}})
+			test.AssertEqualSliceFn(t, res.offsets,
+				[]accessOffset{
+					{prev: prog, btf: auxPtr, offset: 56},
+					{prev: auxPtr, btf: vptr, offset: 176},
+					{prev: auxPtr, btf: vptr, offset: -1, address: true},
+				}, equalsOffset)
 		})
 
 		t.Run("skb->cb - 1", func(t *testing.T) {
 			expr, err := cc.ParseExpr("skb->cb - 1")
 			test.AssertNoErr(t, err)
 
+			skb := getSkbBtf(t)
+			char, err := testBtf.AnyTypeByName("char")
+			test.AssertNoErr(t, err)
+			intTyp, err := testBtf.AnyTypeByName("int")
+			test.AssertNoErr(t, err)
+			cb := &btf.Array{
+				Type:   char,
+				Index:  intTyp,
+				Nelems: 48,
+			}
+			charPtr := &btf.Pointer{Target: char}
+
 			res, err := c.accessMemory(expr)
 			test.AssertNoErr(t, err)
 			test.AssertEqual(t, res.idx, 0)
-			test.AssertEqualSlice(t, res.offsets, []accessOffset{{offset: 40, address: true}, {offset: -1, address: true}})
+			test.AssertEqualSliceFn(t, res.offsets,
+				[]accessOffset{
+					{prev: skb, btf: cb, offset: 40, address: true},
+					{prev: skb, btf: charPtr, offset: -1, address: true},
+				}, equalsOffset)
 		})
 
 		t.Run("skb->sk - 1", func(t *testing.T) {
 			expr, err := cc.ParseExpr("skb->sk - 1")
 			test.AssertNoErr(t, err)
 
+			skb := getSkbBtf(t)
 			sk, err := testBtf.AnyTypeByName("sock")
 			test.AssertNoErr(t, err)
 			sizeofSk, _ := btf.Sizeof(sk)
+			skPtr := &btf.Pointer{Target: sk}
 
 			res, err := c.accessMemory(expr)
 			test.AssertNoErr(t, err)
 			test.AssertEqual(t, res.idx, 0)
-			test.AssertEqualSlice(t, res.offsets, []accessOffset{{offset: 24}, {offset: -int64(sizeofSk), address: true}})
+			test.AssertEqualSliceFn(t, res.offsets,
+				[]accessOffset{
+					{prev: skb, btf: skPtr, offset: 24},
+					{prev: skb, btf: skPtr, offset: -int64(sizeofSk), address: true},
+				}, equalsOffset)
 			test.AssertTrue(t, reflect.DeepEqual(res.btf, &btf.Pointer{Target: sk}))
 		})
 	})
@@ -694,6 +850,30 @@ func TestAccess(t *testing.T) {
 		test.AssertHaveErr(t, err)
 		test.AssertTrue(t, errors.Is(err, ErrRegisterNotEnough))
 		test.AssertStrPrefix(t, err.Error(), "failed to alloc register")
+	})
+
+	t.Run("offset2insns failed", func(t *testing.T) {
+		defer c.reset()
+		defer func() { c.memMode = MemoryReadModeProbeRead }()
+		c.memMode = MemoryReadModeCoreRead
+
+		rdonlyCast, err := testBtf.AnyTypeByName(kfuncBpfRdonlyCast)
+		test.AssertNoErr(t, err)
+
+		spec := (*Spec)(unsafe.Pointer(c.kernelBtf))
+		id := spec.mutableTypes.copiedTypeIDs[rdonlyCast]
+		delete(spec.mutableTypes.copiedTypeIDs, rdonlyCast)
+		defer func() {
+			spec.mutableTypes.copiedTypeIDs[rdonlyCast] = id
+		}()
+
+		expr, err := cc.ParseExpr("skb->dev->ifindex")
+		test.AssertNoErr(t, err)
+
+		_, err = c.access(expr)
+		test.AssertHaveErr(t, err)
+		test.AssertStrPrefix(t, err.Error(), "failed to convert offsets to instructions")
+		test.AssertTrue(t, errors.Is(err, btf.ErrNotFound))
 	})
 
 	t.Run("skb->head", func(t *testing.T) {
@@ -779,58 +959,88 @@ func TestAccess(t *testing.T) {
 func TestOffset2insns(t *testing.T) {
 	c := prepareCompiler(t)
 
+	const reg = asm.R8
+
 	t.Run("no offsets", func(t *testing.T) {
 		c.offset2insns(nil, asm.R8)
 		test.AssertEmptySlice(t, c.insns)
 	})
 
-	t.Run("one offset with address", func(t *testing.T) {
+	t.Run("all address", func(t *testing.T) {
 		defer c.reset()
-		c.offset2insns([]accessOffset{{offset: 4, address: true}}, asm.R8)
+
+		offsets := []accessOffset{
+			{address: true, offset: 4},
+			{address: true, offset: 8},
+		}
+
+		err := c.offset2insns(offsets, reg)
+		test.AssertNoErr(t, err)
 		test.AssertEqualSlice(t, c.insns, asm.Instructions{
-			asm.Add.Imm(asm.R8, 4),
+			asm.Add.Imm(reg, 4),
+			asm.Add.Imm(reg, 8),
 		})
 	})
 
-	t.Run("one offset", func(t *testing.T) {
+	t.Run("core read", func(t *testing.T) {
 		defer c.reset()
-		c.offset2insns([]accessOffset{{offset: 4}}, asm.R8)
+
+		c.memMode = MemoryReadModeCoreRead
+
+		e, err := cc.ParseExpr("skb->dev->ifindex")
+		test.AssertNoErr(t, err)
+
+		res, err := c.accessMemory(e)
+		test.AssertNoErr(t, err)
+
+		c.offset2insns(res.offsets, reg)
 		test.AssertEqualSlice(t, c.insns, asm.Instructions{
-			asm.Mov.Reg(asm.R3, asm.R8),
-			asm.Add.Imm(asm.R3, 4),
-			asm.Mov.Imm(asm.R2, 8),
-			asm.Mov.Reg(asm.R1, asm.RFP),
-			asm.Add.Imm(asm.R1, -8),
-			asm.FnProbeReadKernel.Call(),
-			asm.LoadMem(asm.R8, asm.RFP, -8, asm.DWord),
+			asm.Mov.Reg(asm.R1, reg),
+			asm.Mov.Imm(asm.R2, 1875),
+			bpfKfuncCall(41126),
+			asm.LoadMem(asm.R1, asm.R0, 16, asm.DWord),
+			asm.JEq.Imm(asm.R1, 0, c.labelExit),
+			asm.Mov.Imm(asm.R2, 6973),
+			bpfKfuncCall(41126),
+			asm.LoadMem(reg, asm.R0, 224, asm.Word),
 		})
 	})
 
-	t.Run("multiple offsets", func(t *testing.T) {
+	t.Run("direct read", func(t *testing.T) {
 		defer c.reset()
+
+		c.memMode = MemoryReadModeDirectRead
+
 		c.offset2insns([]accessOffset{
-			{offset: 4},
+			{offset: 4, address: true},
 			{offset: 8},
-			{offset: 12, address: true},
-		}, asm.R8)
+		}, reg)
+
 		test.AssertEqualSlice(t, c.insns, asm.Instructions{
-			asm.Mov.Reg(asm.R3, asm.R8),
+			asm.Add.Imm(reg, 4),
+			asm.LoadMem(reg, reg, 8, asm.DWord),
+		})
+	})
+
+	t.Run("probe read", func(t *testing.T) {
+		defer c.reset()
+
+		c.memMode = MemoryReadModeProbeRead
+
+		c.offset2insns([]accessOffset{
+			{offset: 4, address: true},
+			{offset: 8},
+		}, reg)
+
+		test.AssertEqualSlice(t, c.insns, asm.Instructions{
+			asm.Mov.Reg(asm.R3, reg),
 			asm.Add.Imm(asm.R3, 4),
-			asm.Mov.Imm(asm.R2, 8),
-			asm.Mov.Reg(asm.R1, asm.RFP),
-			asm.Add.Imm(asm.R1, -8),
-			asm.FnProbeReadKernel.Call(),
-			asm.LoadMem(asm.R3, asm.RFP, -8, asm.DWord),
-			asm.JEq.Imm(asm.R3, 0, c.labelExit),
 			asm.Add.Imm(asm.R3, 8),
 			asm.Mov.Imm(asm.R2, 8),
 			asm.Mov.Reg(asm.R1, asm.RFP),
 			asm.Add.Imm(asm.R1, -8),
 			asm.FnProbeReadKernel.Call(),
-			asm.LoadMem(asm.R3, asm.RFP, -8, asm.DWord),
-			asm.JEq.Imm(asm.R3, 0, c.labelExit),
-			asm.Add.Imm(asm.R3, 12),
-			asm.Mov.Reg(asm.R8, asm.R3),
+			asm.LoadMem(reg, asm.RFP, -8, asm.DWord),
 		})
 	})
 }

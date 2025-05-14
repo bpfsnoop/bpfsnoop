@@ -43,9 +43,11 @@ func (v evalValue) String() string {
 }
 
 func (c *compiler) emitReg2bool(reg asm.Register) {
-	c.emit(asm.Mov.Imm(reg, 1))
-	c.emit(Ja(1))
-	c.emit(asm.Xor.Reg(reg, reg))
+	c.emit(
+		asm.Mov.Imm(reg, 1),
+		Ja(1),
+		asm.Xor.Reg(reg, reg),
+	)
 }
 
 func (c *compiler) extractEnum(typ btf.Type, enum string) (int, error) {

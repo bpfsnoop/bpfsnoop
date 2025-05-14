@@ -14,8 +14,11 @@ import (
 )
 
 type accessOffset struct {
+	btf     btf.Type
+	prev    btf.Type
 	offset  int64
 	address bool
+	inArray bool
 }
 
 type accessResult struct {
@@ -25,12 +28,18 @@ type accessResult struct {
 	btf btf.Type
 	mem *btf.Member
 
+	lastIdx int
 	offsets []accessOffset
 }
 
 // isMemberBitfield reports whether the member is a bitfield attribute.
 func isMemberBitfield(member *btf.Member) bool {
 	return member != nil && member.BitfieldSize != 0
+}
+
+func (r *accessResult) addOffset(offset accessOffset) {
+	r.lastIdx = len(r.offsets)
+	r.offsets = append(r.offsets, offset)
 }
 
 func (c *compiler) accessMemory(expr *cc.Expr) (accessResult, error) {
@@ -45,6 +54,8 @@ func (c *compiler) accessMemory(expr *cc.Expr) (accessResult, error) {
 			raw: c.btfs[idx],
 			idx: idx,
 			btf: c.btfs[idx],
+
+			lastIdx: -1,
 		}, nil
 
 	case cc.Dot, cc.Arrow:
@@ -87,20 +98,23 @@ func (c *compiler) accessMemory(expr *cc.Expr) (accessResult, error) {
 		if !useArrow {
 			// access via .
 			if len(res.offsets) > 0 {
-				res.offsets[len(res.offsets)-1].offset += int64(offset)
+				res.offsets[res.lastIdx].offset += int64(offset)
+				res.offsets[res.lastIdx].btf = member.Type
 			} else {
 				return accessResult{}, fmt.Errorf("disallow accessing member %s of %s via dot", expr.Text, expr.Left.Text)
 			}
 		} else {
 			// access via ->
-			res.offsets = append(res.offsets, accessOffset{
+			res.addOffset(accessOffset{
 				offset: int64(offset),
+				btf:    member.Type,
+				prev:   res.btf,
 			})
 		}
 
 		t = mybtf.UnderlyingType(member.Type)
 		if _, ok := t.(*btf.Array); ok {
-			res.offsets[len(res.offsets)-1].address = true
+			res.offsets[res.lastIdx].address = true
 			res.btf = member.Type
 			res.mem = nil
 		} else {
@@ -144,12 +158,25 @@ func (c *compiler) accessMemory(expr *cc.Expr) (accessResult, error) {
 			return accessResult{}, fmt.Errorf("disallow using bitfield for add")
 		}
 
+		if num == 0 {
+			return res, nil
+		}
+
+		getPrev := func() btf.Type {
+			if len(res.offsets) > 0 {
+				return res.offsets[res.lastIdx].prev
+			}
+			return nil
+		}
+
 		t := mybtf.UnderlyingType(res.btf)
 		if ptr, ok := t.(*btf.Pointer); ok {
 			if _, ok := mybtf.UnderlyingType(ptr.Target).(*btf.Void); ok { // void *
-				res.offsets = append(res.offsets, accessOffset{
+				res.addOffset(accessOffset{
 					offset:  int64(num),
 					address: true,
+					btf:     res.btf,
+					prev:    getPrev(),
 				})
 			} else {
 				size, err := btf.Sizeof(ptr.Target)
@@ -157,9 +184,11 @@ func (c *compiler) accessMemory(expr *cc.Expr) (accessResult, error) {
 					return res, fmt.Errorf("disallow type %v for adding", ptr.Target)
 				}
 
-				res.offsets = append(res.offsets, accessOffset{
+				res.addOffset(accessOffset{
 					offset:  int64(size * int(num)),
 					address: true,
+					btf:     res.btf,
+					prev:    getPrev(),
 				})
 			}
 		} else if arr, ok := t.(*btf.Array); ok {
@@ -168,9 +197,11 @@ func (c *compiler) accessMemory(expr *cc.Expr) (accessResult, error) {
 				return res, fmt.Errorf("disallow type %v for adding", arr.Type)
 			}
 
-			res.offsets = append(res.offsets, accessOffset{
+			res.addOffset(accessOffset{
 				offset:  int64(size * int(num)),
 				address: true,
+				btf:     &btf.Pointer{Target: arr.Type},
+				prev:    getPrev(),
 			})
 		} else {
 			return res, fmt.Errorf("disallow using non-{pointer,array} for add")
@@ -191,7 +222,11 @@ func (c *compiler) accessMemory(expr *cc.Expr) (accessResult, error) {
 			return accessResult{}, fmt.Errorf("disallow address '%s'", expr.Left.Text)
 		}
 
-		res.offsets[len(res.offsets)-1].address = true
+		res.offsets[res.lastIdx].address = true
+		res.btf = &btf.Pointer{
+			Target: res.btf,
+		}
+		res.offsets[res.lastIdx].btf = res.btf
 		res.mem = nil
 		return res, nil
 
@@ -236,6 +271,7 @@ func (c *compiler) accessMemory(expr *cc.Expr) (accessResult, error) {
 			res.btf = typ
 		}
 
+		res.offsets[res.lastIdx].btf = res.btf
 		res.mem = nil
 		return res, nil
 
@@ -261,6 +297,7 @@ func (c *compiler) accessMemory(expr *cc.Expr) (accessResult, error) {
 			return accessResult{}, fmt.Errorf("failed to parse number: %w", err)
 		}
 
+		var inArray bool
 		var size int
 
 		t := mybtf.UnderlyingType(res.btf)
@@ -278,12 +315,16 @@ func (c *compiler) accessMemory(expr *cc.Expr) (accessResult, error) {
 			}
 
 			res.btf = arr.Type
+			inArray = true
 		} else {
 			return accessResult{}, fmt.Errorf("disallow indexing type %v", t)
 		}
 
-		res.offsets = append(res.offsets, accessOffset{
-			offset: int64(index * int64(size)),
+		res.addOffset(accessOffset{
+			offset:  int64(index * int64(size)),
+			btf:     res.btf,
+			prev:    res.offsets[res.lastIdx].prev,
+			inArray: inArray,
 		})
 		res.mem = nil
 		return res, nil
@@ -305,8 +346,10 @@ func (c *compiler) accessMemory(expr *cc.Expr) (accessResult, error) {
 			return accessResult{}, fmt.Errorf("disallow indirecting type %v", t)
 		}
 
-		res.offsets = append(res.offsets, accessOffset{
+		res.addOffset(accessOffset{
 			offset: 0,
+			btf:    ptr.Target,
+			prev:   res.btf,
 		})
 		res.btf = ptr.Target
 		res.mem = nil
@@ -335,9 +378,11 @@ func (c *compiler) accessMemory(expr *cc.Expr) (accessResult, error) {
 		t := mybtf.UnderlyingType(res.btf)
 		if ptr, ok := t.(*btf.Pointer); ok {
 			if _, ok := mybtf.UnderlyingType(ptr.Target).(*btf.Void); ok { // void *
-				res.offsets = append(res.offsets, accessOffset{
+				res.addOffset(accessOffset{
 					offset:  -int64(num),
 					address: true,
+					btf:     res.btf,
+					prev:    res.offsets[res.lastIdx].prev,
 				})
 			} else {
 				size, err := btf.Sizeof(ptr.Target)
@@ -345,9 +390,11 @@ func (c *compiler) accessMemory(expr *cc.Expr) (accessResult, error) {
 					return res, fmt.Errorf("disallow type %v for subing", ptr.Target)
 				}
 
-				res.offsets = append(res.offsets, accessOffset{
+				res.addOffset(accessOffset{
 					offset:  -int64(size * int(num)),
 					address: true,
+					btf:     res.btf,
+					prev:    res.offsets[res.lastIdx].prev,
 				})
 			}
 		} else if arr, ok := t.(*btf.Array); ok {
@@ -356,9 +403,11 @@ func (c *compiler) accessMemory(expr *cc.Expr) (accessResult, error) {
 				return res, fmt.Errorf("disallow type %v for subing", arr.Type)
 			}
 
-			res.offsets = append(res.offsets, accessOffset{
+			res.addOffset(accessOffset{
 				offset:  int64(-size * int(num)),
 				address: true,
+				btf:     &btf.Pointer{Target: arr.Type},
+				prev:    res.offsets[res.lastIdx].prev,
 			})
 		} else {
 			return res, fmt.Errorf("disallow using non-{pointer,array} for sub")
@@ -378,9 +427,6 @@ func (c *compiler) access(expr *cc.Expr) (evalValue, error) {
 		return evalValue{}, err
 	}
 
-	c.pushUsedCallerSavedRegs()
-	defer c.popUsedCallerSavedRegs()
-
 	var eval evalValue
 
 	reg, err := c.regalloc.Alloc()
@@ -394,7 +440,9 @@ func (c *compiler) access(expr *cc.Expr) (evalValue, error) {
 	eval.reg = reg
 
 	c.emitLoadArg(res.idx, reg)
-	c.offset2insns(res.offsets, reg)
+	if err := c.offset2insns(res.offsets, reg); err != nil {
+		return eval, fmt.Errorf("failed to convert offsets to instructions: %w", err)
+	}
 	if isMemberBitfield(res.mem) {
 		c.bitfield2insns(res.mem, reg)
 	} else {
@@ -404,9 +452,9 @@ func (c *compiler) access(expr *cc.Expr) (evalValue, error) {
 	return eval, nil
 }
 
-func (c *compiler) offset2insns(offsets []accessOffset, reg asm.Register) {
+func (c *compiler) offset2insns(offsets []accessOffset, reg asm.Register) error {
 	if len(offsets) == 0 {
-		return
+		return nil
 	}
 
 	allAddress := offsets[0].address
@@ -417,38 +465,21 @@ func (c *compiler) offset2insns(offsets []accessOffset, reg asm.Register) {
 		for i := range offsets {
 			c.emit(asm.Add.Imm(reg, int32(offsets[i].offset)))
 		}
-		return
+		return nil
 	}
 
-	if reg != asm.R3 {
-		c.emit(asm.Mov.Reg(asm.R3, reg))
+	switch c.memMode {
+	case MemoryReadModeCoreRead:
+		return c.coreReadOffsets(offsets, reg)
+
+	case MemoryReadModeDirectRead:
+		c.directReadOffsets(offsets, reg)
+
+	default:
+		c.probeReadOffsets(offsets, reg)
 	}
 
-	lastIndex := len(offsets) - 1
-	for i, offset := range offsets {
-		if offset.offset != 0 {
-			c.emit(asm.Add.Imm(asm.R3, int32(offset.offset)))
-		}
-		if offset.address {
-			if i == lastIndex && reg != asm.R3 {
-				c.emit(asm.Mov.Reg(reg, asm.R3))
-			}
-			continue
-		}
-
-		c.emit(asm.Mov.Imm(asm.R2, 8))       // r2 = 8; always read 8 bytes
-		c.emit(asm.Mov.Reg(asm.R1, asm.RFP)) // r1 = r10
-		c.emit(asm.Add.Imm(asm.R1, -8))      // r1 = r10 - 8
-		c.emit(asm.FnProbeReadKernel.Call()) // bpf_probe_read_kernel(r1, 8, r3)
-
-		if i != lastIndex {
-			c.labelExitUsed = true
-			c.emit(asm.LoadMem(asm.R3, asm.RFP, -8, asm.DWord)) // r3 = *(r10 - 8)
-			c.emit(asm.JEq.Imm(asm.R3, 0, c.labelExit))
-		} else {
-			c.emit(asm.LoadMem(reg, asm.RFP, -8, asm.DWord))
-		}
-	}
+	return nil
 }
 
 func (c *compiler) bitfield2insns(member *btf.Member, reg asm.Register) {

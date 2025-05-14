@@ -19,7 +19,10 @@ import (
 //go:embed testdata/vmlinux_v680_btf.o
 var btfFile []byte
 
-var testBtf *btf.Spec
+var (
+	testBtf *btf.Spec
+	skb     *btf.Pointer
+)
 
 func init() {
 	spec, err := btf.LoadSpecFromReader(bytes.NewReader(btfFile))
@@ -28,13 +31,31 @@ func init() {
 	}
 
 	testBtf = spec
+
+	iter := spec.Iterate()
+	for iter.Next() {
+		if ptr, ok := iter.Type.(*btf.Pointer); ok {
+			if s, ok := ptr.Target.(*btf.Struct); ok && s.Name == "sk_buff" {
+				skb = ptr
+				break
+			}
+		}
+	}
+	if skb == nil {
+		log.Fatalf("Failed to find skb pointer in btf spec")
+	}
 }
 
 func getSkbBtf(t *testing.T) *btf.Pointer {
-	skb, err := testBtf.AnyTypeByName("sk_buff")
+	_ = t
+	return skb
+}
+
+func getNetDeviceBtf(t *testing.T) *btf.Pointer {
+	netDev, err := testBtf.AnyTypeByName("net_device")
 	t.Helper()
 	test.AssertNoErr(t, err)
-	return &btf.Pointer{Target: skb}
+	return &btf.Pointer{Target: netDev}
 }
 
 func getBpfProgBtf(t *testing.T) *btf.Pointer {
@@ -51,6 +72,13 @@ func getBpfMapBtf(t *testing.T) *btf.Pointer {
 	return &btf.Pointer{Target: bpfMap}
 }
 
+func getBpfProgAuxBtf(t *testing.T) *btf.Pointer {
+	bpfProgAux, err := testBtf.AnyTypeByName("bpf_prog_aux")
+	t.Helper()
+	test.AssertNoErr(t, err)
+	return &btf.Pointer{Target: bpfProgAux}
+}
+
 func getBpfProgTypeBtf(t *testing.T) *btf.Enum {
 	bpfProgType, err := testBtf.AnyTypeByName("bpf_prog_type")
 	t.Helper()
@@ -63,6 +91,20 @@ func getU8Btf(t *testing.T) btf.Type {
 	t.Helper()
 	test.AssertNoErr(t, err)
 	return u8
+}
+
+func getU16Btf(t *testing.T) btf.Type {
+	u16, err := testBtf.AnyTypeByName("__u16")
+	t.Helper()
+	test.AssertNoErr(t, err)
+	return u16
+}
+
+func getU32Btf(t *testing.T) btf.Type {
+	u32, err := testBtf.AnyTypeByName("__u32")
+	t.Helper()
+	test.AssertNoErr(t, err)
+	return u32
 }
 
 func getU64Btf(t *testing.T) btf.Type {
@@ -136,6 +178,7 @@ func prepareCompiler(t *testing.T) *compiler {
 }
 
 func (c *compiler) reset() {
+	c.memMode = MemoryReadModeProbeRead
 	c.insns = nil
 	c.labelExitUsed = false
 	c.regalloc.registers = [10]bool{}

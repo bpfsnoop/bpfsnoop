@@ -16,6 +16,14 @@ const (
 	argsReg = asm.R9
 )
 
+type MemoryReadMode int
+
+const (
+	MemoryReadModeProbeRead MemoryReadMode = iota
+	MemoryReadModeCoreRead
+	MemoryReadModeDirectRead
+)
+
 type compiler struct {
 	regalloc RegisterAllocator
 	insns    asm.Instructions
@@ -29,6 +37,8 @@ type compiler struct {
 	labelExitUsed bool
 
 	reservedStack int
+
+	memMode MemoryReadMode
 }
 
 type CompileExprOptions struct {
@@ -38,6 +48,8 @@ type CompileExprOptions struct {
 	LabelExit     string
 	ReservedStack int
 	UsedRegisters []asm.Register
+
+	MemoryReadMode MemoryReadMode
 }
 
 func CompileFilterExpr(opts CompileExprOptions) (asm.Instructions, error) {
@@ -52,6 +64,7 @@ func CompileFilterExpr(opts CompileExprOptions) (asm.Instructions, error) {
 		kernelBtf:     opts.Spec,
 		labelExit:     opts.LabelExit,
 		reservedStack: opts.ReservedStack,
+		memMode:       opts.MemoryReadMode,
 	}
 
 	c.vars = make([]string, len(opts.Params))
@@ -147,6 +160,7 @@ func CompileEvalExpr(opts CompileExprOptions) (EvalResult, error) {
 		kernelBtf:     opts.Spec,
 		labelExit:     opts.LabelExit,
 		reservedStack: opts.ReservedStack,
+		memMode:       opts.MemoryReadMode,
 	}
 
 	c.vars = make([]string, len(opts.Params))
@@ -185,8 +199,8 @@ func CompileEvalExpr(opts CompileExprOptions) (EvalResult, error) {
 	return res, nil
 }
 
-func (c *compiler) emit(insn asm.Instruction) {
-	c.insns = append(c.insns, insn)
+func (c *compiler) emit(insns ...asm.Instruction) {
+	c.insns = append(c.insns, insns...)
 }
 
 func (c *compiler) emitLoadArg(index int, dst asm.Register) {
