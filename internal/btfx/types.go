@@ -329,9 +329,9 @@ func reprValue(sb *strings.Builder, t btf.Type, isStr, isNumberPtr bool, data, d
 func ReprExprType(expr string, t btf.Type, mem *btf.Member, isStr, isNumberPtr bool, data, data2, dataNext uint64, s string, f FindSymbol) string {
 	var sb strings.Builder
 
-	fmt.Fprintf(&sb, "(%v)'%s'=", Repr(t), expr)
+	fmt.Fprintf(&sb, "(%s)'%s'=", Repr(t), expr)
 
-	if mem != nil {
+	if mem != nil && mem.BitfieldSize != 0 {
 		var memData [24]byte
 		*(*uint64)(unsafe.Pointer(&memData[0])) = data
 		*(*uint64)(unsafe.Pointer(&memData[8])) = data2
