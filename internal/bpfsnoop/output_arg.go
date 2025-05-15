@@ -81,6 +81,11 @@ func prepareFuncArgOutput(exprs []string) argDataOutput {
 }
 
 func (arg *funcArgumentOutput) compile(params []btf.FuncParam, spec *btf.Spec, offset int) (int, error) {
+	mode := cc.MemoryReadModeProbeRead
+	if _, err := spec.AnyTypeByName("bpf_rdonly_cast"); err == nil {
+		mode = cc.MemoryReadModeCoreRead
+	}
+
 	res, err := cc.CompileEvalExpr(cc.CompileExprOptions{
 		Expr:          arg.expr,
 		Params:        params,
@@ -88,6 +93,8 @@ func (arg *funcArgumentOutput) compile(params []btf.FuncParam, spec *btf.Spec, o
 		LabelExit:     outputFuncArgDataLabelExit,
 		ReservedStack: argOutputStackOff,
 		UsedRegisters: []asm.Register{dataReg, argsReg},
+
+		MemoryReadMode: mode,
 	})
 	if err != nil {
 		return 0, fmt.Errorf("failed to compile expr '%s': %w", arg.expr, err)

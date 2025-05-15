@@ -97,11 +97,18 @@ func (arg *funcArgument) matchParams(params []btf.FuncParam) bool {
 }
 
 func (arg *funcArgument) inject(prog *ebpf.ProgramSpec, spec *btf.Spec, params []btf.FuncParam) error {
+	mode := cc.MemoryReadModeProbeRead
+	if _, err := spec.AnyTypeByName("bpf_rdonly_cast"); err == nil {
+		mode = cc.MemoryReadModeCoreRead
+	}
+
 	insns, err := cc.CompileFilterExpr(cc.CompileExprOptions{
 		Expr:      arg.expr,
 		Params:    params,
 		Spec:      spec,
 		LabelExit: "__label_cc_exit",
+
+		MemoryReadMode: mode,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to compile expr '%s': %w", arg.expr, err)
