@@ -80,9 +80,8 @@ func ShowFuncProto(f *Flags, tpSpec, tpModSpec *ebpf.CollectionSpec) {
 			keys := maps.Keys(progs.tracings)
 			sort.Strings(keys)
 
-			listParams := f.listFuncParams && len(f.progs) == 1
 			for _, k := range keys {
-				printFuncProto(&sb, progs.tracings[k].fn, yellow, listParams)
+				printFuncProto(&sb, progs.tracings[k].fn, yellow, f.listFuncParams)
 			}
 
 			printNewline = true
@@ -106,9 +105,8 @@ func ShowFuncProto(f *Flags, tpSpec, tpModSpec *ebpf.CollectionSpec) {
 		keys := maps.Keys(kfuncs)
 		slices.Sort(keys)
 
-		listParams := f.listFuncParams && len(f.kfuncs) == 1
 		for _, k := range keys {
-			printFuncProto(&sb, kfuncs[k].Func, yellow, listParams)
+			printFuncProto(&sb, kfuncs[k].Func, yellow, f.listFuncParams)
 		}
 
 		printNewline = true
@@ -131,9 +129,8 @@ func ShowFuncProto(f *Flags, tpSpec, tpModSpec *ebpf.CollectionSpec) {
 		keys := maps.Keys(ktps)
 		slices.Sort(keys)
 
-		listParams := f.listFuncParams && len(f.ktps) == 1
 		for _, k := range keys {
-			printFuncProto(&sb, ktps[k].Func, yellow, listParams)
+			printFuncProto(&sb, ktps[k].Func, yellow, f.listFuncParams)
 		}
 	}
 
