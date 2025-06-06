@@ -136,7 +136,7 @@ func (b *bpfProgs) wait() error {
 
 func (b *bpfProgs) get(addr uintptr) (*bpfProgLineInfo, bool) {
 	if err := b.wait(); err != nil {
-		assert.NoErr(err, "Failed to parse bpf progs info: %w")
+		assert.NoErr(err, "Failed to parse bpf progs info: %v")
 		return nil, false
 	}
 
@@ -151,7 +151,7 @@ func (b *bpfProgs) get(addr uintptr) (*bpfProgLineInfo, bool) {
 
 func (b *bpfProgs) contains(addr uintptr) bool {
 	if err := b.wait(); err != nil {
-		assert.NoErr(err, "Failed to parse bpf progs info: %w")
+		assert.NoErr(err, "Failed to parse bpf progs info: %v")
 		return false
 	}
 

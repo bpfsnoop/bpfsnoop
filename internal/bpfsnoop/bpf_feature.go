@@ -32,6 +32,9 @@ func DetectBPFFeatures(spec *ebpf.CollectionSpec) error {
 		Program:    prog,
 		AttachType: ebpf.AttachTraceFEntry,
 	})
+	if err != nil {
+		return fmt.Errorf("failed to fentry nanosleep: %w", err)
+	}
 	defer l.Close()
 
 	nanosleep()

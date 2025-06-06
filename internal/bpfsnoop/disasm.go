@@ -79,7 +79,7 @@ func findDisasmKfuncInKmods(kfunc string, kaddr uint64, kmods []string, a2l *Add
 
 	for _, kmodName := range kmods {
 		err := a2l.addKmod(kmodName)
-		assert.NoErr(err, "Failed to parse addr2line of kmod %s: %v", kmodName, err)
+		assert.NoErr(err, "Failed to parse addr2line of kmod %s: %v", kmodName)
 
 		kmod := a2l.kmods[kmodName]
 		var entry *addr2line.Addr2LineEntry
@@ -171,7 +171,7 @@ func dumpKfunc(kfunc string, kmods []string, bytes uint, readSpec *ebpf.Collecti
 	bytes = guessBytes(uintptr(kaddr), kallsyms, bytes)
 	assert.False(bytes > readLimit, "Disasm bytes %d is larger than limit %d", bytes, readLimit)
 	data, err := readKernel(readSpec, kaddr, uint32(bytes))
-	assert.NoErr(err, "Failed to read kernel memory: %v", err)
+	assert.NoErr(err, "Failed to read kernel memory: %v")
 
 	data = trimTailingInsns(data)
 	log.Printf("Disassembling %s at %s (%d bytes) ..",
@@ -179,7 +179,7 @@ func dumpKfunc(kfunc string, kmods []string, bytes uint, readSpec *ebpf.Collecti
 		color.New(color.FgBlue).Sprintf("%#x", kaddr), len(data))
 
 	engine, err := createGapstoneEngine()
-	assert.NoErr(err, "Failed to create gapstone engine: %v", err)
+	assert.NoErr(err, "Failed to create gapstone engine: %v")
 	defer engine.Close()
 
 	VerboseLog("Disassembling bpf progs ..")

@@ -49,6 +49,9 @@ func readKernel(spec *ebpf.CollectionSpec, addr uint64, size uint32) ([]byte, er
 		Program:    prog,
 		AttachType: ebpf.AttachTraceFEntry,
 	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to fentry nanosleep: %w", err)
+	}
 	defer l.Close()
 
 	nanosleep()

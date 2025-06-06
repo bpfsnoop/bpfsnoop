@@ -56,6 +56,9 @@ func probeTracepointInfos(spec *ebpf.CollectionSpec, start uint64, cnt uint32) (
 		Program:    prog,
 		AttachType: ebpf.AttachTraceFEntry,
 	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to fentry nanosleep: %w", err)
+	}
 	defer l.Close()
 
 	nanosleep()

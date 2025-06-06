@@ -56,6 +56,9 @@ func detectTraceable(spec *ebpf.CollectionSpec, addrs []uintptr) ([]uintptr, err
 		Program:    prog,
 		AttachType: ebpf.AttachTraceFEntry,
 	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to fentry nanosleep: %w", err)
+	}
 	defer l.Close()
 
 	nanosleep()

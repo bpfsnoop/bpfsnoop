@@ -58,7 +58,7 @@ func probeTracepointModuleInfos(spec, tpSpec *ebpf.CollectionSpec, head, start u
 		AttachType: ebpf.AttachTraceFEntry,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("failed to attach tracing: %w", err)
+		return nil, fmt.Errorf("failed to fentry nanosleep: %w", err)
 	}
 	defer l.Close()
 
