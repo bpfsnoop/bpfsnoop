@@ -36,10 +36,6 @@ func DetectSupportedMaxArg(traceableSpec, spec *ebpf.CollectionSpec, ksyms *Kall
 	clearFilterArgSubprog(prog)
 
 	attachType := ebpf.AttachTraceFExit
-	if mode == TracingModeEntry {
-		attachType = ebpf.AttachTraceFEntry
-	}
-
 	kfunc := maps.Values(kfuncs)[0]
 	prog.AttachTo = kfunc.Ksym.name
 	prog.AttachType = attachType

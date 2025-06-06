@@ -6,11 +6,9 @@ package main
 import (
 	"context"
 	"errors"
-	"fmt"
 	"log"
 	"os"
 	"os/signal"
-	"slices"
 	"syscall"
 	"time"
 
@@ -46,10 +44,6 @@ func main() {
 		bpfsnoop.ShowFuncProto(flags, tpSpec, tpModSpec)
 		return
 	}
-
-	mode := flags.Mode()
-	assert.True(slices.Contains([]string{bpfsnoop.TracingModeEntry, bpfsnoop.TracingModeExit}, mode),
-		fmt.Sprintf("Mode (%s) must be exit or entry", mode))
 
 	progs, err := flags.ParseProgs()
 	assert.NoErr(err, "Failed to parse bpf prog infos: %v")

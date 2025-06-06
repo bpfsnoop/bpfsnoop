@@ -144,10 +144,6 @@ func ProbeTailcallIssue(spec, tailcallSpec, readSpec *ebpf.CollectionSpec) error
 	clearFilterArgSubprog(prog)
 
 	attachType := ebpf.AttachTraceFExit
-	if mode == TracingModeEntry {
-		attachType = ebpf.AttachTraceFEntry
-	}
-
 	prog.AttachTarget = tcProg
 	prog.AttachTo = tcProgName
 	prog.AttachType = attachType

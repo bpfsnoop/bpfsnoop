@@ -4,8 +4,10 @@
 package bpfsnoop
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 
 	flag "github.com/spf13/pflag"
 )
@@ -19,7 +21,7 @@ var (
 	verbose           bool
 	debugLog          bool
 	disasmIntelSyntax bool
-	mode              string
+	modes             []string
 	filterArg         []string
 	filterPkt         string
 	outputArg         []string
@@ -72,7 +74,7 @@ func ParseFlags() (*Flags, error) {
 	f.BoolVar(&disasmIntelSyntax, "disasm-intel-syntax", false, "use Intel asm syntax for disasm, ATT asm syntax by default")
 	f.BoolVarP(&verbose, "verbose", "v", false, "output verbose log")
 	f.BoolVarP(&debugLog, "debug-log", "D", false, "output many debug logs")
-	f.StringVarP(&mode, "mode", "m", TracingModeExit, "mode of bpfsnoop, exit or entry")
+	f.StringSliceVarP(&modes, "mode", "m", []string{TracingModeExit}, "mode of bpfsnoop, exit and/or entry")
 	f.BoolVar(&outputLbr, "output-lbr", false, "output LBR perf event")
 	f.BoolVar(&outputFuncStack, "output-stack", false, "output function call stack")
 	f.StringVar(&outputFlameGraph, "output-flamegraph", "", "output flamegraph fold data")
@@ -115,11 +117,44 @@ func ParseFlags() (*Flags, error) {
 		}
 	}
 
+	if e := flags.checkMode(); e != nil {
+		return nil, e
+	}
+
 	return &flags, err
 }
 
 func (f *Flags) ParseProgs() ([]ProgFlag, error) {
 	return parseProgsFlag(f.progs)
+}
+
+func (f *Flags) checkMode() error {
+	switch len(modes) {
+	case 1:
+		if !slices.Contains([]string{TracingModeEntry, TracingModeExit}, modes[0]) {
+			return fmt.Errorf("invalid mode %q, must be %q and/or %q", modes[0], TracingModeEntry, TracingModeExit)
+		}
+
+	case 2:
+		for _, m := range modes {
+			if !slices.Contains([]string{TracingModeEntry, TracingModeExit}, m) {
+				return fmt.Errorf("invalid mode %q, must be %q and/or %q", m, TracingModeEntry, TracingModeExit)
+			}
+		}
+
+	default:
+		return fmt.Errorf("invalid number of modes %d, must be 1 or 2", len(modes))
+	}
+
+	return nil
+}
+
+func hasModeEntry() bool {
+	return slices.Contains(modes, TracingModeEntry)
+}
+
+func hasModeExit() bool {
+	return slices.Contains(modes, TracingModeExit)
 }
 
 func (f *Flags) Kfuncs() []string {
@@ -142,24 +177,12 @@ func (f *Flags) Disasm() bool {
 	return f.disasm
 }
 
-func (f *Flags) Mode() string {
-	return mode
-}
-
 func (f *Flags) OutputLbr() bool {
 	return outputLbr
 }
 
 func (f *Flags) OutputFuncStack() bool {
 	return outputFuncStack
-}
-
-func (f *Flags) OtherMode() string {
-	if mode == TracingModeExit {
-		return TracingModeEntry
-	}
-
-	return TracingModeExit
 }
 
 func (f *Flags) ShowFuncProto() bool {

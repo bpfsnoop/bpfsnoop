@@ -37,7 +37,7 @@ func (s *lbrStack) get(funcIP uintptr, lbrData *LbrData, helpers *Helpers) bool 
 					break
 				}
 			}
-		} else if mode == TracingModeExit {
+		} else if hasModeExit() {
 			for i := range entries {
 				if progInfo.contains(entries[i].From) || progInfo.contains(entries[i].To) {
 					entries = entries[i:]
