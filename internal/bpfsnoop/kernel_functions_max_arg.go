@@ -12,7 +12,7 @@ import (
 )
 
 func DetectSupportedMaxArg(traceableSpec, spec *ebpf.CollectionSpec, ksyms *Kallsyms) (int, error) {
-	kfuncs, err := findKernelFuncs([]string{"ip_*", "tcp_*"}, ksyms, MAX_BPF_FUNC_ARGS, true, true)
+	kfuncs, err := findKernelFuncs([]string{"ip_*", "tcp_*"}, nil, ksyms, MAX_BPF_FUNC_ARGS, true, true)
 	if err != nil {
 		return 0, fmt.Errorf("failed to find kernel functions with many args: %w", err)
 	}

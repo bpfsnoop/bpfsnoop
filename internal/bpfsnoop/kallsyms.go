@@ -65,6 +65,8 @@ type Kallsyms struct {
 	stext  uint64
 	sysBPF uint64
 
+	mods []string // kernel modules, sorted by name
+
 	bpfRawTpStart uint64
 	bpfRawTpStop  uint64
 
@@ -82,6 +84,8 @@ func NewKallsyms() (*Kallsyms, error) {
 	var ks Kallsyms
 	ks.a2s = make(map[uint64]*KsymEntry)
 	ks.n2s = make(map[string]*KsymEntry)
+
+	kmods := make(map[string]struct{})
 
 	scanner := bufio.NewScanner(fd)
 	for scanner.Scan() {
@@ -123,6 +127,11 @@ func NewKallsyms() (*Kallsyms, error) {
 			case "__x64_sys_bpf":
 				ks.sysBPF = entry.addr
 			}
+
+			if _, exists := kmods[entry.mod]; !exists && !isKernelBuiltinMod(entry.mod) {
+				kmods[entry.mod] = struct{}{}
+				ks.mods = append(ks.mods, entry.mod)
+			}
 		} else if fields[1] == "D" || fields[1] == "d" {
 			setAddr := func(s string, addr *uint64) error {
 				var err error
@@ -160,6 +169,9 @@ func NewKallsyms() (*Kallsyms, error) {
 
 	ks.addrs = maps.Keys(ks.a2s)
 	slices.Sort(ks.addrs)
+
+	// Sort modules by name
+	slices.Sort(ks.mods)
 
 	return &ks, nil
 }
