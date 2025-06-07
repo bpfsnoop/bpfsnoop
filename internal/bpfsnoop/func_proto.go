@@ -96,7 +96,14 @@ func ShowFuncProto(f *Flags, tpSpec, tpModSpec *ebpf.CollectionSpec) {
 			fmt.Fprintln(&sb)
 		}
 
-		kfuncs, err := findKernelFuncs(f.kfuncs, kallsyms, MAX_BPF_FUNC_ARGS, false, true)
+		kmods, err := inferenceKfuncKmods(f.kfuncs, kfuncKmods, kallsyms)
+		assert.NoErr(err, "Failed to inference kernel module names for kernel functions: %v")
+
+		if ksym, ok := kallsyms.findBySymbol(f.kfuncs[0]); ok && ksym.mod != "" {
+			kmods = []string{ksym.mod}
+		}
+
+		kfuncs, err := findKernelFuncs(f.kfuncs, kmods, kallsyms, MAX_BPF_FUNC_ARGS, false, true)
 		assert.NoErr(err, "Failed to find kernel functions: %v")
 
 		fmt.Fprint(&sb, "Kernel functions:")

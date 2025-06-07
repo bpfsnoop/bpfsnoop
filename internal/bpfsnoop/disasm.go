@@ -121,8 +121,15 @@ func parseDisasmKfunc(kfunc string, kmods []string, ksyms *Kallsyms, a2l *Addr2L
 		return entry.addr, entry.name
 	}
 
+	kmods, err = inferenceKfuncKmods([]string{kfunc}, kfuncKmods, ksyms)
+	assert.NoErr(err, "Failed to inference kernel modules for kfunc %s: %v", kfunc)
+
+	if ksym, ok := ksyms.findBySymbol(kfunc); ok && ksym.mod != "" {
+		kmods = []string{ksym.mod}
+	}
+
 	// kfunc may be a glob filter
-	kfuncs, _ := FindKernelFuncs([]string{kfunc}, ksyms, 0xFF)
+	kfuncs, _ := searchKernelFuncs([]string{kfunc}, kmods, ksyms, 0xFF)
 	if len(kfuncs) != 0 {
 		// grab the very first one sorted by name
 		values := maps.Values(kfuncs)

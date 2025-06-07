@@ -64,8 +64,8 @@ func readKernel(spec *ebpf.CollectionSpec, addr uint64, size uint32) ([]byte, er
 		return nil, errors.New("reading kernel was not triggered")
 	}
 
-	if err := coll.Variables["buff"].Get(&buff); err != nil {
-		return nil, fmt.Errorf("failed to get buff: %w", err)
+	if err := coll.Maps[".data.buff"].Lookup(uint32(0), buff); err != nil {
+		return nil, fmt.Errorf("failed to lookup .data.buff: %w", err)
 	}
 
 	return buff[:size], nil

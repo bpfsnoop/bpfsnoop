@@ -11,9 +11,13 @@ import (
 	"github.com/cilium/ebpf/btf"
 )
 
-func iterateKernelBtfs(iter func(*btf.Spec)) error {
+const (
+	kernelBTFPath = "/sys/kernel/btf"
+)
+
+func iterateKernelBtfs(kmods []string, iter func(*btf.Spec)) error {
 	if kfuncAllKmods {
-		files, err := os.ReadDir("/sys/kernel/btf")
+		files, err := os.ReadDir(kernelBTFPath)
 		if err != nil {
 			return fmt.Errorf("failed to read /sys/kernel/btf: %w", err)
 		}
@@ -26,8 +30,7 @@ func iterateKernelBtfs(iter func(*btf.Spec)) error {
 
 			iter(kmodBtf)
 		}
-	} else if len(kfuncKmods) != 0 {
-		kmods := slices.Clone(kfuncKmods)
+	} else if len(kmods) != 0 {
 		kmods = append(kmods, "vmlinux")
 		slices.Sort(kmods)
 		kmods = slices.Compact(kmods)
