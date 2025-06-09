@@ -8,7 +8,7 @@ include makefiles/variables.mk
 # Build libcapstone for static linking
 $(LIBCAPSTONE_OBJ):
 	cd lib/capstone && \
-		cmake -B build -DCMAKE_BUILD_TYPE=Release -DCAPSTONE_ARCHITECTURE_DEFAULT=1 -DCAPSTONE_BUILD_CSTOOL=0 && \
+		CC=$(CMD_CC) CXX=$(CMD_CXX) cmake -B build -DCMAKE_BUILD_TYPE=Release -DCAPSTONE_ARCHITECTURE_DEFAULT=1 -DCAPSTONE_BUILD_CSTOOL=0 -DCMAKE_C_FLAGS="-Qunused-arguments" && \
 		cmake --build build
 
 # Build libpcap for static linking
@@ -16,7 +16,7 @@ $(LIBPCAP_OBJ):
 	cd lib/libpcap && \
 		./autogen.sh && \
 		CC=$(CMD_CC) CXX=$(CMD_CXX) ./configure --disable-rdma --disable-shared --disable-usb --disable-netmap --disable-bluetooth --disable-dbus --without-libnl && \
-		make
+		make CFLAGS="-Qunused-arguments"
 
 $(VMLINUX_OBJ):
 	$(CMD_BPFTOOL) btf dump file /sys/kernel/btf/vmlinux format c > $(VMLINUX_OBJ)
