@@ -19,9 +19,10 @@ const (
 	pcapFilterL2StubSpecialized = "filter_pcap_l2.specialized.1"
 	pcapFilterL3StubSpecialized = "filter_pcap_l3.specialized.1"
 
-	filterSkbFunc = "filter_skb"
-	filterXdpFunc = "filter_xdp"
-	filterPktFunc = "filter_pkt"
+	filterSkbFunc      = "filter_skb"
+	filterXdpFunc      = "filter_xdp"
+	filterXdpFrameFunc = "filter_xdp_frame"
+	filterPktFunc      = "filter_pkt"
 )
 
 var pktFilter packetFilter
@@ -66,6 +67,7 @@ func (pf *packetFilter) filterSkb(prog *ebpf.ProgramSpec, index int, t btf.Type)
 
 	pf.clearSpecializedStubs(prog)
 	clearFilterSubprog(prog, filterXdpFunc)
+	clearFilterSubprog(prog, filterXdpFrameFunc)
 
 	insns := append(genAccessArg(index, asm.R1),
 		asm.Call.Label(filterSkbFunc),
@@ -78,7 +80,7 @@ func (pf *packetFilter) filterSkb(prog *ebpf.ProgramSpec, index int, t btf.Type)
 	return nil
 }
 
-func (pf *packetFilter) filterXdp(prog *ebpf.ProgramSpec, index int, t btf.Type) error {
+func (pf *packetFilter) injectFilterXdp(prog *ebpf.ProgramSpec, index int, t btf.Type, stub, otherStub string) error {
 	if pf.expr == "" {
 		return nil
 	}
@@ -95,10 +97,11 @@ func (pf *packetFilter) filterXdp(prog *ebpf.ProgramSpec, index int, t btf.Type)
 
 	pf.clearSpecializedStubs(prog)
 	clearFilterSubprog(prog, filterSkbFunc)
+	clearFilterSubprog(prog, otherStub)
 	clearFilterSubprog(prog, pcapFilterL3Stub)
 
 	insns := append(genAccessArg(index, asm.R1),
-		asm.Call.Label(filterXdpFunc),
+		asm.Call.Label(stub),
 		asm.Return(),
 	)
 
@@ -106,6 +109,14 @@ func (pf *packetFilter) filterXdp(prog *ebpf.ProgramSpec, index int, t btf.Type)
 	injectInsns(prog, filterPktFunc, insns)
 
 	return nil
+}
+
+func (pf *packetFilter) filterXdp(prog *ebpf.ProgramSpec, index int, t btf.Type) error {
+	return pf.injectFilterXdp(prog, index, t, filterXdpFunc, filterXdpFrameFunc)
+}
+
+func (pf *packetFilter) filterXdpFrame(prog *ebpf.ProgramSpec, index int, t btf.Type) error {
+	return pf.injectFilterXdp(prog, index, t, filterXdpFrameFunc, filterXdpFunc)
 }
 
 func (pf *packetFilter) clearSpecializedStubs(prog *ebpf.ProgramSpec) {
@@ -119,5 +130,6 @@ func (pf *packetFilter) clear(prog *ebpf.ProgramSpec) {
 	clearFilterSubprog(prog, pcapFilterL3Stub)
 	clearFilterSubprog(prog, filterSkbFunc)
 	clearFilterSubprog(prog, filterXdpFunc)
+	clearFilterSubprog(prog, filterXdpFrameFunc)
 	clearFilterSubprog(prog, filterPktFunc)
 }

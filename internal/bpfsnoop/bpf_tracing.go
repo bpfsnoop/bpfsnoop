@@ -207,7 +207,15 @@ func (t *bpfTracing) injectSkbFilter(prog *ebpf.ProgramSpec, index int, typ btf.
 
 func (t *bpfTracing) injectXdpFilter(prog *ebpf.ProgramSpec, index int, typ btf.Type) error {
 	if err := pktFilter.filterXdp(prog, index, typ); err != nil {
-		return fmt.Errorf("failed to inject xdp pcap-filter: %w", err)
+		return fmt.Errorf("failed to inject xdp_buff pcap-filter: %w", err)
+	}
+
+	return nil
+}
+
+func (t *bpfTracing) injectXdpFrameFilter(prog *ebpf.ProgramSpec, index int, typ btf.Type) error {
+	if err := pktFilter.filterXdpFrame(prog, index, typ); err != nil {
+		return fmt.Errorf("failed to inject xdp_frame pcap-filter: %w", err)
 	}
 
 	return nil
@@ -254,6 +262,9 @@ func (t *bpfTracing) injectPktFilter(prog *ebpf.ProgramSpec, params []btf.FuncPa
 
 			err = t.injectXdpFilter(prog, i, typ)
 
+		case "xdp_frame":
+			err = t.injectXdpFrameFilter(prog, i, typ)
+
 		default:
 			continue
 		}
@@ -262,7 +273,7 @@ func (t *bpfTracing) injectPktFilter(prog *ebpf.ProgramSpec, params []btf.FuncPa
 			return err
 		}
 
-		DebugLog("Injected --filter-pkt expr to %dth param %s of %s", i, p.Name, fnName)
+		DebugLog("Injected --filter-pkt expr to %dth param (%s)%s of %s", i, btfx.Repr(typ), p.Name, fnName)
 		return nil
 	}
 
