@@ -101,6 +101,18 @@ const (
 	EvalResultTypeDeref
 	EvalResultTypeBuf
 	EvalResultTypeString
+	EvalResultTypePkt
+)
+
+const (
+	PktTypeEth   = "eth"
+	PktTypeIP    = "ip"
+	PktTypeIP4   = "ip4"
+	PktTypeIP6   = "ip6"
+	PktTypeICMP  = "icmp"
+	PktTypeICMP6 = "icmp6"
+	PktTypeTCP   = "tcp"
+	PktTypeUDP   = "udp"
 )
 
 type EvalResult struct {
@@ -111,8 +123,178 @@ type EvalResult struct {
 	Type  EvalResultType
 	Size  int
 	Off   int
+	Pkt   string // pkt type, e.g. "eth", "ip4", "ip6", "icmp", "icmp6", "tcp" and "udp"
 
 	LabelUsed bool
+}
+
+type funcCallValue struct {
+	typ        EvalResultType
+	expr       *cc.Expr
+	dataOffset int64
+	dataSize   int64
+	pktType    string
+}
+
+func compileFuncCall(expr *cc.Expr) (funcCallValue, error) {
+	var val funcCallValue
+	var err error
+
+	fnName := expr.Left.Text
+	switch fnName {
+	case "buf":
+		switch len(expr.List) {
+		case 2, 3:
+			if expr.List[1].Op != cc.Number {
+				return val, fmt.Errorf("%s() second argument must be a number", fnName)
+			}
+
+			val.dataSize, err = parseNumber(expr.List[1].Text)
+			if err != nil {
+				return val, fmt.Errorf("%s() second argument must be a number: %w", fnName, err)
+			}
+
+			if len(expr.List) == 3 {
+				val.dataOffset = val.dataSize
+
+				if expr.List[2].Op != cc.Number {
+					return val, fmt.Errorf("%s() third argument must be a number", fnName)
+				}
+				val.dataSize, err = parseNumber(expr.List[2].Text)
+				if err != nil {
+					return val, fmt.Errorf("%s() third argument must be a number: %w", fnName, err)
+				}
+			}
+
+		default:
+			return val, fmt.Errorf("%s() must have 2 or 3 arguments", fnName)
+		}
+
+		if val.dataSize <= 0 {
+			return val, fmt.Errorf("%s() size must be greater than 0", fnName)
+		}
+
+		val.expr = expr.List[0]
+		val.typ = EvalResultTypeBuf
+
+	case "pkt":
+		allowedPktTypes := []string{
+			PktTypeEth,
+			PktTypeIP, PktTypeIP4, PktTypeIP6,
+			PktTypeICMP, PktTypeICMP6,
+			PktTypeTCP, PktTypeUDP,
+		}
+
+		switch len(expr.List) {
+		case 2:
+			if expr.List[1].Op != cc.Number {
+				return val, fmt.Errorf("pkt() second argument must be a number")
+			}
+
+			val.dataSize, err = parseNumber(expr.List[1].Text)
+			if err != nil {
+				return val, fmt.Errorf("pkt() second argument must be a number: %w", err)
+			}
+
+			val.pktType = PktTypeEth // default pkt type
+
+		case 3:
+			if expr.List[1].Op != cc.Number {
+				return val, fmt.Errorf("pkt() second argument must be a number")
+			}
+
+			val.dataSize, err = parseNumber(expr.List[1].Text)
+			if err != nil {
+				return val, fmt.Errorf("%s() second argument must be a number: %w", fnName, err)
+			}
+
+			switch expr.List[2].Op {
+			case cc.Name:
+				pktType := expr.List[2].Text
+				if !slices.Contains(allowedPktTypes, pktType) {
+					return val, fmt.Errorf("pkt() third argument as pkt type must be one of %v", allowedPktTypes)
+				}
+
+				val.pktType = pktType
+
+			case cc.Number:
+				val.dataOffset = val.dataSize
+				val.dataSize, err = parseNumber(expr.List[2].Text)
+				if err != nil {
+					return val, fmt.Errorf("pkt() third argument must be a number: %w", err)
+				}
+
+				val.pktType = PktTypeEth // default pkt type
+
+			default:
+				return val, fmt.Errorf("pkt() third argument must be a name or a number")
+			}
+
+		case 4:
+			if expr.List[1].Op != cc.Number {
+				return val, fmt.Errorf("pkt() second argument must be a number")
+			}
+			val.dataOffset, err = parseNumber(expr.List[1].Text)
+			if err != nil {
+				return val, fmt.Errorf("pkt() second argument must be a number: %w", err)
+			}
+
+			if expr.List[2].Op != cc.Number {
+				return val, fmt.Errorf("pkt() third argument must be a number")
+			}
+			val.dataSize, err = parseNumber(expr.List[2].Text)
+			if err != nil {
+				return val, fmt.Errorf("pkt() third argument must be a number: %w", err)
+			}
+
+			if expr.List[3].Op != cc.Name {
+				return val, fmt.Errorf("pkt() fourth argument must be a name")
+			}
+			pktType := expr.List[3].Text
+			if !slices.Contains(allowedPktTypes, pktType) {
+				return val, fmt.Errorf("pkt() fourth argument as pkt type must be one of %v", allowedPktTypes)
+			}
+
+			val.pktType = pktType
+
+		default:
+			return val, fmt.Errorf("pkt() must have 2, 3 or 4 arguments")
+		}
+
+		if val.dataSize <= 0 {
+			return val, fmt.Errorf("pkt() size must be greater than 0")
+		}
+
+		val.expr = expr.List[0]
+		val.typ = EvalResultTypePkt
+
+	case "str":
+		if len(expr.List) != 1 && len(expr.List) != 2 {
+			return val, fmt.Errorf("str() must have 1 or 2 arguments")
+		}
+
+		val.dataSize = -1
+		if len(expr.List) == 2 {
+			if expr.List[1].Op != cc.Number {
+				return val, fmt.Errorf("str() second argument must be a number")
+			}
+			val.dataSize, err = parseNumber(expr.List[1].Text)
+			if err != nil {
+				return val, fmt.Errorf("str() second argument must be a number: %w", err)
+			}
+			if val.dataSize <= 0 {
+				return val, fmt.Errorf("str() size must be greater than 0")
+			}
+		}
+
+		val.expr = expr.List[0]
+		val.typ = EvalResultTypeString
+
+	default:
+		return val, fmt.Errorf("unsupported function call: %s", fnName)
+	}
+
+	return val, nil
 }
 
 func CompileEvalExpr(opts CompileExprOptions) (EvalResult, error) {
@@ -148,64 +330,16 @@ func CompileEvalExpr(opts CompileExprOptions) (EvalResult, error) {
 			return res, fmt.Errorf("function call must have a constant name")
 		}
 
-		switch e.Left.Text {
-		case "buf":
-			switch len(e.List) {
-			case 2, 3:
-				if e.List[1].Op != cc.Number {
-					return res, fmt.Errorf("buf() second argument must be a number")
-				}
-
-				dataSize, err = parseNumber(e.List[1].Text)
-				if err != nil {
-					return res, fmt.Errorf("buf() second argument must be a number: %w", err)
-				}
-
-				if len(e.List) == 3 {
-					dataOffset = dataSize
-
-					if e.List[2].Op != cc.Number {
-						return res, fmt.Errorf("buf() third argument must be a number")
-					}
-					dataSize, err = parseNumber(e.List[2].Text)
-					if err != nil {
-						return res, fmt.Errorf("buf() third argument must be a number: %w", err)
-					}
-				}
-
-			default:
-				return res, fmt.Errorf("buf() must have 2 or 3 arguments")
-			}
-
-			if dataSize <= 0 {
-				return res, fmt.Errorf("buf() size must be greater than 0")
-			}
-
-			evaluatingExpr = e.List[0]
-			res.Type = EvalResultTypeBuf
-
-		case "str":
-			if len(e.List) != 1 && len(e.List) != 2 {
-				return res, fmt.Errorf("str() must have 1 or 2 arguments")
-			}
-
-			dataSize = -1
-			if len(e.List) == 2 {
-				if e.List[1].Op != cc.Number {
-					return res, fmt.Errorf("str() second argument must be a number")
-				}
-				dataSize, err = parseNumber(e.List[1].Text)
-				if err != nil {
-					return res, fmt.Errorf("str() second argument must be a number: %w", err)
-				}
-				if dataSize <= 0 {
-					return res, fmt.Errorf("str() size must be greater than 0")
-				}
-			}
-
-			evaluatingExpr = e.List[0]
-			res.Type = EvalResultTypeString
+		val, err := compileFuncCall(e)
+		if err != nil {
+			return res, fmt.Errorf("failed to compile function call: %w", err)
 		}
+
+		res.Type = val.typ
+		res.Pkt = val.pktType
+		dataSize = val.dataSize
+		dataOffset = val.dataOffset
+		evaluatingExpr = val.expr
 	}
 
 	val, err := c.eval(evaluatingExpr)
@@ -238,6 +372,17 @@ func CompileEvalExpr(opts CompileExprOptions) (EvalResult, error) {
 		_, isArray := t.(*btf.Array)
 		if !isPtr && !isArray {
 			return res, fmt.Errorf("disallow non-{pointer,array} type %v for buf()", t)
+		}
+
+		res.Off = int(dataOffset)
+		res.Size = int(dataSize)
+		res.Btf = t
+
+	case EvalResultTypePkt:
+		t := mybtf.UnderlyingType(val.btf)
+		_, isPtr := t.(*btf.Pointer)
+		if !isPtr {
+			return res, fmt.Errorf("disallow non-pointer type %v for pkt()", t)
 		}
 
 		res.Off = int(dataOffset)
