@@ -48,6 +48,9 @@ type funcArgumentOutput struct {
 	isString bool
 	isPkt    bool
 	pktType  string
+	isAddr   bool
+	AddrType cc.EvalResultType
+	AddrNum  int
 }
 
 type argDataOutput struct {
@@ -268,11 +271,17 @@ func (arg *funcArgumentOutput) compile(params []btf.FuncParam, spec *btf.Spec, o
 		arg.isDeref = true
 		offset, err = arg.genDerefInsns(&res, offset, size, labelExit)
 
-	case cc.EvalResultTypeBuf, cc.EvalResultTypePkt, cc.EvalResultTypeString:
+	case cc.EvalResultTypeBuf, cc.EvalResultTypePkt, cc.EvalResultTypeString,
+		cc.EvalResultTypeEthAddr, cc.EvalResultTypeIP4Addr, cc.EvalResultTypeIP6Addr:
 		arg.isBuf = res.Type == cc.EvalResultTypeBuf
 		arg.isString = res.Type == cc.EvalResultTypeString
 		arg.isPkt = res.Type == cc.EvalResultTypePkt
 		arg.pktType = res.Pkt
+		arg.isAddr = slices.Contains([]cc.EvalResultType{
+			cc.EvalResultTypeEthAddr, cc.EvalResultTypeIP4Addr, cc.EvalResultTypeIP6Addr,
+		}, res.Type)
+		arg.AddrType = res.Type
+		arg.AddrNum = res.Addr
 		offset, err = arg.genBufInsns(&res, offset, size, labelExit)
 
 	default:
