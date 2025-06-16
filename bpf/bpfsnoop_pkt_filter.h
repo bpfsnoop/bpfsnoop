@@ -9,6 +9,12 @@
 #include "bpf_helpers.h"
 #include "bpf_core_read.h"
 
+enum {
+    FILTER_PKT_SKB = 0,
+    FILTER_PKT_XDP,
+    FILTER_PKT_XDP_FRAME,
+};
+
 static __noinline bool
 filter_pcap_l2(void *_pkt, void *__pkt , void *___pkt, void *data, void *data_end)
 {
@@ -47,12 +53,28 @@ filter_xdp(struct xdp_buff *xdp)
 }
 
 static __noinline bool
-filter_pkt(__u64 *args, __u64 aux /* auxiliary */)
+filter_xdp_frame(struct xdp_frame *xdp_frame)
+{
+    void *data = (void *) BPF_CORE_READ(xdp_frame, data);
+    void *data_end = data + BPF_CORE_READ(xdp_frame, len);
+
+    return filter_pcap_l2(xdp_frame, xdp_frame, xdp_frame, data, data_end);
+}
+
+static __noinline bool
+filter_pkt(__u64 *args, int filter)
 {
     /* This function will be rewrote by Go totally. */
-    void *ptr = (void *) aux;
+    switch (filter) {
+    case FILTER_PKT_XDP:
+        return filter_xdp((struct xdp_buff *) args[0]);
 
-    return args ? filter_skb((struct sk_buff *) ptr) : filter_xdp((struct xdp_buff *) ptr);
+    case FILTER_PKT_XDP_FRAME:
+        return filter_xdp_frame((struct xdp_frame *) args[0]);
+
+    default:
+        return filter_skb((struct sk_buff *) args[0]);
+    }
 }
 
 #endif // __BPFSNOOP_PKT_FILTER_H_
