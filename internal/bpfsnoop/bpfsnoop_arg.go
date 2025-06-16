@@ -5,6 +5,7 @@ package bpfsnoop
 
 import (
 	"fmt"
+	"net"
 	"strings"
 
 	"github.com/Asphaltt/mybtf"
@@ -54,7 +55,7 @@ func outputFuncArgAttrs(sb *strings.Builder, info *funcInfo, data []byte, f btfx
 			continue
 		}
 
-		if arg.isDeref || arg.isBuf || arg.isPkt || arg.isString {
+		if arg.isDeref || arg.isBuf || arg.isPkt || arg.isAddr || arg.isString {
 			var (
 				s   string
 				err error
@@ -93,6 +94,39 @@ func outputFuncArgAttrs(sb *strings.Builder, info *funcInfo, data []byte, f btfx
 				}
 				pkt := gopacket.NewPacket(data[:arg.trueDataSize], layer, gopacket.NoCopy)
 				s = fmt.Sprintf("(%s)'%s'=%v", btfx.Repr(arg.t), arg.expr, pkt)
+
+			case arg.isAddr:
+				switch arg.AddrType {
+				case cc.EvalResultTypeEthAddr:
+					if arg.AddrNum == 1 {
+						s = fmt.Sprintf("(%s)'%s'=%s", btfx.Repr(arg.t), arg.expr,
+							net.HardwareAddr(data[:cc.EthAddrSize]))
+					} else {
+						s = fmt.Sprintf("(%s)'%s'=[%s,%s]", btfx.Repr(arg.t), arg.expr,
+							net.HardwareAddr(data[:cc.EthAddrSize]),
+							net.HardwareAddr(data[cc.EthAddrSize:cc.EthAddrSize*2]))
+					}
+
+				case cc.EvalResultTypeIP4Addr:
+					if arg.AddrNum == 1 {
+						s = fmt.Sprintf("(%s)'%s'=%s", btfx.Repr(arg.t), arg.expr,
+							net.IP(data[:cc.IP4AddrSize]))
+					} else {
+						s = fmt.Sprintf("(%s)'%s'=[%s,%s]", btfx.Repr(arg.t), arg.expr,
+							net.IP(data[:cc.IP4AddrSize]),
+							net.IP(data[cc.IP4AddrSize:cc.IP4AddrSize*2]))
+					}
+
+				case cc.EvalResultTypeIP6Addr:
+					if arg.AddrNum == 1 {
+						s = fmt.Sprintf("(%s)'%s'=%s", btfx.Repr(arg.t), arg.expr,
+							net.IP(data[:cc.IP6AddrSize]))
+					} else {
+						s = fmt.Sprintf("(%s)'%s'=[%s,%s]", btfx.Repr(arg.t), arg.expr,
+							net.IP(data[:cc.IP6AddrSize]),
+							net.IP(data[cc.IP6AddrSize:cc.IP6AddrSize*2]))
+					}
+				}
 
 			case arg.isString:
 				s = fmt.Sprintf(`(%s)'%s'="%s"`, btfx.Repr(arg.t), arg.expr,
