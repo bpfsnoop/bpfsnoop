@@ -102,6 +102,9 @@ const (
 	EvalResultTypeBuf
 	EvalResultTypeString
 	EvalResultTypePkt
+	EvalResultTypeEthAddr
+	EvalResultTypeIP4Addr
+	EvalResultTypeIP6Addr
 )
 
 const (
@@ -124,9 +127,16 @@ type EvalResult struct {
 	Size  int
 	Off   int
 	Pkt   string // pkt type, e.g. "eth", "ip4", "ip6", "icmp", "icmp6", "tcp" and "udp"
+	Addr  int    // address number for EvalResultTypeEthAddr, EvalResultTypeIP4Addr and EvalResultTypeIP6Addr
 
 	LabelUsed bool
 }
+
+const (
+	EthAddrSize = 6
+	IP4AddrSize = 4
+	IP6AddrSize = 16
+)
 
 type funcCallValue struct {
 	typ        EvalResultType
@@ -134,6 +144,7 @@ type funcCallValue struct {
 	dataOffset int64
 	dataSize   int64
 	pktType    string
+	addr       int // address number for EvalResultTypeEthAddr, EvalResultTypeIP4Addr and EvalResultTypeIP6Addr
 }
 
 func compileFuncCall(expr *cc.Expr) (funcCallValue, error) {
@@ -290,6 +301,59 @@ func compileFuncCall(expr *cc.Expr) (funcCallValue, error) {
 		val.expr = expr.List[0]
 		val.typ = EvalResultTypeString
 
+	case "eth", "eth2", "ip4", "ip42", "ip6", "ip62":
+		switch len(expr.List) {
+		case 1:
+			break
+
+		case 2:
+			if expr.List[1].Op != cc.Number {
+				return val, fmt.Errorf("eth() second argument must be a number")
+			}
+
+			val.dataOffset, err = parseNumber(expr.List[1].Text)
+			if err != nil {
+				return val, fmt.Errorf("eth() second argument must be a number: %w", err)
+			}
+
+		default:
+			return val, fmt.Errorf("eth() must have 1 or 2 arguments")
+		}
+
+		switch fnName {
+		case "eth":
+			val.dataSize = EthAddrSize // ethernet address size
+			val.typ = EvalResultTypeEthAddr
+			val.addr = 1
+
+		case "eth2":
+			val.dataSize = EthAddrSize * 2 // ethernet address size * 2
+			val.typ = EvalResultTypeEthAddr
+			val.addr = 2
+
+		case "ip4":
+			val.dataSize = IP4AddrSize // IPv4 address size
+			val.typ = EvalResultTypeIP4Addr
+			val.addr = 1
+
+		case "ip42":
+			val.dataSize = IP4AddrSize * 2 // IPv4 address size * 2
+			val.typ = EvalResultTypeIP4Addr
+			val.addr = 2
+
+		case "ip6":
+			val.dataSize = IP6AddrSize // IPv6 address size
+			val.typ = EvalResultTypeIP6Addr
+			val.addr = 1
+
+		case "ip62":
+			val.dataSize = IP6AddrSize * 2 // IPv6 address size * 2
+			val.typ = EvalResultTypeIP6Addr
+			val.addr = 2
+		}
+
+		val.expr = expr.List[0]
+
 	default:
 		return val, fmt.Errorf("unsupported function call: %s", fnName)
 	}
@@ -318,6 +382,7 @@ func CompileEvalExpr(opts CompileExprOptions) (EvalResult, error) {
 
 	dataOffset := int64(0)
 	dataSize := int64(0)
+	fnName := ""
 
 	evaluatingExpr := e
 	switch e.Op {
@@ -336,10 +401,12 @@ func CompileEvalExpr(opts CompileExprOptions) (EvalResult, error) {
 		}
 
 		res.Type = val.typ
+		res.Addr = val.addr
 		res.Pkt = val.pktType
 		dataSize = val.dataSize
 		dataOffset = val.dataOffset
 		evaluatingExpr = val.expr
+		fnName = e.Left.Text
 	}
 
 	val, err := c.eval(evaluatingExpr)
@@ -378,11 +445,12 @@ func CompileEvalExpr(opts CompileExprOptions) (EvalResult, error) {
 		res.Size = int(dataSize)
 		res.Btf = t
 
-	case EvalResultTypePkt:
+	case EvalResultTypePkt, EvalResultTypeEthAddr, EvalResultTypeIP4Addr, EvalResultTypeIP6Addr:
+		// pkt(), eth(), eth2(), ip4(), ip42(), ip6() and ip62() functions
 		t := mybtf.UnderlyingType(val.btf)
 		_, isPtr := t.(*btf.Pointer)
 		if !isPtr {
-			return res, fmt.Errorf("disallow non-pointer type %v for pkt()", t)
+			return res, fmt.Errorf("disallow non-pointer type %v for %s()", t, fnName)
 		}
 
 		res.Off = int(dataOffset)
