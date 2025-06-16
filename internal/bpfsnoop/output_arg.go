@@ -272,13 +272,15 @@ func (arg *funcArgumentOutput) compile(params []btf.FuncParam, spec *btf.Spec, o
 		offset, err = arg.genDerefInsns(&res, offset, size, labelExit)
 
 	case cc.EvalResultTypeBuf, cc.EvalResultTypePkt, cc.EvalResultTypeString,
-		cc.EvalResultTypeEthAddr, cc.EvalResultTypeIP4Addr, cc.EvalResultTypeIP6Addr:
+		cc.EvalResultTypeEthAddr, cc.EvalResultTypeIP4Addr, cc.EvalResultTypeIP6Addr,
+		cc.EvalResultTypePort:
 		arg.isBuf = res.Type == cc.EvalResultTypeBuf
 		arg.isString = res.Type == cc.EvalResultTypeString
 		arg.isPkt = res.Type == cc.EvalResultTypePkt
 		arg.pktType = res.Pkt
 		arg.isAddr = slices.Contains([]cc.EvalResultType{
 			cc.EvalResultTypeEthAddr, cc.EvalResultTypeIP4Addr, cc.EvalResultTypeIP6Addr,
+			cc.EvalResultTypePort,
 		}, res.Type)
 		arg.AddrType = res.Type
 		arg.AddrNum = res.Addr

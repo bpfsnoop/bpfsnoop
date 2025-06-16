@@ -126,6 +126,16 @@ func outputFuncArgAttrs(sb *strings.Builder, info *funcInfo, data []byte, f btfx
 							net.IP(data[:cc.IP6AddrSize]),
 							net.IP(data[cc.IP6AddrSize:cc.IP6AddrSize*2]))
 					}
+
+				case cc.EvalResultTypePort:
+					if arg.AddrNum == 1 {
+						s = fmt.Sprintf("(%s)'%s'=%d", btfx.Repr(arg.t), arg.expr,
+							uint16(data[0])<<8|uint16(data[1]))
+					} else {
+						s = fmt.Sprintf("(%s)'%s'=[%d,%d]", btfx.Repr(arg.t), arg.expr,
+							uint16(data[0])<<8|uint16(data[1]),
+							uint16(data[2])<<8|uint16(data[3]))
+					}
 				}
 
 			case arg.isString:
