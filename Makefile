@@ -5,18 +5,17 @@ include makefiles/variables.mk
 
 .DEFAULT_GOAL := $(BPFSNOOP_OBJ)
 
-.PHONY: git_submodules
-git_submodules:
-	@if [[ ! -d .git/modules ]]; then git submodule update --init --force --recursive; fi
+$(GIT_MODULES_DIR):
+	@$(CMD_GIT_MODULES) update --init --force --recursive
 
 # Build libcapstone for static linking
-$(LIBCAPSTONE_OBJ): git_submodules
+$(LIBCAPSTONE_OBJ): $(GIT_MODULES_DIR)
 	cd lib/capstone && \
 		CC=$(CMD_CC) CXX=$(CMD_CXX) cmake -B build -DCMAKE_BUILD_TYPE=Release -DCAPSTONE_ARCHITECTURE_DEFAULT=1 -DCAPSTONE_BUILD_CSTOOL=0 -DCMAKE_C_FLAGS="-Qunused-arguments" && \
 		cmake --build build
 
 # Build libpcap for static linking
-$(LIBPCAP_OBJ): git_submodules
+$(LIBPCAP_OBJ): $(GIT_MODULES_DIR)
 	cd lib/libpcap && \
 		./autogen.sh && \
 		CC=$(CMD_CC) CXX=$(CMD_CXX) ./configure --disable-rdma --disable-shared --disable-usb --disable-netmap --disable-bluetooth --disable-dbus --without-libnl && \
@@ -49,7 +48,7 @@ $(INSN_BPF_OBJ): $(INSN_BPF_SRC) $(VMLINUX_OBJ)
 $(BPFSNOOP_BPF_OBJ): $(BPFSNOOP_BPF_SRC) $(VMLINUX_OBJ)
 	$(BPF2GO) bpfsnoop bpf/bpfsnoop.c -- $(BPF2GO_EXTRA_FLAGS)
 
-$(BPFSNOOP_OBJ): $(BPF_OBJS) $(BPFSNOOP_SRC) $(LIBCAPSTONE_OBJ) $(LIBPCAP_OBJ) git_submodules
+$(BPFSNOOP_OBJ): $(BPF_OBJS) $(BPFSNOOP_SRC) $(LIBCAPSTONE_OBJ) $(LIBPCAP_OBJ)
 	$(GOBUILD_CGO_CFLAGS) $(GOBUILD_CGO_LDFLAGS) $(GOBUILD)
 
 .PHONY: local_release

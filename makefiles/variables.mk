@@ -11,6 +11,8 @@ CMD_CXX ?= clang++
 CMD_GH ?= gh
 CMD_MV ?= mv
 CMD_TAR ?= tar
+CMD_GIT ?= git
+CMD_GIT_MODULES ?= $(CMD_GIT) submodule
 
 DIR_BIN := ./bin
 
@@ -64,3 +66,5 @@ LIBCAPSTONE_OBJ := lib/capstone/build/libcapstone.a
 LIBPCAP_OBJ := lib/libpcap/libpcap.a
 
 VMLINUX_OBJ := $(CURDIR)/bpf/headers/vmlinux.h
+
+GIT_MODULES_DIR := .git/modules
