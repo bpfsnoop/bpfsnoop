@@ -46,6 +46,8 @@ type funcArgumentOutput struct {
 	isDeref  bool
 	isBuf    bool
 	isString bool
+	isPkt    bool
+	pktType  string
 }
 
 type argDataOutput struct {
@@ -266,9 +268,11 @@ func (arg *funcArgumentOutput) compile(params []btf.FuncParam, spec *btf.Spec, o
 		arg.isDeref = true
 		offset, err = arg.genDerefInsns(&res, offset, size, labelExit)
 
-	case cc.EvalResultTypeBuf, cc.EvalResultTypeString:
+	case cc.EvalResultTypeBuf, cc.EvalResultTypePkt, cc.EvalResultTypeString:
 		arg.isBuf = res.Type == cc.EvalResultTypeBuf
 		arg.isString = res.Type == cc.EvalResultTypeString
+		arg.isPkt = res.Type == cc.EvalResultTypePkt
+		arg.pktType = res.Pkt
 		offset, err = arg.genBufInsns(&res, offset, size, labelExit)
 
 	default:
