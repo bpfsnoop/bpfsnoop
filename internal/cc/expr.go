@@ -105,6 +105,7 @@ const (
 	EvalResultTypeEthAddr
 	EvalResultTypeIP4Addr
 	EvalResultTypeIP6Addr
+	EvalResultTypePort
 )
 
 const (
@@ -127,7 +128,7 @@ type EvalResult struct {
 	Size  int
 	Off   int
 	Pkt   string // pkt type, e.g. "eth", "ip4", "ip6", "icmp", "icmp6", "tcp" and "udp"
-	Addr  int    // address number for EvalResultTypeEthAddr, EvalResultTypeIP4Addr and EvalResultTypeIP6Addr
+	Addr  int    // address number for EvalResultTypeEthAddr, EvalResultTypeIP4Addr, EvalResultTypeIP6Addr and EvalResultTypePort
 
 	LabelUsed bool
 }
@@ -136,6 +137,7 @@ const (
 	EthAddrSize = 6
 	IP4AddrSize = 4
 	IP6AddrSize = 16
+	PortSize    = 2
 )
 
 type funcCallValue struct {
@@ -301,7 +303,7 @@ func compileFuncCall(expr *cc.Expr) (funcCallValue, error) {
 		val.expr = expr.List[0]
 		val.typ = EvalResultTypeString
 
-	case "eth", "eth2", "ip4", "ip42", "ip6", "ip62":
+	case "eth", "eth2", "ip4", "ip42", "ip6", "ip62", "port", "port2":
 		switch len(expr.List) {
 		case 1:
 			break
@@ -349,6 +351,16 @@ func compileFuncCall(expr *cc.Expr) (funcCallValue, error) {
 		case "ip62":
 			val.dataSize = IP6AddrSize * 2 // IPv6 address size * 2
 			val.typ = EvalResultTypeIP6Addr
+			val.addr = 2
+
+		case "port":
+			val.dataSize = PortSize // port size
+			val.typ = EvalResultTypePort
+			val.addr = 1
+
+		case "port2":
+			val.dataSize = PortSize * 2 // port size * 2
+			val.typ = EvalResultTypePort
 			val.addr = 2
 		}
 
@@ -445,7 +457,7 @@ func CompileEvalExpr(opts CompileExprOptions) (EvalResult, error) {
 		res.Size = int(dataSize)
 		res.Btf = t
 
-	case EvalResultTypePkt, EvalResultTypeEthAddr, EvalResultTypeIP4Addr, EvalResultTypeIP6Addr:
+	case EvalResultTypePkt, EvalResultTypeEthAddr, EvalResultTypeIP4Addr, EvalResultTypeIP6Addr, EvalResultTypePort:
 		// pkt(), eth(), eth2(), ip4(), ip42(), ip6() and ip62() functions
 		t := mybtf.UnderlyingType(val.btf)
 		_, isPtr := t.(*btf.Pointer)
