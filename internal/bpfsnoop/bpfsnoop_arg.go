@@ -9,8 +9,11 @@ import (
 
 	"github.com/Asphaltt/mybtf"
 	"github.com/fatih/color"
+	"github.com/gopacket/gopacket"
+	"github.com/gopacket/gopacket/layers"
 
 	"github.com/bpfsnoop/bpfsnoop/internal/btfx"
+	"github.com/bpfsnoop/bpfsnoop/internal/cc"
 	"github.com/bpfsnoop/bpfsnoop/internal/strx"
 )
 
@@ -51,32 +54,51 @@ func outputFuncArgAttrs(sb *strings.Builder, info *funcInfo, data []byte, f btfx
 			continue
 		}
 
-		if arg.isDeref {
-			s, err := mybtf.DumpData(arg.t, data[:arg.trueDataSize])
-			if err != nil {
-				return fmt.Errorf("failed to dump deref data: %w", err)
-			}
+		if arg.isDeref || arg.isBuf || arg.isPkt || arg.isString {
+			var (
+				s   string
+				err error
+			)
 
-			s = fmt.Sprintf("(%s)'%s'=%s", btfx.Repr(arg.t), arg.expr, s)
-			if colorfulOutput {
-				gray.Fprint(sb, s)
-			} else {
-				fmt.Fprint(sb, s)
-			}
+			switch {
+			case arg.isDeref:
+				s, err = mybtf.DumpData(arg.t, data[:arg.trueDataSize])
+				if err != nil {
+					return fmt.Errorf("failed to dump deref data: %w", err)
+				}
 
-			data = data[arg.size:]
-			continue
-		}
+				s = fmt.Sprintf("(%s)'%s'=%s", btfx.Repr(arg.t), arg.expr, s)
 
-		if arg.isBuf || arg.isString {
-			var s string
-			if arg.isBuf {
+			case arg.isBuf:
 				s = fmt.Sprintf("(%s)'%s'=%s", btfx.Repr(arg.t), arg.expr,
 					dumpOutputArgBuf(data[:arg.trueDataSize]))
-			} else /* isString */ {
+
+			case arg.isPkt:
+				layer := layers.LayerTypeEthernet
+				switch arg.pktType {
+				case cc.PktTypeEth:
+					layer = layers.LayerTypeEthernet
+				case cc.PktTypeIP, cc.PktTypeIP4:
+					layer = layers.LayerTypeIPv4
+				case cc.PktTypeIP6:
+					layer = layers.LayerTypeIPv6
+				case cc.PktTypeICMP:
+					layer = layers.LayerTypeICMPv4
+				case cc.PktTypeICMP6:
+					layer = layers.LayerTypeICMPv6
+				case cc.PktTypeTCP:
+					layer = layers.LayerTypeTCP
+				case cc.PktTypeUDP:
+					layer = layers.LayerTypeUDP
+				}
+				pkt := gopacket.NewPacket(data[:arg.trueDataSize], layer, gopacket.NoCopy)
+				s = fmt.Sprintf("(%s)'%s'=%v", btfx.Repr(arg.t), arg.expr, pkt)
+
+			case arg.isString:
 				s = fmt.Sprintf(`(%s)'%s'="%s"`, btfx.Repr(arg.t), arg.expr,
 					strx.NullTerminated(data[:arg.trueDataSize]))
 			}
+
 			if colorfulOutput {
 				gray.Fprint(sb, s)
 			} else {

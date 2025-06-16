@@ -12,6 +12,7 @@ require (
 	github.com/fatih/color v1.18.0
 	github.com/gobwas/glob v0.2.3
 	github.com/goccy/go-json v0.10.5
+	github.com/gopacket/gopacket v1.3.1
 	github.com/jschwinger233/elibpcap v1.0.1
 	github.com/klauspost/compress v1.17.11
 	github.com/spf13/pflag v1.0.5
