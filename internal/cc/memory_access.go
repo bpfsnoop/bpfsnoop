@@ -42,6 +42,13 @@ func (r *accessResult) addOffset(offset accessOffset) {
 	r.offsets = append(r.offsets, offset)
 }
 
+func (r *accessResult) prevBtf() btf.Type {
+	if r.lastIdx >= 0 {
+		return r.offsets[r.lastIdx].prev
+	}
+	return nil
+}
+
 func (c *compiler) accessMemory(expr *cc.Expr) (accessResult, error) {
 	switch expr.Op {
 	case cc.Name:
@@ -162,13 +169,6 @@ func (c *compiler) accessMemory(expr *cc.Expr) (accessResult, error) {
 			return res, nil
 		}
 
-		getPrev := func() btf.Type {
-			if len(res.offsets) > 0 {
-				return res.offsets[res.lastIdx].prev
-			}
-			return nil
-		}
-
 		t := mybtf.UnderlyingType(res.btf)
 		if ptr, ok := t.(*btf.Pointer); ok {
 			if _, ok := mybtf.UnderlyingType(ptr.Target).(*btf.Void); ok { // void *
@@ -176,7 +176,7 @@ func (c *compiler) accessMemory(expr *cc.Expr) (accessResult, error) {
 					offset:  int64(num),
 					address: true,
 					btf:     res.btf,
-					prev:    getPrev(),
+					prev:    res.prevBtf(),
 				})
 			} else {
 				size, err := btf.Sizeof(ptr.Target)
@@ -188,7 +188,7 @@ func (c *compiler) accessMemory(expr *cc.Expr) (accessResult, error) {
 					offset:  int64(size * int(num)),
 					address: true,
 					btf:     res.btf,
-					prev:    getPrev(),
+					prev:    res.prevBtf(),
 				})
 			}
 		} else if arr, ok := t.(*btf.Array); ok {
@@ -201,7 +201,7 @@ func (c *compiler) accessMemory(expr *cc.Expr) (accessResult, error) {
 				offset:  int64(size * int(num)),
 				address: true,
 				btf:     &btf.Pointer{Target: arr.Type},
-				prev:    getPrev(),
+				prev:    res.prevBtf(),
 			})
 		} else {
 			return res, fmt.Errorf("disallow using non-{pointer,array} for add")
@@ -259,9 +259,13 @@ func (c *compiler) accessMemory(expr *cc.Expr) (accessResult, error) {
 			}
 		} else {
 			typeName := ccType.String()
-			typ, err = c.kernelBtf.AnyTypeByName(typeName)
-			if err != nil {
-				return accessResult{}, fmt.Errorf("failed to find type '%s': %w", typeName, err)
+			if typeName == "void" {
+				typ = &btf.Void{}
+			} else {
+				typ, err = c.kernelBtf.AnyTypeByName(typeName)
+				if err != nil {
+					return accessResult{}, fmt.Errorf("failed to find type '%s': %w", typeName, err)
+				}
 			}
 		}
 
@@ -271,7 +275,9 @@ func (c *compiler) accessMemory(expr *cc.Expr) (accessResult, error) {
 			res.btf = typ
 		}
 
-		res.offsets[res.lastIdx].btf = res.btf
+		if res.lastIdx >= 0 {
+			res.offsets[res.lastIdx].btf = res.btf
+		}
 		res.mem = nil
 		return res, nil
 
@@ -323,7 +329,7 @@ func (c *compiler) accessMemory(expr *cc.Expr) (accessResult, error) {
 		res.addOffset(accessOffset{
 			offset:  int64(index * int64(size)),
 			btf:     res.btf,
-			prev:    res.offsets[res.lastIdx].prev,
+			prev:    res.prevBtf(),
 			inArray: inArray,
 		})
 		res.mem = nil
@@ -382,7 +388,7 @@ func (c *compiler) accessMemory(expr *cc.Expr) (accessResult, error) {
 					offset:  -int64(num),
 					address: true,
 					btf:     res.btf,
-					prev:    res.offsets[res.lastIdx].prev,
+					prev:    res.prevBtf(),
 				})
 			} else {
 				size, err := btf.Sizeof(ptr.Target)
@@ -394,7 +400,7 @@ func (c *compiler) accessMemory(expr *cc.Expr) (accessResult, error) {
 					offset:  -int64(size * int(num)),
 					address: true,
 					btf:     res.btf,
-					prev:    res.offsets[res.lastIdx].prev,
+					prev:    res.prevBtf(),
 				})
 			}
 		} else if arr, ok := t.(*btf.Array); ok {
@@ -407,7 +413,7 @@ func (c *compiler) accessMemory(expr *cc.Expr) (accessResult, error) {
 				offset:  int64(-size * int(num)),
 				address: true,
 				btf:     &btf.Pointer{Target: arr.Type},
-				prev:    res.offsets[res.lastIdx].prev,
+				prev:    res.prevBtf(),
 			})
 		} else {
 			return res, fmt.Errorf("disallow using non-{pointer,array} for sub")
