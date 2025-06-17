@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/Asphaltt/mybtf"
+	"github.com/cilium/ebpf/btf"
 	"github.com/fatih/color"
 	"github.com/gopacket/gopacket"
 	"github.com/gopacket/gopacket/layers"
@@ -55,7 +56,8 @@ func outputFuncArgAttrs(sb *strings.Builder, info *funcInfo, data []byte, f btfx
 			continue
 		}
 
-		if arg.isDeref || arg.isBuf || arg.isPkt || arg.isAddr || arg.isString {
+		if arg.isDeref || arg.isBuf || arg.isPkt || arg.isAddr || arg.isString ||
+			arg.isSlice {
 			var (
 				s   string
 				err error
@@ -73,6 +75,27 @@ func outputFuncArgAttrs(sb *strings.Builder, info *funcInfo, data []byte, f btfx
 			case arg.isBuf:
 				s = fmt.Sprintf("(%s)'%s'=%s", btfx.Repr(arg.t), arg.expr,
 					dumpOutputArgBuf(data[:arg.trueDataSize]))
+
+			case arg.isSlice:
+				size, _ := btf.Sizeof(arg.t)
+				cnt := arg.trueDataSize / size
+
+				var sb strings.Builder
+				sb.WriteString(fmt.Sprintf("(%s)'%s'=[", btfx.Repr(arg.t), arg.expr))
+				for i := range cnt {
+					dd, err := mybtf.DumpData(arg.t, data[i*size:(i+1)*size])
+					if err != nil {
+						return fmt.Errorf("failed to dump slice data: %w", err)
+					}
+
+					if i != 0 {
+						sb.WriteString(",")
+					}
+					sb.WriteString(dd)
+				}
+				sb.WriteString("]")
+
+				s = sb.String()
 
 			case arg.isPkt:
 				layer := layers.LayerTypeEthernet

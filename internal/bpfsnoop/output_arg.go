@@ -51,6 +51,7 @@ type funcArgumentOutput struct {
 	isAddr   bool
 	AddrType cc.EvalResultType
 	AddrNum  int
+	isSlice  bool
 }
 
 type argDataOutput struct {
@@ -273,7 +274,7 @@ func (arg *funcArgumentOutput) compile(params []btf.FuncParam, spec *btf.Spec, o
 
 	case cc.EvalResultTypeBuf, cc.EvalResultTypePkt, cc.EvalResultTypeString,
 		cc.EvalResultTypeEthAddr, cc.EvalResultTypeIP4Addr, cc.EvalResultTypeIP6Addr,
-		cc.EvalResultTypePort:
+		cc.EvalResultTypePort, cc.EvalResultTypeSlice:
 		arg.isBuf = res.Type == cc.EvalResultTypeBuf
 		arg.isString = res.Type == cc.EvalResultTypeString
 		arg.isPkt = res.Type == cc.EvalResultTypePkt
@@ -284,6 +285,7 @@ func (arg *funcArgumentOutput) compile(params []btf.FuncParam, spec *btf.Spec, o
 		}, res.Type)
 		arg.AddrType = res.Type
 		arg.AddrNum = res.Addr
+		arg.isSlice = res.Type == cc.EvalResultTypeSlice
 		offset, err = arg.genBufInsns(&res, offset, size, labelExit)
 
 	default:
