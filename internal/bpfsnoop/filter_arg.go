@@ -96,9 +96,9 @@ func (arg *funcArgument) matchParams(params []btf.FuncParam) bool {
 	return false
 }
 
-func (arg *funcArgument) inject(prog *ebpf.ProgramSpec, spec *btf.Spec, params []btf.FuncParam) error {
+func (arg *funcArgument) inject(prog *ebpf.ProgramSpec, krnl, spec *btf.Spec, params []btf.FuncParam) error {
 	mode := cc.MemoryReadModeProbeRead
-	if _, err := spec.AnyTypeByName("bpf_rdonly_cast"); err == nil {
+	if _, err := krnl.AnyTypeByName("bpf_rdonly_cast"); err == nil {
 		mode = cc.MemoryReadModeCoreRead
 	}
 
@@ -119,12 +119,12 @@ func (arg *funcArgument) inject(prog *ebpf.ProgramSpec, spec *btf.Spec, params [
 	return nil
 }
 
-func (f *argumentFilter) inject(prog *ebpf.ProgramSpec, params []btf.FuncParam) (int, error) {
+func (f *argumentFilter) inject(prog *ebpf.ProgramSpec, params []btf.FuncParam, spec *btf.Spec) (int, error) {
 	if len(f.args) == 0 {
 		return 0, errSkipped
 	}
 
-	spec, err := btf.LoadKernelSpec()
+	krnl, err := btf.LoadKernelSpec()
 	if err != nil {
 		return 0, fmt.Errorf("failed to load kernel spec: %w", err)
 	}
@@ -134,7 +134,7 @@ func (f *argumentFilter) inject(prog *ebpf.ProgramSpec, params []btf.FuncParam) 
 			continue
 		}
 
-		err := arg.inject(prog, spec, params)
+		err := arg.inject(prog, krnl, spec, params)
 		if err != nil {
 			return 0, err
 		}

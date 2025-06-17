@@ -361,13 +361,8 @@ func (arg *argDataOutput) genExitLabel() string {
 	return label
 }
 
-func (arg *argDataOutput) matchParams(params []btf.FuncParam, checkArgType bool) ([]funcArgumentOutput, int, error) {
+func (arg *argDataOutput) matchParams(params []btf.FuncParam, spec *btf.Spec, checkArgType bool) ([]funcArgumentOutput, int, error) {
 	args := make([]funcArgumentOutput, 0, 12)
-
-	spec, err := btf.LoadKernelSpec()
-	if err != nil {
-		return nil, 0, fmt.Errorf("failed to load kernel spec: %w", err)
-	}
 
 	params = slices.Clone(params)
 	if checkArgType {
@@ -388,6 +383,7 @@ func (arg *argDataOutput) matchParams(params []btf.FuncParam, checkArgType bool)
 		}
 
 		a := a
+		var err error
 		offset, err = a.compile(params, spec, offset, arg.genExitLabel())
 		if err != nil {
 			return nil, 0, fmt.Errorf("failed to compile expr '%s': %w", a.expr, err)

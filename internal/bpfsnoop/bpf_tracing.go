@@ -165,8 +165,8 @@ func TracingProgName() string {
 	return "bpfsnoop_fn"
 }
 
-func (t *bpfTracing) injectArgFilter(prog *ebpf.ProgramSpec, params []btf.FuncParam, fnName string) error {
-	i, err := argFilter.inject(prog, params)
+func (t *bpfTracing) injectArgFilter(prog *ebpf.ProgramSpec, params []btf.FuncParam, spec *btf.Spec, fnName string) error {
+	i, err := argFilter.inject(prog, params, spec)
 	if err != nil {
 		if err == errSkipped {
 			clearFilterArgSubprog(prog)
@@ -180,12 +180,12 @@ func (t *bpfTracing) injectArgFilter(prog *ebpf.ProgramSpec, params []btf.FuncPa
 	return nil
 }
 
-func (t *bpfTracing) injectArgOutput(prog *ebpf.ProgramSpec, params []btf.FuncParam, checkArgType bool, fnName string) ([]funcArgumentOutput, int, error) {
+func (t *bpfTracing) injectArgOutput(prog *ebpf.ProgramSpec, params []btf.FuncParam, spec *btf.Spec, checkArgType bool, fnName string) ([]funcArgumentOutput, int, error) {
 	if len(argOutput.args) == 0 {
 		return nil, 0, nil
 	}
 
-	args, size, err := argOutput.matchParams(params, checkArgType)
+	args, size, err := argOutput.matchParams(params, spec, checkArgType)
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to match params: %w", err)
 	}
@@ -318,6 +318,11 @@ func (t *bpfTracing) injectPktOutput(prog *ebpf.ProgramSpec, params []btf.FuncPa
 }
 
 func (t *bpfTracing) traceProg(spec *ebpf.CollectionSpec, reusedMaps map[string]*ebpf.Map, info bpfTracingInfo, bprogs *bpfProgs, fexit bool) error {
+	krnl, err := btf.LoadKernelSpec()
+	if err != nil {
+		return fmt.Errorf("failed to load kernel btf spec: %w", err)
+	}
+
 	spec = spec.Copy()
 
 	traceeName := info.fn.Name
@@ -328,10 +333,10 @@ func (t *bpfTracing) traceProg(spec *ebpf.CollectionSpec, reusedMaps map[string]
 	if err := t.injectPktFilter(progSpec, params, traceeName); err != nil {
 		return err
 	}
-	if err := t.injectArgFilter(progSpec, params, traceeName); err != nil {
+	if err := t.injectArgFilter(progSpec, params, krnl, traceeName); err != nil {
 		return err
 	}
-	args, argDataSize, err := t.injectArgOutput(progSpec, params, true, traceeName)
+	args, argDataSize, err := t.injectArgOutput(progSpec, params, krnl, true, traceeName)
 	if err != nil {
 		return err
 	}
@@ -404,10 +409,10 @@ func (t *bpfTracing) traceFunc(spec *ebpf.CollectionSpec, reusedMaps map[string]
 	if err := t.injectPktFilter(progSpec, params, traceeName); err != nil {
 		return err
 	}
-	if err := t.injectArgFilter(progSpec, params, traceeName); err != nil {
+	if err := t.injectArgFilter(progSpec, params, fn.Src, traceeName); err != nil {
 		return err
 	}
-	args, argDataSize, err := t.injectArgOutput(progSpec, params, false, traceeName)
+	args, argDataSize, err := t.injectArgOutput(progSpec, params, fn.Src, false, traceeName)
 	if err != nil {
 		return err
 	}

@@ -19,6 +19,7 @@ const tpMax = 256
 
 type tracepointInfo struct {
 	name   string
+	kmod   string
 	sym    uint64
 	nrArgs uint32
 

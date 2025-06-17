@@ -19,6 +19,13 @@ func matchKernelTracepoints(tps []string, tpInfos map[string]tracepointInfo, sil
 		return Tracepoints{}, err
 	}
 
+	krnl, err := btf.LoadKernelSpec()
+	if err != nil {
+		return Tracepoints{}, fmt.Errorf("failed to load kernel btf spec: %w", err)
+	}
+
+	kmods := make(map[string]*btf.Spec)
+
 	ktps := make(Tracepoints, len(tps))
 	for tpName, tp := range tpInfos {
 		fn := *tp.fn
@@ -49,10 +56,26 @@ func matchKernelTracepoints(tps []string, tpInfos map[string]tracepointInfo, sil
 			continue
 		}
 
+		src := krnl
+		if tp.kmod != "" {
+			if mod, ok := kmods[tp.kmod]; ok {
+				src = mod
+			} else {
+				mod, err := btf.LoadKernelModuleSpec(tp.kmod)
+				if err != nil {
+					return nil, fmt.Errorf("failed to load kernel module btf spec for %s: %w", tp.kmod, err)
+				}
+
+				kmods[tp.kmod] = mod
+				src = mod
+			}
+		}
+
 		fn.Name = tpName
 		ktps[tpName] = &KFunc{
 			Ksym: &KsymEntry{name: tpName},
 			Func: &fn,
+			Src:  src,
 			Prms: params,
 			Ret:  ret,
 			IsTp: true,
@@ -80,6 +103,7 @@ func probeKernelTracepoints(tps []string, spec, modSpec *ebpf.CollectionSpec, ks
 	for _, mod := range kmods {
 		for _, tp := range mod.tps {
 			if _, ok := tpInfos[tp.name]; !ok {
+				tp.kmod = mod.module
 				tpInfos[tp.name] = tp
 			}
 		}
