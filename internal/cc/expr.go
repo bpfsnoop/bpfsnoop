@@ -106,6 +106,7 @@ const (
 	EvalResultTypeIP4Addr
 	EvalResultTypeIP6Addr
 	EvalResultTypePort
+	EvalResultTypeSlice
 )
 
 const (
@@ -155,7 +156,7 @@ func compileFuncCall(expr *cc.Expr) (funcCallValue, error) {
 
 	fnName := expr.Left.Text
 	switch fnName {
-	case "buf":
+	case "buf", "slice":
 		switch len(expr.List) {
 		case 2, 3:
 			if expr.List[1].Op != cc.Number {
@@ -189,6 +190,9 @@ func compileFuncCall(expr *cc.Expr) (funcCallValue, error) {
 
 		val.expr = expr.List[0]
 		val.typ = EvalResultTypeBuf
+		if fnName == "slice" {
+			val.typ = EvalResultTypeSlice
+		}
 
 	case "pkt":
 		allowedPktTypes := []string{
@@ -456,6 +460,27 @@ func CompileEvalExpr(opts CompileExprOptions) (EvalResult, error) {
 		res.Off = int(dataOffset)
 		res.Size = int(dataSize)
 		res.Btf = t
+
+	case EvalResultTypeSlice:
+		t := mybtf.UnderlyingType(val.btf)
+		ptr, isPtr := t.(*btf.Pointer)
+		arr, isArray := t.(*btf.Array)
+		if !isPtr && !isArray {
+			return res, fmt.Errorf("disallow non-{pointer,array} type %v for %s()", t, fnName)
+		}
+
+		if isPtr {
+			res.Btf = ptr.Target
+		} else if isArray {
+			res.Btf = arr.Type
+		}
+		size, _ := btf.Sizeof(res.Btf)
+		if size == 0 {
+			return res, fmt.Errorf("disallow zero size type %v for %s()", res.Btf, fnName)
+		}
+
+		res.Off = int(dataOffset) * size
+		res.Size = int(dataSize) * size
 
 	case EvalResultTypePkt, EvalResultTypeEthAddr, EvalResultTypeIP4Addr, EvalResultTypeIP6Addr, EvalResultTypePort:
 		// pkt(), eth(), eth2(), ip4(), ip42(), ip6() and ip62() functions
