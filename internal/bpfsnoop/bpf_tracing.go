@@ -456,14 +456,16 @@ func (t *bpfTracing) traceFunc(spec *ebpf.CollectionSpec, reusedMaps map[string]
 	})
 	if err != nil {
 		_ = prog.Close()
-		if errors.Is(err, unix.ENOENT) || errors.Is(err, unix.EINVAL) {
+		if errors.Is(err, unix.ENOENT) || errors.Is(err, unix.EINVAL) ||
+			errors.Is(err, unix.EADDRNOTAVAIL) ||
+			errors.Is(err, unix.EOPNOTSUPP) || errors.Is(err, ebpf.ErrNotSupported) {
 			return nil
 		}
 		if errors.Is(err, unix.EBUSY) /* Because no nop5 at the function entry, especially non-traceable funcs */ {
 			VerboseLog("Cannot trace kernel function %s", fnName)
 			return nil
 		}
-		return fmt.Errorf("failed to attach tracing: %w", err)
+		return fmt.Errorf("failed to attach tracing %s: %w", fnName, err)
 	}
 
 	verboseLogIf(!isTracepoint && isExit, "Tracing(fexit) kernel function %s", fnName)
