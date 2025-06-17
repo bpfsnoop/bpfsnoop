@@ -242,6 +242,21 @@ func (c *compiler) accessMemory(expr *cc.Expr) (accessResult, error) {
 			ccType = ccType.Base
 		}
 
+		tryFindType := func(name string) (btf.Type, error) {
+			typ, err := c.kernelBtf.AnyTypeByName(name)
+			if err == nil {
+				return typ, nil
+			}
+
+			krnl, err := btf.LoadKernelSpec()
+			if err != nil {
+				return nil, fmt.Errorf("failed to load kernel spec: %w", err)
+			}
+
+			typ, err = krnl.AnyTypeByName(name)
+			return typ, err
+		}
+
 		var typ btf.Type
 
 		if ccType.Kind == cc.Struct {
@@ -259,13 +274,16 @@ func (c *compiler) accessMemory(expr *cc.Expr) (accessResult, error) {
 			}
 		} else {
 			typeName := ccType.String()
-			if typeName == "void" {
+			switch typeName {
+			case "void":
 				typ = &btf.Void{}
-			} else {
-				typ, err = c.kernelBtf.AnyTypeByName(typeName)
-				if err != nil {
-					return accessResult{}, fmt.Errorf("failed to find type '%s': %w", typeName, err)
-				}
+			case "ushort":
+				typ, err = tryFindType("__u16")
+			default:
+				typ, err = tryFindType(typeName)
+			}
+			if err != nil {
+				return accessResult{}, fmt.Errorf("failed to find type '%s': %w", typeName, err)
 			}
 		}
 
