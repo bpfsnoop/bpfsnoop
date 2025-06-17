@@ -109,11 +109,13 @@ func ShowFuncProto(f *Flags, tpSpec, tpModSpec *ebpf.CollectionSpec) {
 		fmt.Fprint(&sb, "Kernel functions:")
 		color.New(color.FgGreen).Fprintf(&sb, " (total %d)\n", len(kfuncs))
 
-		keys := maps.Keys(kfuncs)
-		slices.Sort(keys)
+		kfns := maps.Values(kfuncs)
+		sort.Slice(kfns, func(i, j int) bool {
+			return kfns[i].Func.Name < kfns[j].Func.Name
+		})
 
-		for _, k := range keys {
-			printFuncProto(&sb, kfuncs[k].Func, yellow, f.listFuncParams)
+		for _, k := range kfns {
+			printFuncProto(&sb, k.Func, yellow, f.listFuncParams)
 		}
 
 		printNewline = true
