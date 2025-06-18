@@ -107,6 +107,7 @@ const (
 	EvalResultTypeIP6Addr
 	EvalResultTypePort
 	EvalResultTypeSlice
+	EvalResultTypeHex
 )
 
 const (
@@ -156,7 +157,7 @@ func compileFuncCall(expr *cc.Expr) (funcCallValue, error) {
 
 	fnName := expr.Left.Text
 	switch fnName {
-	case "buf", "slice":
+	case "buf", "slice", "hex":
 		switch len(expr.List) {
 		case 2, 3:
 			if expr.List[1].Op != cc.Number {
@@ -192,6 +193,8 @@ func compileFuncCall(expr *cc.Expr) (funcCallValue, error) {
 		val.typ = EvalResultTypeBuf
 		if fnName == "slice" {
 			val.typ = EvalResultTypeSlice
+		} else if fnName == "hex" {
+			val.typ = EvalResultTypeHex
 		}
 
 	case "pkt":
@@ -449,7 +452,7 @@ func CompileEvalExpr(opts CompileExprOptions) (EvalResult, error) {
 		res.Btf = ptr.Target
 		res.Size = size
 
-	case EvalResultTypeBuf:
+	case EvalResultTypeBuf, EvalResultTypeHex:
 		t := mybtf.UnderlyingType(val.btf)
 		_, isPtr := t.(*btf.Pointer)
 		_, isArray := t.(*btf.Array)
