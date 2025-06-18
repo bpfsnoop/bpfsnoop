@@ -108,6 +108,7 @@ const (
 	EvalResultTypePort
 	EvalResultTypeSlice
 	EvalResultTypeHex
+	EvalResultTypeNum
 )
 
 const (
@@ -130,6 +131,7 @@ type EvalResult struct {
 	Size  int
 	Off   int
 	Pkt   string // pkt type, e.g. "eth", "ip4", "ip6", "icmp", "icmp6", "tcp" and "udp"
+	Num   string // number type, e.g. "u8", "u16", "u32", "u64", "s8", "s16", "s32", "s64", "le16", "le32", "le64", "be16", "be32" and "be64"
 	Addr  int    // address number for EvalResultTypeEthAddr, EvalResultTypeIP4Addr, EvalResultTypeIP6Addr and EvalResultTypePort
 
 	LabelUsed bool
@@ -373,6 +375,45 @@ func compileFuncCall(expr *cc.Expr) (funcCallValue, error) {
 
 		val.expr = expr.List[0]
 
+	case "u8", "u16", "u32", "u64",
+		"s8", "s16", "s32", "s64",
+		"le16", "le32", "le64",
+		"be16", "be32", "be64":
+		switch len(expr.List) {
+		case 1:
+			break
+
+		case 2:
+			if expr.List[1].Op != cc.Number {
+				return val, fmt.Errorf("%s() second argument must be a number", fnName)
+			}
+
+			val.dataOffset, err = parseNumber(expr.List[1].Text)
+			if err != nil {
+				return val, fmt.Errorf("%s() second argument must be a number: %w", fnName, err)
+			}
+
+		default:
+			return val, fmt.Errorf("%s() must have 1 or 2 arguments", fnName)
+		}
+
+		val.typ = EvalResultTypeNum
+		switch fnName {
+		case "u8", "s8":
+			val.dataSize = 1
+
+		case "u16", "s16", "le16", "be16":
+			val.dataSize = 2
+
+		case "u32", "s32", "le32", "be32":
+			val.dataSize = 4
+
+		case "u64", "s64", "le64", "be64":
+			val.dataSize = 8
+		}
+
+		val.expr = expr.List[0]
+
 	default:
 		return val, fmt.Errorf("unsupported function call: %s", fnName)
 	}
@@ -457,7 +498,7 @@ func CompileEvalExpr(opts CompileExprOptions) (EvalResult, error) {
 		_, isPtr := t.(*btf.Pointer)
 		_, isArray := t.(*btf.Array)
 		if !isPtr && !isArray {
-			return res, fmt.Errorf("disallow non-{pointer,array} type %v for buf()", t)
+			return res, fmt.Errorf("disallow non-{pointer,array} type %v for %s()", t, fnName)
 		}
 
 		res.Off = int(dataOffset)
@@ -496,6 +537,21 @@ func CompileEvalExpr(opts CompileExprOptions) (EvalResult, error) {
 		res.Off = int(dataOffset)
 		res.Size = int(dataSize)
 		res.Btf = t
+
+	case EvalResultTypeNum:
+		// u8(), u16(), u32(), u64(), s8(), s16(), s32(), s64(),
+		// le16(), le32(), le64(), be16(), be32() and be64() functions
+		t := mybtf.UnderlyingType(val.btf)
+		_, isPtr := t.(*btf.Pointer)
+		_, isArray := t.(*btf.Array)
+		if !isPtr && !isArray {
+			return res, fmt.Errorf("disallow non-{pointer,array} type %v for %s()", t, fnName)
+		}
+
+		res.Btf = t
+		res.Off = int(dataOffset)
+		res.Size = int(dataSize)
+		res.Num = fnName
 
 	case EvalResultTypeString:
 		t := mybtf.UnderlyingType(val.btf)
