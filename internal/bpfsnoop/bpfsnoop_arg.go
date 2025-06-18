@@ -4,10 +4,12 @@
 package bpfsnoop
 
 import (
+	"encoding/binary"
 	"encoding/hex"
 	"fmt"
 	"net"
 	"strings"
+	"unsafe"
 
 	"github.com/Asphaltt/mybtf"
 	"github.com/cilium/ebpf/btf"
@@ -58,7 +60,7 @@ func outputFuncArgAttrs(sb *strings.Builder, info *funcInfo, data []byte, f btfx
 		}
 
 		if arg.isDeref || arg.isBuf || arg.isPkt || arg.isAddr || arg.isString ||
-			arg.isSlice || arg.isHex {
+			arg.isSlice || arg.isHex || arg.isNum {
 			var (
 				s   string
 				err error
@@ -169,6 +171,56 @@ func outputFuncArgAttrs(sb *strings.Builder, info *funcInfo, data []byte, f btfx
 			case arg.isString:
 				s = fmt.Sprintf(`(%s)'%s'="%s"`, btfx.Repr(arg.t), arg.expr,
 					strx.NullTerminated(data[:arg.trueDataSize]))
+
+			case arg.isNum:
+				var sb strings.Builder
+				sb.WriteString(fmt.Sprintf("(%s)'%s'=", btfx.Repr(arg.t), arg.expr))
+				switch arg.numType {
+				case "u8":
+					n := data[0]
+					sb.WriteString(fmt.Sprintf("%#x/%d", n, n))
+				case "u16":
+					u16 := *(*uint16)(unsafe.Pointer(&data[0]))
+					sb.WriteString(fmt.Sprintf("%#x/%d", u16, u16))
+				case "u32":
+					u32 := *(*uint32)(unsafe.Pointer(&data[0]))
+					sb.WriteString(fmt.Sprintf("%#x/%d", u32, u32))
+				case "u64":
+					u64 := *(*uint64)(unsafe.Pointer(&data[0]))
+					sb.WriteString(fmt.Sprintf("%#x/%d", u64, u64))
+				case "s8":
+					n := int8(data[0])
+					sb.WriteString(fmt.Sprintf("%d", n))
+				case "s16":
+					s16 := *(*int16)(unsafe.Pointer(&data[0]))
+					sb.WriteString(fmt.Sprintf("%d", s16))
+				case "s32":
+					s32 := *(*int32)(unsafe.Pointer(&data[0]))
+					sb.WriteString(fmt.Sprintf("%d", s32))
+				case "s64":
+					s64 := *(*int64)(unsafe.Pointer(&data[0]))
+					sb.WriteString(fmt.Sprintf("%d", s64))
+				case "be16":
+					be16 := binary.BigEndian.Uint16(data[:2])
+					sb.WriteString(fmt.Sprintf("%#x/%d", be16, be16))
+				case "be32":
+					be32 := binary.BigEndian.Uint32(data[:4])
+					sb.WriteString(fmt.Sprintf("%#x/%d", be32, be32))
+				case "be64":
+					be64 := binary.BigEndian.Uint64(data[:8])
+					sb.WriteString(fmt.Sprintf("%#x/%d", be64, be64))
+				case "le16":
+					le16 := binary.LittleEndian.Uint16(data[:2])
+					sb.WriteString(fmt.Sprintf("%#x/%d", le16, le16))
+				case "le32":
+					le32 := binary.LittleEndian.Uint32(data[:4])
+					sb.WriteString(fmt.Sprintf("%#x/%d", le32, le32))
+				case "le64":
+					le64 := binary.LittleEndian.Uint64(data[:8])
+					sb.WriteString(fmt.Sprintf("%#x/%d", le64, le64))
+				}
+
+				s = sb.String()
 			}
 
 			if colorfulOutput {
