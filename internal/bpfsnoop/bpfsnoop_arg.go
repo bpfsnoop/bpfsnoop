@@ -4,6 +4,7 @@
 package bpfsnoop
 
 import (
+	"encoding/hex"
 	"fmt"
 	"net"
 	"strings"
@@ -57,7 +58,7 @@ func outputFuncArgAttrs(sb *strings.Builder, info *funcInfo, data []byte, f btfx
 		}
 
 		if arg.isDeref || arg.isBuf || arg.isPkt || arg.isAddr || arg.isString ||
-			arg.isSlice {
+			arg.isSlice || arg.isHex {
 			var (
 				s   string
 				err error
@@ -75,6 +76,10 @@ func outputFuncArgAttrs(sb *strings.Builder, info *funcInfo, data []byte, f btfx
 			case arg.isBuf:
 				s = fmt.Sprintf("(%s)'%s'=%s", btfx.Repr(arg.t), arg.expr,
 					dumpOutputArgBuf(data[:arg.trueDataSize]))
+
+			case arg.isHex:
+				s = fmt.Sprintf("(%s)'%s'=%s", btfx.Repr(arg.t), arg.expr,
+					hex.EncodeToString(data[:arg.trueDataSize]))
 
 			case arg.isSlice:
 				size, _ := btf.Sizeof(arg.t)
