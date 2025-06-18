@@ -157,6 +157,8 @@ func compileFuncCall(expr *cc.Expr) (funcCallValue, error) {
 	var val funcCallValue
 	var err error
 
+	val.expr = expr.List[0]
+
 	fnName := expr.Left.Text
 	switch fnName {
 	case "buf", "slice", "hex":
@@ -191,7 +193,6 @@ func compileFuncCall(expr *cc.Expr) (funcCallValue, error) {
 			return val, fmt.Errorf("%s() size must be greater than 0", fnName)
 		}
 
-		val.expr = expr.List[0]
 		val.typ = EvalResultTypeBuf
 		if fnName == "slice" {
 			val.typ = EvalResultTypeSlice
@@ -287,7 +288,6 @@ func compileFuncCall(expr *cc.Expr) (funcCallValue, error) {
 			return val, fmt.Errorf("pkt() size must be greater than 0")
 		}
 
-		val.expr = expr.List[0]
 		val.typ = EvalResultTypePkt
 
 	case "str":
@@ -309,7 +309,6 @@ func compileFuncCall(expr *cc.Expr) (funcCallValue, error) {
 			}
 		}
 
-		val.expr = expr.List[0]
 		val.typ = EvalResultTypeString
 
 	case "eth", "eth2", "ip4", "ip42", "ip6", "ip62", "port", "port2":
@@ -373,8 +372,6 @@ func compileFuncCall(expr *cc.Expr) (funcCallValue, error) {
 			val.addr = 2
 		}
 
-		val.expr = expr.List[0]
-
 	case "u8", "u16", "u32", "u64",
 		"s8", "s16", "s32", "s64",
 		"le16", "le32", "le64",
@@ -411,8 +408,6 @@ func compileFuncCall(expr *cc.Expr) (funcCallValue, error) {
 		case "u64", "s64", "le64", "be64":
 			val.dataSize = 8
 		}
-
-		val.expr = expr.List[0]
 
 	default:
 		return val, fmt.Errorf("unsupported function call: %s", fnName)
