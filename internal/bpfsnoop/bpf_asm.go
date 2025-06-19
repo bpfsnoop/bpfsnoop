@@ -50,11 +50,7 @@ func __clearSubprog(prog *ebpf.ProgramSpec, stub string, isFilter bool) {
 
 	for i := 0; i < len(prog.Instructions); i++ {
 		if ref := prog.Instructions[i].Reference(); ref == stub {
-			if isFilter {
-				prog.Instructions[i] = asm.Mov.Imm(asm.R0, 1)
-			} else {
-				prog.Instructions[i] = asm.Xor.Reg(asm.R0, asm.R0)
-			}
+			prog.Instructions[i] = asm.Mov.Imm(asm.R0, int32(b2i(isFilter)))
 		}
 	}
 }
