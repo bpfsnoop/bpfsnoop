@@ -41,9 +41,9 @@ try_get_session(struct pt_regs *ctx)
 }
 
 SEC("kprobe")
-int k_insn(struct pt_regs *ctx)
+int bpfsnoop_insn(struct pt_regs *ctx)
 {
-    struct bpfsnoop_insn_event init_event = {}, *evt = &init_event;
+    struct bpfsnoop_insn_event *evt;
     struct bpfsnoop_sess *sess;
 
     if (!ready)
@@ -53,6 +53,10 @@ int k_insn(struct pt_regs *ctx)
     if (!sess)
         return BPF_OK;
 
+    evt = bpf_ringbuf_reserve(&bpfsnoop_events, sizeof(*evt), 0);
+    if (!evt)
+        return BPF_OK;
+
     evt->type = BPFSNOOP_EVENT_TYPE_INSN;
     evt->length = sizeof(*evt);
     evt->kernel_ts = (__u32) bpf_ktime_get_ns();
@@ -60,7 +64,7 @@ int k_insn(struct pt_regs *ctx)
     evt->insn_ip = INSN_IP;
     evt->cpu = bpf_get_smp_processor_id();
 
-    bpf_ringbuf_output(&bpfsnoop_events, evt, sizeof(*evt), 0);
+    bpf_ringbuf_submit(evt, 0);
 
     return BPF_OK;
 }
