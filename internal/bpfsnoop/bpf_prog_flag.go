@@ -16,44 +16,66 @@ import (
 	"github.com/cilium/ebpf"
 )
 
+type progFlagImmInfo struct {
+	funcName string
+	graph    bool
+}
+
 type progFlags struct {
 	all         bool
-	ids         map[uint32]string // progID -> funcName
-	tags        map[string]string // tag -> funcName
-	names       map[string]string // entryFuncName -> funcName
-	pinnedPaths map[string]string // pinnedPath -> funcName
-	pids        map[uint32]string // pid -> funcName
+	graph       bool
+	ids         map[uint32]progFlagImmInfo
+	tags        map[string]progFlagImmInfo
+	names       map[string]progFlagImmInfo
+	pinnedPaths map[string]progFlagImmInfo
+	pids        map[uint32]progFlagImmInfo
 }
 
 func newProgFlags(pflags []ProgFlag) progFlags {
 	var pf progFlags
-	pf.ids = make(map[uint32]string)
-	pf.tags = make(map[string]string)
-	pf.names = make(map[string]string)
-	pf.pinnedPaths = make(map[string]string)
-	pf.pids = make(map[uint32]string)
+	pf.ids = make(map[uint32]progFlagImmInfo)
+	pf.tags = make(map[string]progFlagImmInfo)
+	pf.names = make(map[string]progFlagImmInfo)
+	pf.pinnedPaths = make(map[string]progFlagImmInfo)
+	pf.pids = make(map[uint32]progFlagImmInfo)
 
 	for _, f := range pflags {
 		if f.all {
 			pf.all = true
+			pf.graph = f.graph
 			return pf
 		}
 
 		switch f.descriptor {
 		case progFlagDescriptorID:
-			pf.ids[f.progID] = f.funcName
+			pf.ids[f.progID] = progFlagImmInfo{
+				funcName: f.funcName,
+				graph:    f.graph,
+			}
 
 		case progFlagDescriptorTag:
-			pf.tags[f.tag] = f.funcName
+			pf.tags[f.tag] = progFlagImmInfo{
+				funcName: f.funcName,
+				graph:    f.graph,
+			}
 
 		case progFlagDescriptorName:
-			pf.names[f.name] = f.funcName
+			pf.names[f.name] = progFlagImmInfo{
+				funcName: f.funcName,
+				graph:    f.graph,
+			}
 
 		case progFlagDescriptorPinned:
-			pf.pinnedPaths[f.pinned] = f.funcName
+			pf.pinnedPaths[f.pinned] = progFlagImmInfo{
+				funcName: f.funcName,
+				graph:    f.graph,
+			}
 
 		case progFlagDescriptorPid:
-			pf.pids[f.pid] = f.funcName
+			pf.pids[f.pid] = progFlagImmInfo{
+				funcName: f.funcName,
+				graph:    f.graph,
+			}
 		}
 	}
 
@@ -69,7 +91,7 @@ func (p progFlags) allID() bool {
 		!p.all
 }
 
-func (p *bpfProgs) prepareProgInfoByID(id ebpf.ProgramID, funcName string) error {
+func (p *bpfProgs) prepareProgInfoByID(id ebpf.ProgramID, funcName string, graph bool) error {
 	prog, err := ebpf.NewProgramFromID(id)
 	if err != nil {
 		return fmt.Errorf("failed to load prog %d: %w", id, err)
@@ -89,14 +111,14 @@ func (p *bpfProgs) prepareProgInfoByID(id ebpf.ProgramID, funcName string) error
 		}
 	}
 
-	return p.addTracing(id, funcName, flagFuncName, prog)
+	return p.addTracing(id, funcName, flagFuncName, prog, graph)
 }
 
 func (p *bpfProgs) prepareProgInfosByIDs(pflags []ProgFlag) error {
 	for i := range pflags {
 		id := ebpf.ProgramID(pflags[i].progID)
 		funcName := pflags[i].funcName
-		if err := p.prepareProgInfoByID(id, funcName); err != nil {
+		if err := p.prepareProgInfoByID(id, funcName, pflags[i].graph); err != nil {
 			return err
 		}
 	}
@@ -126,10 +148,10 @@ func (p *bpfProgs) prepareProgInfoByPinnedPath(pflag ProgFlag) error {
 		return fmt.Errorf("failed to get prog ID")
 	}
 
-	return p.addTracing(id, funcName, pflag.funcName, prog)
+	return p.addTracing(id, funcName, pflag.funcName, prog, pflag.graph)
 }
 
-func (p *bpfProgs) addProgByID(id ebpf.ProgramID, funcName string) error {
+func (p *bpfProgs) addProgByID(id ebpf.ProgramID, funcName string, graph bool) error {
 	prog, err := ebpf.NewProgramFromID(id)
 	if err != nil {
 		return fmt.Errorf("failed to load prog from ID %d: %w", id, err)
@@ -147,7 +169,7 @@ func (p *bpfProgs) addProgByID(id ebpf.ProgramID, funcName string) error {
 		return fmt.Errorf("failed to get prog func name: %w", err)
 	}
 
-	return p.addTracing(id, funcName, flagFuncName, prog)
+	return p.addTracing(id, funcName, flagFuncName, prog, graph)
 }
 
 func (p *bpfProgs) prepareProgInfoByPid(pflag ProgFlag) error {
@@ -187,7 +209,7 @@ func (p *bpfProgs) prepareProgInfoByPid(pflag ProgFlag) error {
 				return fmt.Errorf("failed to parse progID %s from %s: %w", progID, fdinfoPath, err)
 			}
 
-			err = p.addProgByID(ebpf.ProgramID(id), pflag.funcName)
+			err = p.addProgByID(ebpf.ProgramID(id), pflag.funcName, pflag.graph)
 			if err != nil {
 				return err
 			}
@@ -226,37 +248,37 @@ func (p *bpfProgs) prepareProgInfo(progID ebpf.ProgramID, pflags progFlags) erro
 	}
 
 	if pflags.all {
-		return p.addTracing(progID, entryFuncName, "", prog)
+		return p.addTracing(progID, entryFuncName, "", prog, pflags.graph)
 	}
 
 	tag := info.Tag
 
-	if flagFuncName, ok := pflags.ids[uint32(progID)]; ok {
-		funcName := flagFuncName
+	if imm, ok := pflags.ids[uint32(progID)]; ok {
+		funcName := imm.funcName
 		if funcName == "" {
 			funcName = entryFuncName
 		}
-		if err := p.addTracing(progID, funcName, flagFuncName, prog); err != nil {
+		if err := p.addTracing(progID, funcName, imm.funcName, prog, imm.graph); err != nil {
 			return err
 		}
 	}
 
-	if flagFuncName, ok := pflags.tags[tag]; ok {
-		funcName := flagFuncName
+	if imm, ok := pflags.tags[tag]; ok {
+		funcName := imm.funcName
 		if funcName == "" {
 			funcName = entryFuncName
 		}
-		if err := p.addTracing(progID, funcName, flagFuncName, prog); err != nil {
+		if err := p.addTracing(progID, funcName, imm.funcName, prog, imm.graph); err != nil {
 			return err
 		}
 	}
 
-	if flagFuncName, ok := pflags.names[entryFuncName]; ok {
-		funcName := flagFuncName
+	if imm, ok := pflags.names[entryFuncName]; ok {
+		funcName := imm.funcName
 		if funcName == "" {
 			funcName = entryFuncName
 		}
-		if err := p.addTracing(progID, funcName, flagFuncName, prog); err != nil {
+		if err := p.addTracing(progID, funcName, imm.funcName, prog, imm.graph); err != nil {
 			return err
 		}
 	}

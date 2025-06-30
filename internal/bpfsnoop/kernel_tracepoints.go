@@ -20,11 +20,7 @@ func matchKernelTracepoints(tps []string, tpInfos map[string]tracepointInfo, sil
 		return Tracepoints{}, err
 	}
 
-	krnl, err := btf.LoadKernelSpec()
-	if err != nil {
-		return Tracepoints{}, fmt.Errorf("failed to load kernel btf spec: %w", err)
-	}
-
+	krnl := getKernelBTF()
 	kmods := make(map[string]*btf.Spec)
 
 	ktps := make(Tracepoints, len(tps))

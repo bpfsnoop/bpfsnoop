@@ -6,10 +6,14 @@ package bpfsnoop
 import (
 	"errors"
 	"fmt"
+	"math/rand/v2"
+	"time"
 
-	"github.com/bpfsnoop/bpfsnoop/internal/bpf"
 	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/link"
+	"golang.org/x/sys/unix"
+
+	"github.com/bpfsnoop/bpfsnoop/internal/bpf"
 )
 
 const (
@@ -48,12 +52,21 @@ func readKernel(addr uint64, size uint32) ([]byte, error) {
 	}
 	defer coll.Close()
 
+	var l link.Link
 	prog := coll.Programs["read"]
-	l, err := link.AttachTracing(link.TracingOptions{
-		Program:    prog,
-		AttachType: ebpf.AttachTraceFEntry,
-	})
-	if err != nil {
+	for {
+		l, err = link.AttachTracing(link.TracingOptions{
+			Program:    prog,
+			AttachType: ebpf.AttachTraceFEntry,
+		})
+		if err == nil {
+			break
+		}
+		if errors.Is(err, unix.E2BIG) {
+			// BPF_MAX_TRAMP_PROGS 38
+			time.Sleep(time.Duration(rand.Int32N(100) * int32(time.Millisecond)))
+			continue
+		}
 		return nil, fmt.Errorf("failed to fentry nanosleep: %w", err)
 	}
 	defer l.Close()

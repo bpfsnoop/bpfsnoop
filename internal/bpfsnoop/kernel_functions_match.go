@@ -62,11 +62,11 @@ func (m kfuncMatch) match(fn string, fp *btf.FuncProto) bool {
 	return false
 }
 
-func matchKfunc(fn string, fp *btf.FuncProto, matches []*kfuncMatch) (bool, bool) {
+func matchKfunc(fn string, fp *btf.FuncProto, matches []*kfuncMatch) (*kfuncMatch, bool) {
 	for _, m := range matches {
 		if m.match(fn, fp) {
-			return m.flag.insn, true
+			return m, true
 		}
 	}
-	return false, false
+	return nil, false
 }

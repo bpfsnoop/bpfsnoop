@@ -31,6 +31,7 @@ var (
 	outputLbr       bool
 	outputFuncStack bool
 	outputFuncInsns bool
+	outputFuncGraph bool
 	outputPkt       bool
 	filterPid       uint32
 	kfuncAllKmods   bool
@@ -48,6 +49,14 @@ type Flags struct {
 	progs  []string
 	kfuncs []string
 	ktps   []string
+
+	fgraphInclude []string
+	fgraphExclude []string
+	fgraphKfuncs  []string
+	fgraphDepth   uint
+	fgraphProto   bool
+
+	fgragphDebugLock bool
 
 	outputFile string
 
@@ -80,6 +89,13 @@ func ParseFlags() (*Flags, error) {
 	f.BoolVar(&outputFuncStack, "output-stack", false, "output function call stack")
 	f.StringVar(&outputFlameGraph, "output-flamegraph", "", "output flamegraph fold data")
 	f.BoolVar(&outputFuncInsns, "output-insns", false, "output function's insns exec path, same as '(i)' in -k, only works with -k")
+	f.BoolVarP(&outputFuncGraph, "output-fgraph", "g", false, "output function call graph, works with -k,-p")
+	f.UintVar(&flags.fgraphDepth, "fgraph-depth", 5, "maximum depth of function call graph, larger means slower to start bpfsnoop, 5 by default")
+	f.StringSliceVar(&flags.fgraphInclude, "fgraph-include", nil, "limited functions in function call graph, empty means all functions, rules are same as -k")
+	f.StringSliceVar(&flags.fgraphExclude, "fgraph-exclude", nil, "exclude functions in function call graph, empty means no exclude, rules are same as -k")
+	f.StringSliceVar(&flags.fgraphKfuncs, "fgraph-kfuncs", nil, "extra functions in function call graph as depth 1, rules are same as -k")
+	f.BoolVar(&flags.fgraphProto, "fgraph-proto", false, "output function prototype in function call graph, like --show-func-proto")
+	f.BoolVar(&flags.fgragphDebugLock, "fgraph-debug-lock", false, "debug lock for function call graph, may cause kernel deadlock")
 	f.BoolVar(&outputPkt, "output-pkt", false, "output packet's tuple info if tracee has skb/xdp argument")
 	f.Uint32Var(&filterPid, "filter-pid", 0, "filter pid for tracing")
 	f.StringSliceVar(&filterArg, "filter-arg", nil, "filter function's argument with C expression, e.g. 'prog->type == BPF_PROG_TYPE_TRACING'")
@@ -100,6 +116,7 @@ func ParseFlags() (*Flags, error) {
 	f.MarkHidden("limit-events-internal")
 	f.MarkHidden("trace-insn-debug-cnt")
 	f.MarkHidden("no-vmlinux")
+	f.MarkHidden("fgraph-debug-lock")
 
 	err := f.Parse(os.Args)
 
@@ -121,6 +138,10 @@ func ParseFlags() (*Flags, error) {
 
 	if e := flags.checkMode(); e != nil {
 		return nil, e
+	}
+
+	if flags.fgraphDepth == 0 {
+		return nil, fmt.Errorf("--fgraph-depth must be greater than 0")
 	}
 
 	return &flags, err
@@ -189,6 +210,10 @@ func (f *Flags) OutputFuncStack() bool {
 
 func (f *Flags) ShowFuncProto() bool {
 	return f.showFuncProto
+}
+
+func (f *Flags) ShowFgraphProto() bool {
+	return f.fgraphProto
 }
 
 func (f *Flags) Vmlinux() bool {

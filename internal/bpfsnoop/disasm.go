@@ -128,7 +128,7 @@ func parseDisasmKfunc(kfunc string, kmods []string, ksyms *Kallsyms, a2l *Addr2L
 	}
 
 	// kfunc may be a glob filter
-	kfuncs, _ := searchKernelFuncs([]string{kfunc}, kmods, ksyms, 0xFF)
+	kfuncs, _ := findKernelFuncs([]string{kfunc}, kmods, ksyms, 0xFF, false, true)
 	if len(kfuncs) != 0 {
 		// grab the very first one sorted by name
 		values := maps.Values(kfuncs)

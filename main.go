@@ -27,6 +27,9 @@ func main() {
 	flags, err := bpfsnoop.ParseFlags()
 	assert.NoErr(err, "Failed to parse flags: %v")
 
+	err = bpfsnoop.PrepareKernelBTF()
+	assert.NoErr(err, "Failed to prepare kernel btf: %v")
+
 	if flags.Disasm() {
 		bpfsnoop.Disasm(flags)
 		return
@@ -36,6 +39,9 @@ func main() {
 		bpfsnoop.ShowFuncProto(flags)
 		return
 	}
+
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
 
 	progs, err := flags.ParseProgs()
 	assert.NoErr(err, "Failed to parse bpf prog infos: %v")
@@ -120,8 +126,25 @@ func main() {
 	assert.NoErr(err, "Failed to get bpf progs: %v")
 	defer bpfProgs.Close()
 
+	if flags.ShowFgraphProto() {
+		bpfsnoop.ShowFuncGraphProto(ctx, flags, kfuncs, bpfProgs, kallsyms)
+		return
+	}
+
+	fgTs := time.Now()
+	graphs, err := bpfsnoop.FindGraphFuncs(ctx, flags, kfuncs, bpfProgs, kallsyms, maxArg)
+	assert.NoErr(err, "Failed to find graph functions: %v")
+	bpfsnoop.DebugLog("Found %d graph functions/progs cost %s", len(graphs), time.Since(fgTs))
+
+	select {
+	case <-ctx.Done():
+		log.Println("bpfsnoop is exiting early ..")
+		return
+	default:
+	}
+
 	tracingTargets := bpfProgs.Tracings()
-	assert.True(len(tracingTargets)+len(kfuncs)+len(insns.Insns) != 0, "No tracing target")
+	assert.True(len(tracingTargets)+len(kfuncs)+len(insns)+len(graphs) != 0, "No tracing target")
 
 	bpfsnoop.VerboseLog("Tracing bpf progs or kernel functions/tracepoints ..")
 
@@ -133,9 +156,12 @@ func main() {
 	if len(kfuncs) > 20 {
 		log.Printf("bpfsnoop is tracing %d kernel functions/tracepoints, this may take a while", len(kfuncs))
 	}
+	if len(graphs) > 20 {
+		log.Printf("bpfsnoop is tracing %d graph functions/progs, this may take a while", len(graphs))
+	}
 
 	tstarted := time.Now()
-	tracings, err := bpfsnoop.NewBPFTracing(bpfSpec, reusedMaps, bpfProgs, kfuncs, insns)
+	tracings, err := bpfsnoop.NewBPFTracing(bpfSpec, reusedMaps, bpfProgs, kfuncs, insns, graphs)
 	assert.NoVerifierErr(err, "Failed to trace: %v")
 	bpfsnoop.DebugLog("Tracing %d tracees cost %s", len(tracings.Progs()), time.Since(tstarted))
 	var tended time.Time
@@ -171,9 +197,6 @@ func main() {
 	log.Print("bpfsnoop is running..")
 	defer log.Print("bpfsnoop is exiting..")
 
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer stop()
-
 	errg, ctx := errgroup.WithContext(ctx)
 
 	errg.Go(func() error {
@@ -183,14 +206,14 @@ func main() {
 	})
 
 	errg.Go(func() error {
-		helpers := bpfsnoop.Helpers{
+		return bpfsnoop.Run(reader, reusedMaps, w, &bpfsnoop.Helpers{
 			Progs:     bpfProgs,
 			Addr2line: addr2line,
 			Ksyms:     kallsyms,
 			Kfuncs:    kfuncs,
 			Insns:     insns,
-		}
-		return bpfsnoop.Run(reader, &helpers, reusedMaps, w)
+			Graphs:    graphs,
+		})
 	})
 
 	err = errg.Wait()

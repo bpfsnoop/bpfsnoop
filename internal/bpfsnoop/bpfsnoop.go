@@ -27,6 +27,8 @@ const (
 	eventTypeFuncEntry
 	eventTypeFuncExit
 	eventTypeInsn
+	eventTypeGraphEntry
+	eventTypeGraphExit
 )
 
 type Event struct {
@@ -50,10 +52,11 @@ type Helpers struct {
 	Addr2line *Addr2Line
 	Ksyms     *Kallsyms
 	Kfuncs    KFuncs
-	Insns     *FuncInsns
+	Insns     FuncInsns
+	Graphs    FuncGraphs
 }
 
-func Run(reader *ringbuf.Reader, helpers *Helpers, maps map[string]*ebpf.Map, w io.Writer) error {
+func Run(reader *ringbuf.Reader, maps map[string]*ebpf.Map, w io.Writer, helpers *Helpers) error {
 	lbrStack := newLBRStack()
 	fnStack := newFnStack()
 	sessions := NewSessions()
@@ -66,14 +69,6 @@ func Run(reader *ringbuf.Reader, helpers *Helpers, maps map[string]*ebpf.Map, w 
 	fg := NewFlameGraph()
 	defer fg.Save(outputFlameGraph)
 
-	findSymbol := func(addr uint64) string {
-		if prog, ok := helpers.Progs.funcs[uintptr(addr)]; ok {
-			return prog.funcName + "[bpf]"
-		}
-
-		return helpers.Ksyms.findSymbol(addr)
-	}
-
 	var sb strings.Builder
 
 	var record ringbuf.Record
@@ -82,7 +77,7 @@ func Run(reader *ringbuf.Reader, helpers *Helpers, maps map[string]*ebpf.Map, w 
 	bothModes := hasModeEntry() && hasModeExit()
 
 	unlimited := limitEvents == 0
-	for i := int64(limitEvents); unlimited || i > 0; i-- {
+	for i := int64(limitEvents); unlimited || i > 0; {
 		err := reader.ReadInto(&record)
 		if err != nil {
 			if errors.Is(err, ringbuf.ErrClosed) {
@@ -100,17 +95,35 @@ func Run(reader *ringbuf.Reader, helpers *Helpers, maps map[string]*ebpf.Map, w 
 			continue
 		}
 
+		if typ == eventTypeGraphEntry || typ == eventTypeGraphExit {
+			event := (*GraphEvent)(unsafe.Pointer(&record.RawSample[0]))
+			graph, ok := helpers.Graphs[event.FuncIP]
+			if !ok {
+				continue
+			}
+
+			fnInfo := getFuncInfo(uintptr(event.FuncIP), helpers, graph)
+			data := record.RawSample[sizeOfGraphEvent : sizeOfGraphEvent+int(event.Length)]
+			outputFuncInfo(&sb, fnInfo, helpers, graph.ArgsEnSz, graph.ArgsExSz, typ == eventTypeGraphExit, true, data)
+			s := sb.String()
+			sb.Reset()
+
+			outputGraphEvent(&sb, sessions, helpers.Graphs, event, s)
+			sb.Reset()
+			continue
+		}
+
 		if len(record.RawSample) < sizeOfEvent {
 			continue
 		}
 
 		event := (*Event)(unsafe.Pointer(&record.RawSample[0]))
-		fnInfo := getFuncInfo(event, helpers)
+		fnInfo := getFuncInfo(event.FuncIP, helpers, nil)
 		data := record.RawSample[sizeOfEvent:]
 
 		var sess *Session
 		var duration time.Duration
-		withDuration := fnInfo.insnMode || (bothModes && !fnInfo.isTp)
+		withDuration := fnInfo.insnMode || fnInfo.grphMode || (bothModes && !fnInfo.isTp)
 		if withDuration {
 			if event.Type == eventTypeFuncEntry {
 				sess = sessions.Add(event.SessID, event.KernNs)
@@ -123,35 +136,9 @@ func Run(reader *ringbuf.Reader, helpers *Helpers, maps map[string]*ebpf.Map, w 
 			}
 		}
 
-		fnName := fnInfo.name
-		if event.Type == eventTypeFuncExit {
-			fnName += "[ex]"
-		} else if event.Type == eventTypeFuncEntry && !fnInfo.isTp {
-			fnName += "[en]"
-		}
-
-		if colorfulOutput {
-			color.New(color.FgYellow, color.Bold).Fprint(&sb, fnName, " ")
-			color.New(color.FgBlue).Fprintf(&sb, "args")
-		} else {
-			fmt.Fprint(&sb, fnName, " args")
-		}
+		data = outputFuncInfo(&sb, fnInfo, helpers, fnInfo.argEntry, fnInfo.argExit, event.Type == eventTypeFuncExit, false, data)
 
 		withRetval := event.Type == eventTypeFuncExit
-		argSz := fnInfo.argEntry
-		if withRetval {
-			argSz = fnInfo.argExit
-		}
-		if argSz != 0 {
-			outputFnArgs(&sb, fnInfo, helpers, data[:argSz], findSymbol, withRetval)
-			data = data[argSz:]
-		} else {
-			fmt.Fprint(&sb, "=()")
-			if withRetval {
-				fmt.Fprint(&sb, " retval=(void)")
-			}
-		}
-
 		if colorfulOutput {
 			color.New(color.FgCyan).Fprintf(&sb, " cpu=%d", event.CPU)
 			color.New(color.FgMagenta).Fprintf(&sb, " process=(%d:%s)", event.Pid, strx.NullTerminated(event.Comm[:]))
@@ -172,7 +159,8 @@ func Run(reader *ringbuf.Reader, helpers *Helpers, maps map[string]*ebpf.Map, w 
 		}
 
 		if fnInfo.argData != 0 {
-			err := outputFuncArgAttrs(&sb, fnInfo, data[:fnInfo.argData], findSymbol)
+			f := findSymbolHelper(uint64(event.FuncIP), helpers)
+			err := outputFuncArgAttrs(&sb, fnInfo, data[:fnInfo.argData], f)
 			if err != nil {
 				return fmt.Errorf("failed to output function arg attrs: %w", err)
 			}
@@ -190,7 +178,7 @@ func Run(reader *ringbuf.Reader, helpers *Helpers, maps map[string]*ebpf.Map, w 
 			return fmt.Errorf("failed to output function stack: %w", err)
 		}
 
-		if sess == nil || withRetval || !fnInfo.insnMode {
+		if sess == nil || withRetval || (!fnInfo.insnMode && !fnInfo.grphMode) {
 			fmt.Fprintln(&sb)
 		}
 		if sess != nil {
@@ -199,9 +187,11 @@ func Run(reader *ringbuf.Reader, helpers *Helpers, maps map[string]*ebpf.Map, w 
 				for _, output := range sess.outputs {
 					fmt.Fprint(w, output)
 				}
+				i--
 			}
 		} else {
 			fmt.Fprint(w, sb.String())
+			i--
 		}
 
 		sb.Reset()

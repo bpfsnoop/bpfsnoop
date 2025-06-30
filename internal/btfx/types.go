@@ -101,12 +101,7 @@ func IsFuncPtr(t btf.Type) bool {
 	}
 }
 
-func GetStructBtfPointer(name string) (*btf.Pointer, error) {
-	spec, err := btf.LoadKernelSpec()
-	if err != nil {
-		return nil, fmt.Errorf("failed to load kernel btf spec: %w", err)
-	}
-
+func GetStructBtfPointer(name string, spec *btf.Spec) (*btf.Pointer, error) {
 	typ, err := spec.AnyTypeByName(name)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get type of %s: %w", name, err)

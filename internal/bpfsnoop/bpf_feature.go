@@ -61,10 +61,7 @@ func DetectBPFFeatures() error {
 	}
 
 	if outputLbr {
-		krnl, err := btf.LoadKernelSpec()
-		if err != nil {
-			return fmt.Errorf("failed to load kernel btf: %w", err)
-		}
+		krnl := getKernelBTF()
 
 		bpfFuncIDs, err := krnl.AnyTypeByName("bpf_func_id")
 		if err != nil {

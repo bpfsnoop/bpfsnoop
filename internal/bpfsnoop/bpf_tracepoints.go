@@ -143,10 +143,7 @@ func ProbeTracepoints(spec *ebpf.CollectionSpec, ksyms *Kallsyms) (map[string]tr
 		return nil, fmt.Errorf("invalid %s(%d) and %s(%d)", bpfRawTpStart, ksyms.bpfRawTpStart, bpfRawTpStop, ksyms.bpfRawTpStop)
 	}
 
-	kernelSpec, err := btf.LoadKernelSpec()
-	if err != nil {
-		return nil, fmt.Errorf("failed to load kernel btf: %w", err)
-	}
+	kernelSpec := getKernelBTF()
 
 	bpfRawTp, err := kernelSpec.AnyTypeByName("bpf_raw_event_map")
 	if err != nil {

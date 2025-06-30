@@ -18,11 +18,9 @@ type FuncInsn struct {
 	Desc string
 }
 
-type FuncInsns struct {
-	Insns map[uint64]FuncInsn
-}
+type FuncInsns map[uint64]FuncInsn
 
-func (f *FuncInsns) parseFuncInsns(kfunc *KFunc, engine *gapstone.Engine, ksyms *Kallsyms) error {
+func (i FuncInsns) parseFuncInsns(kfunc *KFunc, engine *gapstone.Engine, ksyms *Kallsyms) error {
 	kaddr := kfunc.Ksym.addr
 	bytesCnt := guessBytes(uintptr(kaddr), ksyms, 0)
 	if bytesCnt > readLimit {
@@ -51,7 +49,7 @@ func (f *FuncInsns) parseFuncInsns(kfunc *KFunc, engine *gapstone.Engine, ksyms 
 		}
 
 		offset := uint64(insn.Address) - kaddr
-		f.Insns[uint64(insn.Address)] = FuncInsn{
+		i[uint64(insn.Address)] = FuncInsn{
 			Func: kfunc.Ksym.name,
 			Off:  offset,
 			IP:   uint64(insn.Address),
@@ -63,29 +61,34 @@ func (f *FuncInsns) parseFuncInsns(kfunc *KFunc, engine *gapstone.Engine, ksyms 
 	return nil
 }
 
-func NewFuncInsns(kfuncs KFuncs, ksyms *Kallsyms) (*FuncInsns, error) {
-	if len(kfuncs) == 0 {
-		return &FuncInsns{}, nil
+func NewFuncInsns(kfuncs KFuncs, ksyms *Kallsyms) (FuncInsns, error) {
+	var kfs []*KFunc
+	for _, kf := range kfuncs {
+		if kf.Insn {
+			kfs = append(kfs, kf)
+		}
+	}
+	if len(kfs) == 0 {
+		return FuncInsns{}, nil
 	}
 
 	engine, err := createGapstoneEngine()
 	if err != nil {
-		return &FuncInsns{}, fmt.Errorf("failed to create capstone engine: %w", err)
+		return FuncInsns{}, fmt.Errorf("failed to create capstone engine: %w", err)
 	}
 	defer engine.Close()
 
-	var insns FuncInsns
-	insns.Insns = make(map[uint64]FuncInsn)
+	insns := FuncInsns{}
 
-	for _, kfunc := range kfuncs {
+	for _, kfunc := range kfs {
 		if !kfunc.Insn {
 			continue
 		}
 
 		if err := insns.parseFuncInsns(kfunc, engine, ksyms); err != nil {
-			return &FuncInsns{}, fmt.Errorf("failed to parse insns of func %s: %w", kfunc.Ksym.name, err)
+			return FuncInsns{}, fmt.Errorf("failed to parse insns of func %s: %w", kfunc.Ksym.name, err)
 		}
 	}
 
-	return &insns, nil
+	return insns, nil
 }

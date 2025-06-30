@@ -24,6 +24,8 @@ const (
 	bpfRawTpStop  = "__stop__bpf_raw_tp"
 
 	bpfTraceModules = "bpf_trace_modules"
+
+	btfIDDeny = "btf_id_deny"
 )
 
 func isKernelBuiltinMod(mod string) bool {
@@ -71,6 +73,8 @@ type Kallsyms struct {
 	bpfRawTpStop  uint64
 
 	bpfTraceModules uint64
+
+	btfIDDeny uint64 // address of btf_id_deny, if exists
 }
 
 // NewKallsyms reads /proc/kallsyms and returns a Kallsyms instance.
@@ -100,6 +104,15 @@ func NewKallsyms() (*Kallsyms, error) {
 			continue
 		}
 
+		setAddr := func(s string, addr *uint64) error {
+			var err error
+			*addr, err = strconv.ParseUint(s, 16, 64)
+			if err != nil {
+				return fmt.Errorf("failed to parse addr %s: %w", s, err)
+			}
+			return nil
+		}
+
 		if fields[1] == "t" || fields[1] == "T" {
 			var entry KsymEntry
 			entry.addr, err = strconv.ParseUint(fields[0], 16, 64)
@@ -112,13 +125,14 @@ func NewKallsyms() (*Kallsyms, error) {
 				entry.mod = strings.Trim(fields[3], "[]")
 			}
 
-			ks.a2s[entry.addr] = &entry
 			if sym, ok := ks.n2s[entry.name]; ok {
 				sym.extra = append(sym.extra, entry.addr)
 				sym.duped = true
+				entry.duped = true
 			} else {
 				ks.n2s[entry.name] = &entry
 			}
+			ks.a2s[entry.addr] = &entry
 
 			switch entry.name {
 			case "_stext":
@@ -133,15 +147,6 @@ func NewKallsyms() (*Kallsyms, error) {
 				ks.mods = append(ks.mods, entry.mod)
 			}
 		} else if fields[1] == "D" || fields[1] == "d" {
-			setAddr := func(s string, addr *uint64) error {
-				var err error
-				*addr, err = strconv.ParseUint(s, 16, 64)
-				if err != nil {
-					return fmt.Errorf("failed to parse addr %s: %w", s, err)
-				}
-				return nil
-			}
-
 			name := fields[2]
 			switch name {
 			case bpfRawTpStart, bpfRawTpStop:
@@ -156,6 +161,14 @@ func NewKallsyms() (*Kallsyms, error) {
 
 			case bpfTraceModules:
 				err = setAddr(fields[0], &ks.bpfTraceModules)
+				if err != nil {
+					return nil, err
+				}
+			}
+		} else if fields[1] == "R" || fields[1] == "r" {
+			switch fields[2] {
+			case btfIDDeny:
+				err = setAddr(fields[0], &ks.btfIDDeny)
 				if err != nil {
 					return nil, err
 				}

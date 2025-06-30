@@ -15,20 +15,33 @@ const (
 	kernelBTFPath = "/sys/kernel/btf"
 )
 
-func iterateKernelBtfs(kmods []string, iter func(*btf.Spec)) error {
-	if kfuncAllKmods {
+func iterateKernelBtfs(allKmods bool, kmods []string, iter func(*btf.Spec) bool) error {
+	if allKmods {
 		files, err := os.ReadDir(kernelBTFPath)
 		if err != nil {
 			return fmt.Errorf("failed to read /sys/kernel/btf: %w", err)
 		}
 
+		fileNames := make([]string, 0, len(files))
 		for _, file := range files {
-			kmodBtf, err := btf.LoadKernelModuleSpec(file.Name())
+			if file.IsDir() || file.Name() == "vmlinux" {
+				continue // skip directories and vmlinux
+			}
+			fileNames = append(fileNames, file.Name())
+		}
+
+		slices.Sort(fileNames)
+		fileNames = append([]string{"vmlinux"}, fileNames...) // search vmlinux first
+
+		for _, file := range fileNames {
+			kmodBtf, err := btf.LoadKernelModuleSpec(file)
 			if err != nil {
 				return fmt.Errorf("failed to load kernel module BTF: %w", err)
 			}
 
-			iter(kmodBtf)
+			if iter(kmodBtf) {
+				break // stop iterating if the iterator returns true
+			}
 		}
 	} else if len(kmods) != 0 {
 		kmods = append(kmods, "vmlinux")
@@ -41,14 +54,12 @@ func iterateKernelBtfs(kmods []string, iter func(*btf.Spec)) error {
 				return fmt.Errorf("failed to load kernel module BTF: %w", err)
 			}
 
-			iter(kmodBtf)
+			if iter(kmodBtf) {
+				break // stop iterating if the iterator returns true
+			}
 		}
 	} else {
-		kernelBtf, err := btf.LoadKernelSpec()
-		if err != nil {
-			return fmt.Errorf("failed to load kernel BTF: %w", err)
-		}
-
+		kernelBtf := getKernelBTF()
 		iter(kernelBtf)
 	}
 

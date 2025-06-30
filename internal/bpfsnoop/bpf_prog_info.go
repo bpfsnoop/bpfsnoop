@@ -22,6 +22,8 @@ func (r *bpfProgKaddrRange) contains(addr uintptr) bool {
 }
 
 type bpfProgFuncInfo struct {
+	prog       *ebpf.Program
+	progID     ebpf.ProgramID
 	kaddrRange bpfProgKaddrRange
 	funcName   string
 	funcProto  *btf.Func
@@ -33,6 +35,7 @@ type bpfProgFuncInfo struct {
 	argDataSz  int
 	isRetStr   bool
 	pktOutput  bool
+	fgraph     bool
 	progType   ebpf.ProgramType
 
 	jitedLineInfo []uintptr        // ordered
@@ -122,6 +125,8 @@ func (b *bpfProgs) newBPFProgInfo(prog *ebpf.Program, id ebpf.ProgramID, pinfo *
 	insns := jitedInsns
 	for i, funcLen := range jitedFuncLens {
 		var info bpfProgFuncInfo
+		info.prog = prog
+		info.progID = id
 		info.kaddrRange.start = jitedKsyms[i]
 		info.kaddrRange.end = info.kaddrRange.start + uintptr(funcLen)
 		info.funcName = strings.TrimSpace(funcInfos[i].Func.Name)

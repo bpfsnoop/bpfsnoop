@@ -94,10 +94,7 @@ func probeTracepointModuleInfos(spec, tpSpec *ebpf.CollectionSpec, head, start u
 		return nil, fmt.Errorf("failed to get modules: %w", err)
 	}
 
-	kernelSpec, err := btf.LoadKernelSpec()
-	if err != nil {
-		return nil, fmt.Errorf("failed to load kernel btf spec: %w", err)
-	}
+	kernelSpec := getKernelBTF()
 	bpfRawTp, err := kernelSpec.AnyTypeByName("bpf_raw_event_map")
 	if err != nil {
 		return nil, fmt.Errorf("failed to find bpf_raw_event_map btf: %w", err)

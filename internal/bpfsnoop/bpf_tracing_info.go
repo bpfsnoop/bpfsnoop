@@ -17,9 +17,11 @@ import (
 type bpfTracingInfo struct {
 	prog     *ebpf.Program
 	fn       *btf.Func
+	jitedLen uint32 // length of the jited function
 	funcIP   uintptr
 	funcName string
 	disAll   bool
+	graph    bool
 	params   []FuncParamFlags
 	ret      FuncParamFlags
 }
@@ -96,7 +98,7 @@ func (p *bpfProgs) canTrace(prog *ebpf.Program, id ebpf.ProgramID) bool {
 	return true
 }
 
-func (p *bpfProgs) addTracing(id ebpf.ProgramID, funcName, flagFuncName string, prog *ebpf.Program) error {
+func (p *bpfProgs) addTracing(id ebpf.ProgramID, funcName, flagFuncName string, prog *ebpf.Program, graph bool) error {
 	if !p.canTrace(prog, id) && !p.disasm {
 		return nil
 	}
@@ -119,6 +121,11 @@ func (p *bpfProgs) addTracing(id ebpf.ProgramID, funcName, flagFuncName string, 
 	jitedKsymAddrs, ok := info.JitedKsymAddrs()
 	if !ok {
 		return fmt.Errorf("failed to get jited ksym addrs for %d", id)
+	}
+
+	jitedLens, ok := info.JitedFuncLens()
+	if !ok {
+		return fmt.Errorf("failed to get jited func lens for %d", id)
 	}
 
 	fns, err := info.FuncInfos()
@@ -168,12 +175,14 @@ func (p *bpfProgs) addTracing(id ebpf.ProgramID, funcName, flagFuncName string, 
 		prog = prev
 	}
 
-	p.tracings[key] = bpfTracingInfo{
+	p.tracings[key] = &bpfTracingInfo{
 		prog:     prog,
 		fn:       fns[idx].Func,
+		jitedLen: jitedLens[idx],
 		funcIP:   jitedKsymAddrs[idx],
 		funcName: funcName,
 		disAll:   flagFuncName == "",
+		graph:    graph,
 		params:   params,
 		ret:      ret,
 	}

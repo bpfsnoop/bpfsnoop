@@ -346,13 +346,13 @@ func (arg *argDataOutput) correctArgType(t btf.Type) (btf.Type, error) {
 	var err error
 	switch stt.Name {
 	case "__sk_buff":
-		t, err = btfx.GetStructBtfPointer("sk_buff")
+		t, err = btfx.GetStructBtfPointer("sk_buff", getKernelBTF())
 		if err != nil {
 			return nil, fmt.Errorf("failed to get sk_buff btf pointer: %w", err)
 		}
 
 	case "xdp_md":
-		t, err = btfx.GetStructBtfPointer("xdp_buff")
+		t, err = btfx.GetStructBtfPointer("xdp_buff", getKernelBTF())
 		if err != nil {
 			return nil, fmt.Errorf("failed to get xdp_buff btf pointer: %w", err)
 		}
@@ -382,11 +382,7 @@ func (arg *argDataOutput) matchParams(params []btf.FuncParam, spec *btf.Spec, ch
 		}
 	}
 
-	krnl, err := btf.LoadKernelSpec()
-	if err != nil {
-		return nil, 0, fmt.Errorf("failed to load kernel spec: %w", err)
-	}
-
+	krnl := getKernelBTF()
 	offset := 0
 	for _, a := range arg.args {
 		if !a.match(params) {

@@ -18,7 +18,7 @@ const (
 )
 
 // According to patch [bpf: Reject attaching fexit/fmod_ret to __noreturn functions](https://lore.kernel.org/bpf/20250318114447.75484-1-laoar.shao@gmail.com/),
-// the following functions cannot be traced by fexit.
+// the following functions in noreturn_deny set cannot be traced by fexit.
 var noreturnFuncs = []string{
 	"__ia32_sys_exit",
 	"__ia32_sys_exit_group",
@@ -36,6 +36,24 @@ var noreturnFuncs = []string{
 	"kthread_complete_and_exit",
 	"kthread_exit",
 	"make_task_dead",
+}
+
+// According to patch [bpf: Add deny list of btf ids check for tracing programs](https://lore.kernel.org/bpf/20210429114712.43783-1-jolsa@kernel.org/),
+// the following functions in btf_id_deny set cannot be traced by fentry/fexit.
+var tracingDenyFuncs = []string{
+	"migrate_disable",
+	"migrate_enable",
+
+	"rcu_read_unlock_strict",
+
+	"preempt_count_add",
+	"preempt_count_sub",
+
+	"__rcu_read_lock",
+	"__rcu_read_unlock",
+
+	// Excluding in btf_id_deny set but harmful for bpfsnoop
+	"smp_call_function_many_cond",
 }
 
 type ParamFlags struct {
@@ -59,6 +77,7 @@ type KFunc struct {
 	Exit int // fn args buffer size for fexit
 	Data int // arg output data size
 	Insn bool
+	Grph bool
 	IsTp bool
 	Pkt  bool
 }
@@ -72,16 +91,8 @@ func isValistParam(p btf.FuncParam) bool {
 	return p.Name == "" && isVoid
 }
 
-func matchKernelFunc(matches []*kfuncMatch, fn *btf.Func, maxArgs int, ksyms *Kallsyms, findManyArgs, silent bool) (*KFunc, bool) {
-	if len(matches) == 0 {
-		return nil, false
-	}
-
+func checkKfuncTraceable(fn *btf.Func, ksyms *Kallsyms, silent bool) (*KsymEntry, bool) {
 	funcProto := fn.Type.(*btf.FuncProto)
-	insnMode, matched := matchKfunc(fn.Name, funcProto, matches)
-	if !matched {
-		return nil, false
-	}
 
 	if isValist := len(funcProto.Params) != 0 && isValistParam(funcProto.Params[len(funcProto.Params)-1]); isValist {
 		verboseLogIf(!silent, "Skip function %s with variable args", fn.Name)
@@ -103,6 +114,25 @@ func matchKernelFunc(matches []*kfuncMatch, fn *btf.Func, maxArgs int, ksyms *Ka
 		return nil, false
 	}
 
+	return ksym, true
+}
+
+func matchKernelFunc(matches []*kfuncMatch, fn *btf.Func, maxArgs int, ksyms *Kallsyms, findManyArgs, silent bool) (*KFunc, bool) {
+	if len(matches) == 0 {
+		return nil, false
+	}
+
+	funcProto := fn.Type.(*btf.FuncProto)
+	match, matched := matchKfunc(fn.Name, funcProto, matches)
+	if !matched {
+		return nil, false
+	}
+
+	ksym, traceable := checkKfuncTraceable(fn, ksyms, silent)
+	if !traceable {
+		return nil, false
+	}
+
 	params, ret, err := getFuncParams(fn)
 	if err != nil {
 		verboseLogIf(!silent, "Failed to get params for %s: %v", fn.Name, err)
@@ -113,7 +143,8 @@ func matchKernelFunc(matches []*kfuncMatch, fn *btf.Func, maxArgs int, ksyms *Ka
 		if MAX_BPF_FUNC_ARGS_PREV < len(funcProto.Params) && len(funcProto.Params) <= MAX_BPF_FUNC_ARGS {
 			kf := KFunc{Ksym: ksym, Func: fn}
 			kf.Prms = params
-			kf.Insn = insnMode
+			kf.Insn = match.flag.insn
+			kf.Grph = match.flag.grph
 			kf.Ret = ret
 			return &kf, true
 		}
@@ -123,7 +154,8 @@ func matchKernelFunc(matches []*kfuncMatch, fn *btf.Func, maxArgs int, ksyms *Ka
 	if len(funcProto.Params) <= maxArgs {
 		kf := KFunc{Ksym: ksym, Func: fn}
 		kf.Prms = params
-		kf.Insn = insnMode
+		kf.Insn = match.flag.insn
+		kf.Grph = match.flag.grph
 		kf.Ret = ret
 		return &kf, true
 	}
@@ -142,8 +174,8 @@ func findKernelFuncs(funcs, kmods []string, ksyms *Kallsyms, maxArgs int, findMa
 		return KFuncs{}, err
 	}
 
-	kfuncs := make(KFuncs, len(funcs))
-	err = iterateKernelBtfs(kmods, func(spec *btf.Spec) {
+	kfuncs := make(KFuncs, len(matchFuncs))
+	err = iterateKernelBtfs(kfuncAllKmods, kmods, func(spec *btf.Spec) bool {
 		iter := spec.Iterate()
 		for iter.Next() {
 			if fn, ok := iter.Type.(*btf.Func); ok {
@@ -151,9 +183,12 @@ func findKernelFuncs(funcs, kmods []string, ksyms *Kallsyms, maxArgs int, findMa
 				if ok {
 					kf.Btf = spec
 					kfuncs[uintptr(kf.Ksym.addr)] = kf
+					return true // stop iterating if a match is found
 				}
 			}
 		}
+
+		return false // continue iterating
 	})
 	if err != nil {
 		return kfuncs, err
@@ -168,12 +203,10 @@ func searchKernelFuncs(funcs, kmods []string, ksyms *Kallsyms, maxArgs int) (KFu
 		return nil, err
 	}
 
-	if !hasModeExit() {
-		return kfuncs, nil
-	}
-
+	fexit := hasModeExit()
 	for ptr, kf := range kfuncs {
-		if slices.Contains(noreturnFuncs, kf.Name()) {
+		if (fexit || kf.Grph) && slices.Contains(noreturnFuncs, kf.Name()) {
+			VerboseLog("Skip fexit for noreturn function %s", kf.Name())
 			delete(kfuncs, ptr)
 		}
 	}

@@ -25,7 +25,7 @@ type bpfProgs struct {
 	flock sync.Mutex
 	funcs map[uintptr]*bpfProgFuncInfo // func IP -> prog func info
 
-	tracings map[string]bpfTracingInfo // id:func -> prog, func
+	tracings map[string]*bpfTracingInfo // id:func -> prog, func
 
 	links *bpfLinks
 
@@ -38,7 +38,7 @@ func NewBPFProgs(pflags []ProgFlag, noParseProgs, disasm bool) (*bpfProgs, error
 	progs.progs = make(map[ebpf.ProgramID]*ebpf.Program, len(pflags))
 	progs.infos = make(map[ebpf.ProgramID]*ebpf.ProgramInfo, len(pflags))
 	progs.funcs = make(map[uintptr]*bpfProgFuncInfo, len(pflags))
-	progs.tracings = make(map[string]bpfTracingInfo, len(pflags))
+	progs.tracings = make(map[string]*bpfTracingInfo, len(pflags))
 	progs.disasm = disasm
 
 	var err error
@@ -74,6 +74,10 @@ func (b *bpfProgs) parseProgs() {
 		})
 	}
 	b.err = wg.Wait()
+
+	for _, t := range b.tracings {
+		b.funcs[t.funcIP].fgraph = t.graph
+	}
 
 	close(b.done)
 	b.ready = true
@@ -122,7 +126,7 @@ func (b *bpfProgs) Close() {
 	}
 }
 
-func (b *bpfProgs) Tracings() []bpfTracingInfo {
+func (b *bpfProgs) Tracings() []*bpfTracingInfo {
 	return maps.Values(b.tracings)
 }
 

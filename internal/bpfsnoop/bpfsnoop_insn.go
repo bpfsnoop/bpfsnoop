@@ -20,8 +20,8 @@ type InsnEvent struct {
 	CPU    uint32
 }
 
-func outputInsnEvent(sb *strings.Builder, sessions *Sessions, insns *FuncInsns, event *InsnEvent) {
-	insn, ok := insns.Insns[event.InsnIP]
+func outputInsnEvent(sb *strings.Builder, sessions *Sessions, insns FuncInsns, event *InsnEvent) {
+	insn, ok := insns[event.InsnIP]
 	if !ok {
 		return
 	}
@@ -32,7 +32,7 @@ func outputInsnEvent(sb *strings.Builder, sessions *Sessions, insns *FuncInsns, 
 	}
 
 	duration := time.Duration(event.KernNs - sess.started)
-	if !noColorOutput {
+	if colorfulOutput {
 		color.New(color.FgYellow).Fprint(sb, insn.Func)
 		color.New(color.FgCyan).Fprintf(sb, " cpu=%-2d", event.CPU)
 		color.RGB(0xFF, 0x00, 0x7F /* rose red */).Fprintf(sb, " duration=%-12s", duration)

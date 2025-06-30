@@ -143,7 +143,7 @@ func readStr(data []byte) (string, []byte) {
 	return readStrN(data, maxOutputStrLen)
 }
 
-func outputFnArgs(sb *strings.Builder, info *funcInfo, helpers *Helpers, data []byte, f btfx.FindSymbol, withRetval bool) {
+func outputFnArgs(sb *strings.Builder, info *funcInfo, helpers *Helpers, data []byte, withRetval bool) {
 	funcParamColors := []*color.Color{
 		color.RGB(0x9d, 0x9d, 0x9d),
 		color.RGB(0x7a, 0x7a, 0x7a),
@@ -161,6 +161,7 @@ func outputFnArgs(sb *strings.Builder, info *funcInfo, helpers *Helpers, data []
 
 	fmt.Fprintf(sb, "=(")
 
+	f := findSymbolHelper(uint64(info.funcIP), helpers)
 	params := info.proto.Type.(*btf.FuncProto).Params
 	lastIdx, idx := len(params)-1, 0
 	for i, param := range info.params {
@@ -208,4 +209,14 @@ func outputFnArgs(sb *strings.Builder, info *funcInfo, helpers *Helpers, data []
 		retStr = strx.NullTerminated(data[:maxOutputStrLen])
 	}
 	outputFnRetval(sb, info, retStr, data, f)
+}
+
+func findSymbolHelper(addr uint64, helpers *Helpers) btfx.FindSymbol {
+	return func(addr uint64) string {
+		if prog, ok := helpers.Progs.funcs[uintptr(addr)]; ok {
+			return prog.funcName + "[bpf]"
+		}
+
+		return helpers.Ksyms.findSymbol(addr)
+	}
 }

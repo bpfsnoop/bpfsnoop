@@ -41,7 +41,7 @@ func DumpProg(pf []ProgFlag) {
 
 	assert.NotZero(len(progs.tracings), "No prog to disasm")
 
-	var progInfo bpfTracingInfo
+	var progInfo *bpfTracingInfo
 	for _, t := range progs.tracings {
 		progInfo = t
 		break

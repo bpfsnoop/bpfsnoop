@@ -125,10 +125,7 @@ func (f *argumentFilter) inject(prog *ebpf.ProgramSpec, params []btf.FuncParam, 
 		return 0, errSkipped
 	}
 
-	krnl, err := btf.LoadKernelSpec()
-	if err != nil {
-		return 0, fmt.Errorf("failed to load kernel spec: %w", err)
-	}
+	krnl := getKernelBTF()
 
 	for i, arg := range f.args {
 		if !arg.matchParams(params) {
