@@ -515,8 +515,8 @@ func (t *bpfTracing) traceInsn(spec *ebpf.CollectionSpec, reusedMaps map[string]
 	}
 	defer coll.Close()
 
-	prog := coll.Programs["k_insn"]
-	delete(coll.Programs, "k_insn")
+	prog := coll.Programs["bpfsnoop_insn"]
+	delete(coll.Programs, "bpfsnoop_insn")
 	l, err := link.Kprobe(insn.Func, prog, &link.KprobeOptions{
 		Offset: insn.Off,
 	})
