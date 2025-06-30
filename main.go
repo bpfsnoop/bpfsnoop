@@ -18,6 +18,7 @@ import (
 	"golang.org/x/sys/unix"
 
 	"github.com/bpfsnoop/bpfsnoop/internal/assert"
+	"github.com/bpfsnoop/bpfsnoop/internal/bpf"
 	"github.com/bpfsnoop/bpfsnoop/internal/bpfsnoop"
 	"github.com/bpfsnoop/bpfsnoop/internal/mathx"
 )
@@ -26,7 +27,7 @@ func main() {
 	flags, err := bpfsnoop.ParseFlags()
 	assert.NoErr(err, "Failed to parse flags: %v")
 
-	readSpec, err := loadRead()
+	readSpec, err := bpf.LoadRead()
 	assert.NoErr(err, "Failed to load read bpf spec: %v")
 
 	if flags.Disasm() {
@@ -34,10 +35,10 @@ func main() {
 		return
 	}
 
-	tpSpec, err := loadTracepoint()
+	tpSpec, err := bpf.LoadTracepoint()
 	assert.NoErr(err, "Failed to load tracepoint bpf spec: %v")
 
-	tpModSpec, err := loadTracepoint_module()
+	tpModSpec, err := bpf.LoadTracepoint_module()
 	assert.NoErr(err, "Failed to load tracepoint_module bpf spec: %v")
 
 	if flags.ShowFuncProto() {
@@ -48,7 +49,7 @@ func main() {
 	progs, err := flags.ParseProgs()
 	assert.NoErr(err, "Failed to parse bpf prog infos: %v")
 
-	featBPFSpec, err := loadFeat()
+	featBPFSpec, err := bpf.LoadFeat()
 	assert.NoErr(err, "Failed to load feat bpf spec: %v")
 
 	err = bpfsnoop.DetectBPFFeatures(featBPFSpec)
@@ -68,10 +69,10 @@ func main() {
 	kallsyms, err := bpfsnoop.NewKallsyms()
 	assert.NoErr(err, "Failed to read /proc/kallsyms: %v")
 
-	traceableBPFSpec, err := loadTraceable()
+	traceableBPFSpec, err := bpf.LoadTraceable()
 	assert.NoErr(err, "Failed to load traceable bpf spec: %v")
 
-	bpfSpec, err := loadBpfsnoop()
+	bpfSpec, err := bpf.LoadBpfsnoop()
 	assert.NoErr(err, "Failed to load bpf spec: %v")
 
 	numCPU, err := ebpf.PossibleCPU()
@@ -80,7 +81,7 @@ func main() {
 	err = bpfSpec.Variables["CPU_MASK"].Set(uint32(mathx.Mask(numCPU)))
 	assert.NoErr(err, "Failed to set CPU_MASK: %v")
 
-	tailcallSpec, err := loadTailcall()
+	tailcallSpec, err := bpf.LoadTailcall()
 	assert.NoErr(err, "Failed to load tailcall bpf spec: %v")
 
 	err = bpfsnoop.ProbeTailcallIssue(bpfSpec, tailcallSpec, readSpec)
@@ -129,7 +130,7 @@ func main() {
 		assert.NoErr(err, "Failed to create addr2line: %v")
 	}
 
-	insnSpec, err := loadInsn()
+	insnSpec, err := bpf.LoadInsn()
 	assert.NoErr(err, "Failed to load insn bpf spec: %v")
 
 	insns, err := bpfsnoop.NewFuncInsns(kfuncs, kallsyms, readSpec)
