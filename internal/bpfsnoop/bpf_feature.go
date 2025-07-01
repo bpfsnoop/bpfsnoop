@@ -10,6 +10,8 @@ import (
 	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/btf"
 	"github.com/cilium/ebpf/link"
+
+	"github.com/bpfsnoop/bpfsnoop/internal/bpf"
 )
 
 var hasEndbr bool
@@ -21,7 +23,12 @@ type BPFFeatures struct {
 	HasGetStackID     bool
 }
 
-func DetectBPFFeatures(spec *ebpf.CollectionSpec) error {
+func DetectBPFFeatures() error {
+	spec, err := bpf.LoadFeat()
+	if err != nil {
+		return fmt.Errorf("failed to load feat bpf spec: %w", err)
+	}
+
 	coll, err := ebpf.NewCollectionWithOptions(spec, ebpf.CollectionOptions{})
 	if err != nil {
 		return fmt.Errorf("failed to create bpf collection: %w", err)

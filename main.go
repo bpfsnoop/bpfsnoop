@@ -46,10 +46,7 @@ func main() {
 	progs, err := flags.ParseProgs()
 	assert.NoErr(err, "Failed to parse bpf prog infos: %v")
 
-	featBPFSpec, err := bpf.LoadFeat()
-	assert.NoErr(err, "Failed to load feat bpf spec: %v")
-
-	err = bpfsnoop.DetectBPFFeatures(featBPFSpec)
+	err = bpfsnoop.DetectBPFFeatures()
 	assert.NoVerifierErr(err, "Failed to detect bpf features: %v")
 
 	if flags.OutputLbr() {
