@@ -27,11 +27,8 @@ func main() {
 	flags, err := bpfsnoop.ParseFlags()
 	assert.NoErr(err, "Failed to parse flags: %v")
 
-	readSpec, err := bpf.LoadRead()
-	assert.NoErr(err, "Failed to load read bpf spec: %v")
-
 	if flags.Disasm() {
-		bpfsnoop.Disasm(flags, readSpec)
+		bpfsnoop.Disasm(flags)
 		return
 	}
 
@@ -84,7 +81,7 @@ func main() {
 	tailcallSpec, err := bpf.LoadTailcall()
 	assert.NoErr(err, "Failed to load tailcall bpf spec: %v")
 
-	err = bpfsnoop.ProbeTailcallIssue(bpfSpec, tailcallSpec, readSpec)
+	err = bpfsnoop.ProbeTailcallIssue(bpfSpec, tailcallSpec)
 	assert.NoVerifierErr(err, "Failed to probe tailcall info: %v")
 
 	err = bpfSpec.Variables["PID"].Set(uint32(os.Getpid()))
@@ -133,7 +130,7 @@ func main() {
 	insnSpec, err := bpf.LoadInsn()
 	assert.NoErr(err, "Failed to load insn bpf spec: %v")
 
-	insns, err := bpfsnoop.NewFuncInsns(kfuncs, kallsyms, readSpec)
+	insns, err := bpfsnoop.NewFuncInsns(kfuncs, kallsyms)
 	assert.NoErr(err, "Failed to create func insns: %v")
 
 	bpfsnoop.VerboseLog("Disassembling bpf progs ..")

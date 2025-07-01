@@ -41,7 +41,7 @@ func isTailcallReachable(insns []byte) bool {
 	return tailcallReachable
 }
 
-func probeTailcallInfo(prog *ebpf.Program, readSpec *ebpf.CollectionSpec) (TailcallInfo, error) {
+func probeTailcallInfo(prog *ebpf.Program) (TailcallInfo, error) {
 	var info TailcallInfo
 
 	pinfo, err := prog.Info()
@@ -73,7 +73,7 @@ func probeTailcallInfo(prog *ebpf.Program, readSpec *ebpf.CollectionSpec) (Tailc
 	offset := binary.NativeEndian.Uint32(jinsns[1:])
 	kaddrTramp := kaddr + 5 /* next insn */ + uintptr(offset) /* callq target */
 
-	data, err := readKernel(readSpec, uint64(kaddrTramp), 512)
+	data, err := readKernel(uint64(kaddrTramp), 512)
 	if err != nil {
 		return info, fmt.Errorf("failed to read kernel memory from %#x: %w", kaddrTramp, err)
 	}
@@ -117,7 +117,7 @@ func probeTailcallInfo(prog *ebpf.Program, readSpec *ebpf.CollectionSpec) (Tailc
 	return info, nil
 }
 
-func ProbeTailcallIssue(spec, tailcallSpec, readSpec *ebpf.CollectionSpec) error {
+func ProbeTailcallIssue(spec, tailcallSpec *ebpf.CollectionSpec) error {
 	tcColl, err := ebpf.NewCollection(tailcallSpec)
 	if err != nil {
 		if errors.Is(err, unix.EINVAL) &&
@@ -165,7 +165,7 @@ func ProbeTailcallIssue(spec, tailcallSpec, readSpec *ebpf.CollectionSpec) error
 	}
 	defer l.Close()
 
-	info, err := probeTailcallInfo(tcProg, readSpec)
+	info, err := probeTailcallInfo(tcProg)
 	if err != nil {
 		return fmt.Errorf("failed to probe tailcall info: %w", err)
 	}

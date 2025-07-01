@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/bpfsnoop/bpfsnoop/internal/bpf"
 	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/link"
 )
@@ -15,13 +16,16 @@ const (
 	readLimit = 65536
 )
 
-func readKernel(spec *ebpf.CollectionSpec, addr uint64, size uint32) ([]byte, error) {
+func readKernel(addr uint64, size uint32) ([]byte, error) {
 	readSize := (size + 7) & (^uint32(7)) // round up to 8-times bytes
 	if readSize > readLimit {
 		return nil, fmt.Errorf("read size %d is too large", readSize)
 	}
 
-	spec = spec.Copy()
+	spec, err := bpf.LoadRead()
+	if err != nil {
+		return nil, fmt.Errorf("failed to load read bpf spec: %w", err)
+	}
 
 	buff := make([]byte, readSize)
 	spec.Maps[".data.buff"].ValueSize = readSize

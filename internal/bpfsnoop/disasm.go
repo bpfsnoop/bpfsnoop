@@ -14,7 +14,6 @@ import (
 
 	"github.com/Asphaltt/addr2line"
 	"github.com/bpfsnoop/gapstone"
-	"github.com/cilium/ebpf"
 	"github.com/fatih/color"
 	"golang.org/x/exp/maps"
 
@@ -25,7 +24,7 @@ const (
 	kcorePath = "/proc/kcore"
 )
 
-func Disasm(f *Flags, readSpec *ebpf.CollectionSpec) {
+func Disasm(f *Flags) {
 	assert.False(len(f.progs) != 0 && len(f.kfuncs) != 0, "progs %v or kfuncs %v to be disassembled?", f.progs, f.kfuncs)
 
 	if len(f.progs) != 0 {
@@ -40,7 +39,7 @@ func Disasm(f *Flags, readSpec *ebpf.CollectionSpec) {
 	if len(f.kfuncs) != 0 {
 		assert.SliceLen(f.kfuncs, 1, "Only one --kfunc is allowed for --disasm")
 
-		dumpKfunc(f.kfuncs[0], kfuncKmods, f.disasmBytes, readSpec)
+		dumpKfunc(f.kfuncs[0], kfuncKmods, f.disasmBytes)
 		return
 	}
 }
@@ -144,7 +143,7 @@ func parseDisasmKfunc(kfunc string, kmods []string, ksyms *Kallsyms, a2l *Addr2L
 	return kaddr, kfunc
 }
 
-func dumpKfunc(kfunc string, kmods []string, bytes uint, readSpec *ebpf.CollectionSpec) {
+func dumpKfunc(kfunc string, kmods []string, bytes uint) {
 	assert.True(runtime.GOARCH == "amd64", "Only support amd64 arch")
 
 	VerboseLog("Reading /proc/kallsyms ..")
@@ -177,7 +176,7 @@ func dumpKfunc(kfunc string, kmods []string, bytes uint, readSpec *ebpf.Collecti
 
 	bytes = guessBytes(uintptr(kaddr), kallsyms, bytes)
 	assert.False(bytes > readLimit, "Disasm bytes %d is larger than limit %d", bytes, readLimit)
-	data, err := readKernel(readSpec, kaddr, uint32(bytes))
+	data, err := readKernel(kaddr, uint32(bytes))
 	assert.NoErr(err, "Failed to read kernel memory: %v")
 
 	data = trimTailingInsns(data)

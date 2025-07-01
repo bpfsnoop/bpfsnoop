@@ -8,7 +8,6 @@ import (
 	"fmt"
 
 	"github.com/bpfsnoop/gapstone"
-	"github.com/cilium/ebpf"
 )
 
 type FuncInsn struct {
@@ -23,14 +22,14 @@ type FuncInsns struct {
 	Insns map[uint64]FuncInsn
 }
 
-func (f *FuncInsns) parseFuncInsns(kfunc *KFunc, engine *gapstone.Engine, ksyms *Kallsyms, readSpec *ebpf.CollectionSpec) error {
+func (f *FuncInsns) parseFuncInsns(kfunc *KFunc, engine *gapstone.Engine, ksyms *Kallsyms) error {
 	kaddr := kfunc.Ksym.addr
 	bytesCnt := guessBytes(uintptr(kaddr), ksyms, 0)
 	if bytesCnt > readLimit {
 		return fmt.Errorf("func %s insn count %d is larger than limit %d", kfunc.Ksym.name, bytesCnt, readLimit)
 	}
 
-	data, err := readKernel(readSpec, kaddr, uint32(bytesCnt))
+	data, err := readKernel(kaddr, uint32(bytesCnt))
 	if err != nil {
 		return fmt.Errorf("failed to read kernel memory from %#x: %w", kaddr, err)
 	}
@@ -64,7 +63,7 @@ func (f *FuncInsns) parseFuncInsns(kfunc *KFunc, engine *gapstone.Engine, ksyms 
 	return nil
 }
 
-func NewFuncInsns(kfuncs KFuncs, ksyms *Kallsyms, readSpec *ebpf.CollectionSpec) (*FuncInsns, error) {
+func NewFuncInsns(kfuncs KFuncs, ksyms *Kallsyms) (*FuncInsns, error) {
 	if len(kfuncs) == 0 {
 		return &FuncInsns{}, nil
 	}
@@ -83,7 +82,7 @@ func NewFuncInsns(kfuncs KFuncs, ksyms *Kallsyms, readSpec *ebpf.CollectionSpec)
 			continue
 		}
 
-		if err := insns.parseFuncInsns(kfunc, engine, ksyms, readSpec); err != nil {
+		if err := insns.parseFuncInsns(kfunc, engine, ksyms); err != nil {
 			return &FuncInsns{}, fmt.Errorf("failed to parse insns of func %s: %w", kfunc.Ksym.name, err)
 		}
 	}
