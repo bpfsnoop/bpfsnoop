@@ -22,6 +22,7 @@ func parseKfuncFlag(k string) (KfuncFlag, error) {
 		kf.insn = true
 		k = k[3:]
 	}
+	kf.insn = kf.insn || outputFuncInsns
 
 	fields := strings.Split(k, ":")
 	switch len(fields) {

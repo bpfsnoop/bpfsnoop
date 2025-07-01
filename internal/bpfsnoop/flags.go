@@ -30,6 +30,7 @@ var (
 
 	outputLbr       bool
 	outputFuncStack bool
+	outputFuncInsns bool
 	outputPkt       bool
 	filterPid       uint32
 	kfuncAllKmods   bool
@@ -78,6 +79,7 @@ func ParseFlags() (*Flags, error) {
 	f.BoolVar(&outputLbr, "output-lbr", false, "output LBR perf event")
 	f.BoolVar(&outputFuncStack, "output-stack", false, "output function call stack")
 	f.StringVar(&outputFlameGraph, "output-flamegraph", "", "output flamegraph fold data")
+	f.BoolVar(&outputFuncInsns, "output-insns", false, "output function's insns exec path, same as '(i)' in -k, only works with -k")
 	f.BoolVar(&outputPkt, "output-pkt", false, "output packet's tuple info if tracee has skb/xdp argument")
 	f.Uint32Var(&filterPid, "filter-pid", 0, "filter pid for tracing")
 	f.StringSliceVar(&filterArg, "filter-arg", nil, "filter function's argument with C expression, e.g. 'prog->type == BPF_PROG_TYPE_TRACING'")

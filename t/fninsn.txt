@@ -9,3 +9,12 @@ tag: fninsn,pkt
 test: -k '(i)icmp_rcv' --filter-pkt 'host 127.0.0.1' --trace-insn-debug-cnt 10
 match: andq	$0xfffffffffffffffe, %r12
 trigger: ping -c 1 -s 64 127.0.0.1
+
+---
+
+# icmp_rcv
+name: fninsn::icmp_rcv:output-insns
+tag: fninsn,pkt
+test: -k 'icmp_rcv' --filter-pkt 'host 127.0.0.1' --output-insns --trace-insn-debug-cnt 10
+match: andq	$0xfffffffffffffffe, %r12
+trigger: ping -c 1 -s 64 127.0.0.1
