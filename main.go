@@ -112,9 +112,6 @@ func main() {
 		assert.NoErr(err, "Failed to create addr2line: %v")
 	}
 
-	insnSpec, err := bpf.LoadInsn()
-	assert.NoErr(err, "Failed to load insn bpf spec: %v")
-
 	insns, err := bpfsnoop.NewFuncInsns(kfuncs, kallsyms)
 	assert.NoErr(err, "Failed to create func insns: %v")
 
@@ -138,7 +135,7 @@ func main() {
 	}
 
 	tstarted := time.Now()
-	tracings, err := bpfsnoop.NewBPFTracing(bpfSpec, insnSpec, reusedMaps, bpfProgs, kfuncs, insns)
+	tracings, err := bpfsnoop.NewBPFTracing(bpfSpec, reusedMaps, bpfProgs, kfuncs, insns)
 	assert.NoVerifierErr(err, "Failed to trace: %v")
 	bpfsnoop.DebugLog("Tracing %d tracees cost %s", len(tracings.Progs()), time.Since(tstarted))
 	var tended time.Time

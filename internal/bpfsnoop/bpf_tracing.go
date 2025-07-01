@@ -16,6 +16,7 @@ import (
 	"golang.org/x/sync/errgroup"
 	"golang.org/x/sys/unix"
 
+	"github.com/bpfsnoop/bpfsnoop/internal/bpf"
 	"github.com/bpfsnoop/bpfsnoop/internal/btfx"
 )
 
@@ -55,7 +56,7 @@ func setBpfsnoopConfig(spec *ebpf.CollectionSpec, funcIP uint64, fnArgsNr, fnArg
 	return nil
 }
 
-func NewBPFTracing(spec, insnSpec *ebpf.CollectionSpec, reusedMaps map[string]*ebpf.Map, bprogs *bpfProgs, kfuncs KFuncs, insns *FuncInsns) (*bpfTracing, error) {
+func NewBPFTracing(spec *ebpf.CollectionSpec, reusedMaps map[string]*ebpf.Map, bprogs *bpfProgs, kfuncs KFuncs, insns *FuncInsns) (*bpfTracing, error) {
 	var t bpfTracing
 	t.links = make([]link.Link, 0, len(bprogs.tracings))
 
@@ -98,11 +99,18 @@ func NewBPFTracing(spec, insnSpec *ebpf.CollectionSpec, reusedMaps map[string]*e
 		}
 	}
 
-	for _, insn := range insns.Insns {
-		insn := insn
-		errg.Go(func() error {
-			return t.traceInsn(insnSpec, reusedMaps, insn)
-		})
+	if len(insns.Insns) != 0 {
+		insnSpec, err := bpf.LoadInsn()
+		if err != nil {
+			return nil, fmt.Errorf("failed to load insn bpf spec: %w", err)
+		}
+
+		for _, insn := range insns.Insns {
+			insn := insn
+			errg.Go(func() error {
+				return t.traceInsn(insnSpec, reusedMaps, insn)
+			})
+		}
 	}
 
 	if err := errg.Wait(); err != nil {
