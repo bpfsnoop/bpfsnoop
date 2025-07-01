@@ -66,6 +66,8 @@ LIBCAPSTONE_OBJ := lib/capstone/build/libcapstone.a
 
 LIBPCAP_OBJ := lib/libpcap/libpcap.a
 
+LIBBPF_OBJ := lib/libbpf/src
+
 VMLINUX_OBJ := $(CURDIR)/bpf/headers/vmlinux.h
 
 GIT_MODULES_DIR := .git/modules
