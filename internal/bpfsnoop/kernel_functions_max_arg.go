@@ -11,13 +11,13 @@ import (
 	"golang.org/x/exp/maps"
 )
 
-func DetectSupportedMaxArg(traceableSpec, spec *ebpf.CollectionSpec, ksyms *Kallsyms) (int, error) {
+func DetectSupportedMaxArg(spec *ebpf.CollectionSpec, ksyms *Kallsyms) (int, error) {
 	kfuncs, err := findKernelFuncs([]string{"ip_*", "tcp_*"}, nil, ksyms, MAX_BPF_FUNC_ARGS, true, true)
 	if err != nil {
 		return 0, fmt.Errorf("failed to find kernel functions with many args: %w", err)
 	}
 
-	kfuncs, err = detectTraceables(traceableSpec, kfuncs, true)
+	kfuncs, err = detectTraceables(kfuncs, true)
 	if err != nil {
 		return 0, fmt.Errorf("failed to detect traceable kernel functions: %w", err)
 	}

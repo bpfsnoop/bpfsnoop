@@ -66,9 +66,6 @@ func main() {
 	kallsyms, err := bpfsnoop.NewKallsyms()
 	assert.NoErr(err, "Failed to read /proc/kallsyms: %v")
 
-	traceableBPFSpec, err := bpf.LoadTraceable()
-	assert.NoErr(err, "Failed to load traceable bpf spec: %v")
-
 	bpfSpec, err := bpf.LoadBpfsnoop()
 	assert.NoErr(err, "Failed to load bpf spec: %v")
 
@@ -84,7 +81,7 @@ func main() {
 	err = bpfSpec.Variables["PID"].Set(uint32(os.Getpid()))
 	assert.NoErr(err, "Failed to set PID: %v")
 
-	maxArg, err := bpfsnoop.DetectSupportedMaxArg(traceableBPFSpec, bpfSpec, kallsyms)
+	maxArg, err := bpfsnoop.DetectSupportedMaxArg(bpfSpec, kallsyms)
 	assert.NoErr(err, "Failed to detect supported func max arg: %v")
 	bpfsnoop.VerboseLog("Max arg count limits to %d", maxArg)
 
@@ -92,7 +89,7 @@ func main() {
 	assert.NoErr(err, "Failed to find kernel functions: %v")
 
 	bpfsnoop.VerboseLog("Detect %d kernel functions traceable ..", len(kfuncs))
-	kfuncs, err = bpfsnoop.DetectTraceable(traceableBPFSpec, kfuncs)
+	kfuncs, err = bpfsnoop.DetectTraceable(kfuncs)
 	assert.NoVerifierErr(err, "Failed to detect traceable for kfuncs: %v")
 
 	tpTs := time.Now()

@@ -11,6 +11,8 @@ import (
 	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/link"
 	"golang.org/x/exp/maps"
+
+	"github.com/bpfsnoop/bpfsnoop/internal/bpf"
 )
 
 // bpf_kfuncs.go is to detect a bunch of kernel functions are traceable.
@@ -86,7 +88,12 @@ func detectTraceable(spec *ebpf.CollectionSpec, addrs []uintptr) ([]uintptr, err
 	return nontraceables, nil
 }
 
-func detectTraceables(spec *ebpf.CollectionSpec, kfuncs KFuncs, silent bool) (KFuncs, error) {
+func detectTraceables(kfuncs KFuncs, silent bool) (KFuncs, error) {
+	spec, err := bpf.LoadTraceable()
+	if err != nil {
+		return nil, fmt.Errorf("failed to load traceable bpf spec: %w", err)
+	}
+
 	addrs := maps.Keys(kfuncs)
 	slices.Sort(addrs)
 
@@ -114,10 +121,10 @@ func detectTraceables(spec *ebpf.CollectionSpec, kfuncs KFuncs, silent bool) (KF
 	return kfuncs, nil
 }
 
-func DetectTraceable(spec *ebpf.CollectionSpec, kfuncs KFuncs) (KFuncs, error) {
+func DetectTraceable(kfuncs KFuncs) (KFuncs, error) {
 	if len(kfuncs) == 0 {
 		return kfuncs, nil
 	}
 
-	return detectTraceables(spec, kfuncs, false)
+	return detectTraceables(kfuncs, false)
 }
