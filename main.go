@@ -78,10 +78,7 @@ func main() {
 	err = bpfSpec.Variables["CPU_MASK"].Set(uint32(mathx.Mask(numCPU)))
 	assert.NoErr(err, "Failed to set CPU_MASK: %v")
 
-	tailcallSpec, err := bpf.LoadTailcall()
-	assert.NoErr(err, "Failed to load tailcall bpf spec: %v")
-
-	err = bpfsnoop.ProbeTailcallIssue(bpfSpec, tailcallSpec)
+	err = bpfsnoop.ProbeTailcallIssue(bpfSpec)
 	assert.NoVerifierErr(err, "Failed to probe tailcall info: %v")
 
 	err = bpfSpec.Variables["PID"].Set(uint32(os.Getpid()))

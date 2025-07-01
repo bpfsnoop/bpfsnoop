@@ -14,6 +14,8 @@ import (
 	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/link"
 	"golang.org/x/sys/unix"
+
+	"github.com/bpfsnoop/bpfsnoop/internal/bpf"
 )
 
 var tailcallInfo TailcallInfo
@@ -117,7 +119,12 @@ func probeTailcallInfo(prog *ebpf.Program) (TailcallInfo, error) {
 	return info, nil
 }
 
-func ProbeTailcallIssue(spec, tailcallSpec *ebpf.CollectionSpec) error {
+func ProbeTailcallIssue(spec *ebpf.CollectionSpec) error {
+	tailcallSpec, err := bpf.LoadTailcall()
+	if err != nil {
+		return fmt.Errorf("failed to load tailcall bpf spec: %w", err)
+	}
+
 	tcColl, err := ebpf.NewCollection(tailcallSpec)
 	if err != nil {
 		if errors.Is(err, unix.EINVAL) &&
