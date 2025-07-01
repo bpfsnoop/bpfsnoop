@@ -10,7 +10,6 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/btf"
 	"github.com/fatih/color"
 	"golang.org/x/exp/maps"
@@ -41,12 +40,12 @@ func showFuncProto(w io.Writer, fn *btf.Func, clr *color.Color, listParams bool)
 		if listParams {
 			clr.Fprintf(w, "\n%d:\t", i)
 		}
-		typDesc := btfx.Repr(p.Type)
+		typeDesc := btfx.Repr(p.Type)
 		if p.Name != "" {
-			if typDesc[len(typDesc)-1] == '*' {
-				clr.Fprintf(w, "%s%s", typDesc, p.Name)
+			if typeDesc[len(typeDesc)-1] == '*' {
+				clr.Fprintf(w, "%s%s", typeDesc, p.Name)
 			} else {
-				clr.Fprintf(w, "%s %s", typDesc, p.Name)
+				clr.Fprintf(w, "%s %s", typeDesc, p.Name)
 			}
 		} else {
 			clr.Fprintf(w, "%s", btfx.Repr(p.Type))
@@ -63,7 +62,7 @@ func printFuncProto(w io.Writer, fn *btf.Func, color *color.Color, listParams bo
 	color.Fprint(w, ";\n")
 }
 
-func ShowFuncProto(f *Flags, tpSpec, tpModSpec *ebpf.CollectionSpec) {
+func ShowFuncProto(f *Flags) {
 	yellow := color.New(color.FgYellow)
 	var sb strings.Builder
 
@@ -128,7 +127,7 @@ func ShowFuncProto(f *Flags, tpSpec, tpModSpec *ebpf.CollectionSpec) {
 			fmt.Fprintln(&sb)
 		}
 
-		ktps, err := probeKernelTracepoints(f.ktps, tpSpec, tpModSpec, kallsyms, true)
+		ktps, err := probeKernelTracepoints(f.ktps, kallsyms, true)
 		assert.NoErr(err, "Failed to find kernel tracepoints: %v")
 
 		fmt.Fprint(&sb, "Kernel tracepoints:")
