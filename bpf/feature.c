@@ -21,7 +21,8 @@ int BPF_PROG(detect, struct pt_regs *regs)
     /* Detect if bpf_get_branch_snapshot() helper is supported.
      * Added in: 856c02dbce4f ("bpf: Introduce helper bpf_get_branch_snapshot")
      */
-    features.has_branch_snapshot = bpf_core_enum_value_exists(enum bpf_func_id, BPF_FUNC_get_branch_snapshot);
+    /* check in Go instead, to avoid missing BPF_FUNC_get_branch_snapshot in vmlinux.h */
+    /* features.has_branch_snapshot = bpf_core_enum_value_exists(enum bpf_func_id, BPF_FUNC_get_branch_snapshot); */
 
     /* Detect if BPF_MAP_TYPE_RINGBUF map is supported.
      * Added in: 457f44363a88 ("bpf: Implement BPF ring buffer and verifier support for it")
