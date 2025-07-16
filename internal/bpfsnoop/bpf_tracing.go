@@ -238,7 +238,7 @@ func (t *bpfTracing) injectPktFilter(prog *ebpf.ProgramSpec, params []btf.FuncPa
 			return err
 		}
 
-		DebugLog("Injected --filter-pkt expr to %dth param (%s)'%s' of %s", i, btfx.Repr(typ), p.Name, fnName)
+		DebugLog("Injected --filter-pkt expr to %dth param (%s)%s of %s", i, btfx.Repr(typ), p.Name, fnName)
 		return nil
 	}
 
@@ -268,17 +268,17 @@ func (t *bpfTracing) injectPktOutput(pkt bool, prog *ebpf.ProgramSpec, params []
 		switch stt.Name {
 		case "sk_buff", "__sk_buff":
 			pktOutput.outputSkb(prog, i)
-			DebugLog("Injected --output-pkt to %dth param (%s)'%s' of %s", i, p.Name, btfx.Repr(p.Type), fnName)
+			DebugLog("Injected --output-pkt to %dth param (%s)%s of %s", i, btfx.Repr(p.Type), p.Name, fnName)
 			return true
 
 		case "xdp_buff", "xdp_md":
 			pktOutput.outputXdpBuff(prog, i)
-			DebugLog("Injected --output-pkt to %dth param (%s)'%s' of %s", i, p.Name, btfx.Repr(p.Type), fnName)
+			DebugLog("Injected --output-pkt to %dth param (%s)%s of %s", i, btfx.Repr(p.Type), p.Name, fnName)
 			return true
 
 		case "xdp_frame":
 			pktOutput.outputXdpFrame(prog, i)
-			DebugLog("Injected --output-pkt to %dth param (%s)'%s' of %s", i, p.Name, btfx.Repr(p.Type), fnName)
+			DebugLog("Injected --output-pkt to %dth param (%s)%s of %s", i, btfx.Repr(p.Type), p.Name, fnName)
 			return true
 		}
 	}

@@ -73,8 +73,11 @@ func trimTailingInsns(b []byte) []byte {
 }
 
 func findDisasmKfuncInKmods(kfunc string, kaddr uint64, kmods []string, a2l *Addr2Line) (uint64, bool) {
+	if a2l == nil {
+		return 0, false
+	}
+
 	VerboseLog("Symbol %s not found in /proc/kallsyms", kfunc)
-	assert.NotNil(a2l, "Dbgsym is required to disasm %s", kfunc)
 
 	for _, kmodName := range kmods {
 		err := a2l.addKmod(kmodName)

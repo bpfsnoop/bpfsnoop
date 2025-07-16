@@ -66,6 +66,10 @@ func detectKfuncTraceable(fnName string, ksyms *Kallsyms, fexit, silent bool) (b
 	if err != nil {
 		return false, fmt.Errorf("failed to find BTF function %q: %w", fn.Name, err)
 	}
+	if fn == nil {
+		verboseLogIf(!silent, "BTF function %q not found", fnName)
+		return false, nil
+	}
 
 	ksym, ok := checkKfuncTraceable(fn, ksyms, silent)
 	if !ok {
@@ -142,8 +146,7 @@ func findBtfOfKfunc(name string) (bfn *btf.Func, e error) {
 }
 
 func (p *fgraphProto) findBtfFunc(name string) *btf.Func {
-	bfunc, err := findBtfOfKfunc(name)
-	assert.NoErr(err, "Failed to find btf func for %s: %v", name, err)
+	bfunc, _ := findBtfOfKfunc(name)
 	return bfunc
 }
 
@@ -242,6 +245,17 @@ func ShowFuncGraphProto(flags *Flags) {
 
 	kfs, err := FindKernelFuncs(flags.kfuncs, ksyms, MAX_BPF_FUNC_ARGS)
 	assert.NoErr(err, "Failed to find kfuncs: %v")
+	if len(kfs) == 0 && len(flags.kfuncs) != 0 {
+		for _, kf := range flags.kfuncs {
+			kaddr, _ := parseDisasmKfunc(kf, kfuncKmods, ksyms, nil)
+			ksym, ok := ksyms.findBySymbol(kf)
+			assert.True(ok, "Failed to find ksym for %s", kf)
+
+			kfs[uintptr(kaddr)] = &KFunc{
+				Ksym: ksym,
+			}
+		}
+	}
 
 	if len(kfs) == 0 && len(bps) == 0 {
 		log.Print("Not found any kfuncs/progs")
@@ -277,11 +291,14 @@ func ShowFuncGraphProto(flags *Flags) {
 
 		for _, kf := range kfuncs {
 			bfunc := fp.findBtfFunc(kf.Ksym.name)
-			assert.NotNil(bfunc, "Failed to find btf func for %s", kf.Ksym.name)
-			fp.print(fp.getFuncProto(bfunc), 0)
+			if bfunc != nil {
+				fp.print(fp.getFuncProto(bfunc), 0)
+			} else {
+				fp.print(kf.Ksym.name+"\n", 0)
+			}
 
 			addr := kf.Ksym.addr
-			bytes := guessBytes(uintptr(addr), ksyms, 0)
+			bytes := guessBytes(uintptr(addr), ksyms, flags.disasmBytes)
 			fp.parse(ctx, addr, bytes, 1)
 
 			printNewline = true

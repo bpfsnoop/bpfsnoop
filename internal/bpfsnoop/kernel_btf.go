@@ -6,6 +6,7 @@ package bpfsnoop
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"slices"
 
 	"github.com/cilium/ebpf/btf"
@@ -54,6 +55,10 @@ func iterateKernelBtfs(allKmods bool, kmods []string, iter func(*btf.Spec) bool)
 		}
 
 		for _, kmod := range kmods {
+			if !fileExists(filepath.Join(kernelBTFPath, kmod)) {
+				continue
+			}
+
 			kmodBtf, err := btf.LoadKernelModuleSpec(kmod)
 			if err != nil {
 				return fmt.Errorf("failed to load kernel module BTF: %w", err)

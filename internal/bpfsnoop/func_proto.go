@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"slices"
 	"sort"
 	"strings"
@@ -156,17 +155,19 @@ func ShowFuncProto(f *Flags) {
 				assert.NoErr(err, "Failed to find vmlinux: %v")
 			}
 
-			log.Printf("Found vmlinux: %s", vmlinux)
+			if vmlinux != "" {
+				LogIf(true, "Found vmlinux: %s", vmlinux)
 
-			textAddr, err := ReadTextAddrFromVmlinux(vmlinux)
-			assert.NoErr(err, "Failed to read .text address from vmlinux: %v", err)
+				textAddr, err := ReadTextAddrFromVmlinux(vmlinux)
+				assert.NoErr(err, "Failed to read .text address from vmlinux: %v", err)
 
-			kaslr := NewKaslr(kallsyms.Stext(), textAddr)
-			addr2line, err = NewAddr2Line(vmlinux, kaslr, kallsyms.SysBPF(), kallsyms.Stext())
-			assert.NoErr(err, "Failed to create addr2line: %v", err)
+				kaslr := NewKaslr(kallsyms.Stext(), textAddr)
+				addr2line, err = NewAddr2Line(vmlinux, kaslr, kallsyms.SysBPF(), kallsyms.Stext())
+				assert.NoErr(err, "Failed to create addr2line: %v", err)
 
-			bprogs, err = NewBPFProgs([]ProgFlag{{all: false}}, true, false)
-			assert.NoErr(err, "Failed to prepare bpf progs: %v", err)
+				bprogs, err = NewBPFProgs([]ProgFlag{{all: false}}, true, false)
+				assert.NoErr(err, "Failed to prepare bpf progs: %v", err)
+			}
 		}
 
 		for _, fn := range fns {
