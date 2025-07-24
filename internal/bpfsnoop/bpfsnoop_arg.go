@@ -22,6 +22,47 @@ import (
 	"github.com/bpfsnoop/bpfsnoop/internal/strx"
 )
 
+type funcArgPkt struct {
+	tcpdump *tcpdumpRunner
+	running bool
+	inited  bool
+}
+
+func (f *funcArgPkt) close() {
+	if f.tcpdump != nil {
+		f.tcpdump.close()
+	}
+}
+
+func (f *funcArgPkt) init() {
+	if f.inited {
+		return
+	}
+
+	tcpdump, err := newTcpdumpRunner()
+	verboseLogIf(err != nil, "Failed to initialize tcpdump runner: %v", err)
+	f.inited = true
+	f.running = err == nil
+	f.tcpdump = tcpdump
+}
+
+func (f *funcArgPkt) decode(data []byte, layer gopacket.LayerType) string {
+	pkt := gopacket.NewPacket(data, layer, gopacket.NoCopy)
+	if err := pkt.ErrorLayer(); err != nil {
+		errStr := err.Error().Error()
+		if strings.HasPrefix(errStr, "Unable to decode EthernetType") {
+			f.init()
+			if f.running {
+				s, _ := f.tcpdump.decode(data)
+				if s != "" {
+					return s
+				}
+			}
+		}
+	}
+	return fmt.Sprintf("%v", pkt)
+}
+
 func dumpOutputArgBuf(data []byte) string {
 	sb := &strings.Builder{}
 
@@ -38,7 +79,7 @@ func dumpOutputArgBuf(data []byte) string {
 	return sb.String()
 }
 
-func outputFuncArgAttrs(sb *strings.Builder, info *funcInfo, data []byte, f btfx.FindSymbol) error {
+func outputFuncArgAttrs(sb *strings.Builder, info *funcInfo, data []byte, pkt *funcArgPkt, f btfx.FindSymbol) error {
 	fmt.Fprint(sb, "Arg attrs: ")
 
 	gray := color.RGB(0x88, 0x88, 0x88 /* gray */)
@@ -99,8 +140,8 @@ func outputFuncArgAttrs(sb *strings.Builder, info *funcInfo, data []byte, f btfx
 			case cc.PktTypeUDP:
 				layer = layers.LayerTypeUDP
 			}
-			pkt := gopacket.NewPacket(data[:arg.trueDataSize], layer, gopacket.NoCopy)
-			s = fmt.Sprintf("(%s)'%s'=%v", btfx.Repr(arg.t), arg.expr, pkt)
+			p := pkt.decode(data[:arg.trueDataSize], layer)
+			s = fmt.Sprintf("(%s)'%s'=%s", btfx.Repr(arg.t), arg.expr, p)
 
 		case arg.isAddr:
 			switch arg.addrType {

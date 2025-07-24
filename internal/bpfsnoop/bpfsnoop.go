@@ -73,6 +73,9 @@ func Run(reader *ringbuf.Reader, maps map[string]*ebpf.Map, w io.Writer, helpers
 	fg := NewFlameGraph()
 	defer fg.Save(outputFlameGraph)
 
+	var fpkt funcArgPkt
+	defer fpkt.close()
+
 	var sb strings.Builder
 
 	var record ringbuf.Record
@@ -173,7 +176,7 @@ func Run(reader *ringbuf.Reader, maps map[string]*ebpf.Map, w io.Writer, helpers
 
 		if fnInfo.argData != 0 {
 			f := findSymbolHelper(uint64(event.FuncIP), helpers)
-			err := outputFuncArgAttrs(&sb, fnInfo, data[:fnInfo.argData], f)
+			err := outputFuncArgAttrs(&sb, fnInfo, data[:fnInfo.argData], &fpkt, f)
 			if err != nil {
 				return fmt.Errorf("failed to output function arg attrs: %w", err)
 			}
