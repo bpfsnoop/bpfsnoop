@@ -10,8 +10,10 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"runtime"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 	"syscall"
 
@@ -211,12 +213,28 @@ func (p *fgraphProto) parse(ctx context.Context, ip uint64, bytes, depth uint) {
 		assert.NoErr(err, "Failed to disassemble insns at %x: %v", ip, err)
 
 		for _, inst := range insts {
-			if len(inst.Bytes) != 5 || inst.Bytes[0] != 0xe8 {
-				// TODO: long jump instructions (0xe9)
-				continue // Only handle call instructions (5 bytes, 0xe8).
+			var calleeIP uint64
+
+			switch runtime.GOARCH {
+			case archAMD64:
+				if len(inst.Bytes) != 5 || inst.Bytes[0] != insnCallqPrefix {
+					// TODO: long jump instructions (0xe9)
+					continue // Only handle call instructions (5 bytes, 0xe8).
+				}
+
+				offset := ne.Uint32(inst.Bytes[1:5])
+				calleeIP = getCalleeIP(uint64(inst.Address), offset)
+
+			case archARM64:
+				if inst.Bytes[3] != insnCallqPrefix {
+					continue // Only handle call instructions (4 bytes, 0x97).
+				}
+
+				// Get the callee IP from the instruction operand.
+				calleeIP, err = strconv.ParseUint(inst.OpStr[1:], 0, 64)
+				assert.NoErr(err, "Failed to parse ARM64 instruction operand: %v")
 			}
 
-			calleeIP := getCalleeIP(uint64(inst.Address), ne.Uint32(inst.Bytes[1:5]))
 			callee, ok := p.getCallee(ctx, calleeIP)
 			if ok {
 				callees = append(callees, callee)

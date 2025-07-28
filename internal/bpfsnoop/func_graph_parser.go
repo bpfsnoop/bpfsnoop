@@ -8,6 +8,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"runtime"
 	"slices"
 	"sync"
 
@@ -16,14 +17,23 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-const (
-	insnCallqPrefix = 0xe8 // callq instruction prefix for x86_64
-	insnJmpqPrefix  = 0xe9 // jmpq instruction prefix for x86_64
+var (
+	insnCallqPrefix = byte(0xe8) // callq instruction prefix
+	insnJmpqPrefix  = byte(0xe9) // jmpq instruction prefix
 
-	insnCallqSize = 5 // size of the callq instruction in bytes for x86_64
+	insnCallqSize = uint64(5) // size of the callq instruction in bytes
 )
 
 var ne = binary.NativeEndian // use native endianness for kernel addresses
+
+func init() {
+	switch runtime.GOARCH {
+	case archARM64:
+		insnCallqPrefix = 0x97 // bl instruction prefix for ARM64
+		insnJmpqPrefix = 0x17  // b instruction prefix for ARM64
+		insnCallqSize = 4      // size of the call instruction in bytes for ARM64
+	}
+}
 
 type fgraphParsedKey struct {
 	ip    uint64 // instruction pointer of the caller
