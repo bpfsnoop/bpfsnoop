@@ -15,6 +15,7 @@
 #include "bpfsnoop_pkt_filter.h"
 #include "bpfsnoop_pkt_output.h"
 #include "bpfsnoop_sess.h"
+#include "bpfsnoop_stack.h"
 
 volatile const __u32 PID = -1;
 volatile const __u32 CPU_MASK = 0xFFFF;
@@ -41,10 +42,8 @@ get_tracee_caller_fp(void)
 {
     u64 fp, fp_caller;
 
-    /* get frame pointer */
-    asm volatile ("%[fp] = r10" : [fp] "+r"(fp) :); /* fp of current bpf prog */
-    (void) bpf_probe_read_kernel(&fp_caller, sizeof(fp_caller), (void *) fp); /* fp of trampoline */
-    (void) bpf_probe_read_kernel(&fp_caller, sizeof(fp_caller), (void *) fp_caller); /* fp of tracee caller */
+    fp = get_tramp_fp(); /* read tramp fp */
+    (void) bpf_probe_read_kernel(&fp_caller, sizeof(fp_caller), (void *) fp); /* fp of tracee caller */
     return fp_caller;
 }
 
