@@ -8,6 +8,7 @@
 #include "bpfsnoop_event.h"
 #include "bpfsnoop_fn_args_output.h"
 #include "bpfsnoop_sess.h"
+#include "bpfsnoop_stack.h"
 
 struct bpfsnoop_fn_args {
     __u32 args_nr;
@@ -119,9 +120,7 @@ try_get_session_limited(int *depth)
     if (max_depth > 10)
         return NULL; /* max depth is too large, avoid 'BPF program is too large' */
 
-    /* get frame pointer */
-    asm volatile ("%[fp] = r10" : [fp] "+r"(fp) :); /* read prog fp */
-    (void) bpf_probe_read_kernel(&fp, sizeof(fp), (void *) fp); /* read tramp fp */
+    fp = get_tramp_fp(); /* read tramp fp */
     (void) bpf_probe_read_kernel(&fp, sizeof(fp), (void *) fp); /* read caller fp */
 
     *depth = 0;
@@ -196,9 +195,7 @@ try_get_session(void *ctx, int *depth)
     if (!data)
         return NULL;
 
-    /* get frame pointer */
-    asm volatile ("%[fp] = r10" : [fp] "+r"(fp) :); /* read prog fp */
-    (void) bpf_probe_read_kernel(&fp, sizeof(fp), (void *) fp); /* read tramp fp */
+    fp = get_tramp_fp(); /* read tramp fp */
     (void) bpf_probe_read_kernel(&fp, sizeof(fp), (void *) fp); /* read caller fp */
 
     __builtin_memset(data, 0, sizeof(*data));
