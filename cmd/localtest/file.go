@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"runtime"
 	"strings"
 	"time"
 )
@@ -45,7 +46,7 @@ func parseTestCase(scanner *bufio.Scanner) (testCase, bool, error) {
 			t.test = "./bpfsnoop " + b
 			continue
 
-		case "match":
+		case "match", "match_" + runtime.GOARCH:
 			t.match = b
 			continue
 
@@ -66,6 +67,9 @@ func parseTestCase(scanner *bufio.Scanner) (testCase, bool, error) {
 			continue
 
 		default:
+			if strings.HasPrefix(a, "match_") {
+				continue
+			}
 			return t, false, fmt.Errorf("unknown field: %s", a)
 		}
 	}
