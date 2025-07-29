@@ -8,6 +8,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"runtime"
 	"strings"
 
 	"github.com/bpfsnoop/gapstone"
@@ -137,6 +138,14 @@ func ProbeTailcallIssue(spec *ebpf.CollectionSpec) error {
 		return fmt.Errorf("failed to create tailcall collection: %w", err)
 	}
 	defer tcColl.Close()
+
+	if runtime.GOARCH == archARM64 {
+		tailcallInfo.supportTailcallInBpf2bpf = true
+		// ARM64 kernel does not have tailcall infinite loop issue caused by
+		// trampoline.
+		tailcallInfo.fixedTailcallInfiniteLoopCausedByTrampoline = true
+		return nil
+	}
 
 	tcProgName := "entry"
 	tcProg := tcColl.Programs[tcProgName]
