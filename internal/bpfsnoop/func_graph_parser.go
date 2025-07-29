@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"runtime"
 	"slices"
+	"strconv"
 	"sync"
 
 	"github.com/bpfsnoop/gapstone"
@@ -110,6 +111,39 @@ func (p *FuncGraphParser) checkParsed(ip uint64, depth uint) bool {
 	return parsed
 }
 
+func getCalleeIPFromInsn(inst gapstone.Instruction) (uint64, error) {
+	var calleeIP uint64
+
+	switch runtime.GOARCH {
+	case archAMD64:
+		if len(inst.Bytes) != 5 || inst.Bytes[0] != insnCallqPrefix {
+			// TODO: long jump instructions (0xe9)
+			return 0, nil // Only handle call instructions (5 bytes, 0xe8).
+		}
+
+		offset := ne.Uint32(inst.Bytes[1:5])
+		calleeIP = getCalleeIP(uint64(inst.Address), offset)
+
+	case archARM64:
+		callInsnPfx := []byte{
+			0x97, // bl instruction prefix for ARM64
+			0x94, // blr instruction prefix for ARM64
+		}
+		if !slices.Contains(callInsnPfx, inst.Bytes[3]) {
+			return 0, nil // Only handle call instructions
+		}
+
+		// Get the callee IP from the instruction operand.
+		var err error
+		calleeIP, err = strconv.ParseUint(inst.OpStr[1:], 0, 64)
+		if err != nil {
+			return 0, fmt.Errorf("failed to parse ARM64 instruction operand: %w", err)
+		}
+	}
+
+	return calleeIP, nil
+}
+
 func (p *FuncGraphParser) parse(ip uint64, bytes uint, depth uint, isBPF bool, tracee string) error {
 	if p.checkParsed(ip, depth) {
 		return nil
@@ -134,20 +168,36 @@ func (p *FuncGraphParser) parse(ip uint64, bytes uint, depth uint, isBPF bool, t
 		return fmt.Errorf("failed to disassemble %d bytes kernel memory from %#x: %w", bytes, ip, err)
 	}
 
-	if isBPF && insts[0].Bytes[0] == insnJmpqPrefix {
-		// the prog has been replaced by a freplace prog, jump to the new prog
-		newIP := getCalleeIP(uint64(insts[0].Address), ne.Uint32(insts[0].Bytes[1:5]))
-		DebugLog("BPF prog %s at %#x replaced by freplace prog at %#x", tracee, ip, newIP)
-		return p.add(newIP, depth)
+	if isBPF {
+		var calleeIP uint64
+		switch {
+		case onAmd64 && insts[0].Bytes[0] == insnJmpqPrefix:
+			// the prog has been replaced by a freplace prog, jump to the new prog
+			calleeIP = getCalleeIP(uint64(insts[0].Address), ne.Uint32(insts[0].Bytes[1:5]))
+
+		case onArm64 && insts[1].Bytes[3] == 0x14: // b instruction prefix for ARM64
+			// the prog has been replaced by a freplace prog, jump to the new prog
+			calleeIP, err = strconv.ParseUint(insts[1].OpStr[1:], 0, 64)
+			if err != nil {
+				return fmt.Errorf("failed to parse ARM64 instruction operand: %w", err)
+			}
+		}
+
+		if calleeIP != 0 {
+			DebugLog("BPF prog %s at %#x replaced by freplace prog at %#x", tracee, ip, calleeIP)
+			return p.add(calleeIP, depth)
+		}
 	}
 
 	for _, inst := range insts {
-		if len(inst.Bytes) != 5 || inst.Bytes[0] != insnCallqPrefix {
-			// TODO: long jump instructions (0xe9)
-			continue // Only handle call instructions (5 bytes, 0xe8).
+		callee, err := getCalleeIPFromInsn(inst)
+		if err != nil {
+			return fmt.Errorf("failed to get callee IP from instruction %s at %#x: %w", inst.Mnemonic, inst.Address, err)
+		}
+		if callee == 0 {
+			continue // skip if no callee IP found
 		}
 
-		callee := getCalleeIP(uint64(inst.Address), ne.Uint32(inst.Bytes[1:5]))
 		if err := p.add(callee, depth+1); err != nil {
 			return fmt.Errorf("failed to add callee %#x: %w", callee, err)
 		}

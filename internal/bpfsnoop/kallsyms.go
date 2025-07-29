@@ -28,6 +28,9 @@ const (
 	bpfTraceModules = "bpf_trace_modules"
 
 	btfIDDeny = "btf_id_deny"
+
+	onAmd64 = runtime.GOARCH == archAMD64
+	onArm64 = runtime.GOARCH == archARM64
 )
 
 var (
@@ -37,10 +40,10 @@ var (
 
 func init() {
 	switch runtime.GOARCH {
-	case "amd64":
+	case archAMD64:
 		break
 
-	case "arm64":
+	case archARM64:
 		sysBPFSymbol = "__arm64_sys_bpf"
 		sysNanosleepSymbol = "__arm64_sys_nanosleep"
 
