@@ -155,7 +155,7 @@ func ShowFuncProto(f *Flags) {
 				assert.NoErr(err, "Failed to find vmlinux: %v")
 			}
 
-			if vmlinux != "" {
+			if vmlinux != "" && f.funcProtoVmlinux {
 				LogIf(true, "Found vmlinux: %s", vmlinux)
 
 				textAddr, err := ReadTextAddrFromVmlinux(vmlinux)

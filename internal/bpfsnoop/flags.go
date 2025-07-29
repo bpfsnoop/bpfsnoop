@@ -66,8 +66,9 @@ type Flags struct {
 	disasm      bool
 	disasmBytes uint
 
-	showFuncProto  bool
-	listFuncParams bool
+	showFuncProto    bool
+	listFuncParams   bool
+	funcProtoVmlinux bool
 
 	noVmlinux       bool
 	requiredVmlinux bool
@@ -111,6 +112,7 @@ func ParseFlags() (*Flags, error) {
 	f.StringVar(&kernelVmlinuxDir, "kernel-vmlinux", "", "specific kernel vmlinux directory to search vmlinux and modules dbgsym files")
 
 	f.BoolVarP(&flags.listFuncParams, "show-func-proto-internal", "S", false, "show function prototype of -p,-k,-t")
+	f.BoolVarP(&flags.funcProtoVmlinux, "func-proto-vmlinux-internal", "X", false, "show line info of function prototype in vmlinux")
 	f.UintVarP(&limitEvents, "limit-events-internal", "E", 0, "limited number events to output, 0 to output all events")
 	f.BoolVarP(&flags.noVmlinux, "no-vmlinux", "N", false, "do not load vmlinux")
 	f.DurationVar(&runDurationThreshold, "duration-threshold", 0, "threshold for run duration, e.g. 1s, 100ms, 0 to disable")
@@ -118,6 +120,7 @@ func ParseFlags() (*Flags, error) {
 	f.MarkHidden("debug-log")
 	f.MarkHidden("output-flamegraph")
 	f.MarkHidden("show-func-proto-internal")
+	f.MarkHidden("func-proto-vmlinux-internal")
 	f.MarkHidden("limit-events-internal")
 	f.MarkHidden("trace-insn-debug-cnt")
 	f.MarkHidden("no-vmlinux")
@@ -132,7 +135,8 @@ func ParseFlags() (*Flags, error) {
 	argFilter = prepareFuncArguments(filterArg)
 	argOutput = prepareFuncArgOutput(outputArg)
 	pktFilter = preparePacketFilter(filterPkt)
-	flags.showFuncProto = flags.showFuncProto || flags.listFuncParams
+	flags.listFuncParams = flags.listFuncParams || flags.funcProtoVmlinux
+	flags.showFuncProto = flags.showFuncProto || flags.listFuncParams || flags.funcProtoVmlinux
 
 	if kernelVmlinuxDir != "" {
 		if fileExists(kernelVmlinuxDir) {
