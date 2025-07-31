@@ -106,6 +106,7 @@ const (
 	EvalResultTypeSlice
 	EvalResultTypeHex
 	EvalResultTypeInt
+	EvalResultTypeHist
 )
 
 type EvalResult struct {
