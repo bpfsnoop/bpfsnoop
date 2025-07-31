@@ -56,6 +56,7 @@ type funcArgumentOutput struct {
 	isHex    bool
 	isInt    bool
 	intType  string
+	isHist   bool
 }
 
 type argDataOutput struct {
@@ -295,6 +296,7 @@ func (arg *funcArgumentOutput) compile(params []btf.FuncParam, krnl, spec *btf.S
 		offset, err = arg.genBufInsns(&res, offset, size, labelExit)
 
 	default:
+		arg.isHist = res.Type == cc.EvalResultTypeHist
 		offset, err = arg.genDefaultInsns(&res, offset, size, labelExit)
 	}
 	if err != nil {

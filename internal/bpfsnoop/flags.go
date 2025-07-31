@@ -72,6 +72,9 @@ type Flags struct {
 
 	noVmlinux       bool
 	requiredVmlinux bool
+
+	outputHist bool
+	histExpr   string
 }
 
 func ParseFlags() (*Flags, error) {
@@ -155,6 +158,19 @@ func ParseFlags() (*Flags, error) {
 	}
 	if flags.fgraphDepth > 500 {
 		return nil, fmt.Errorf("--fgraph-max-depth is larger than limit 500")
+	}
+
+	// check histogram
+	for _, s := range outputArg {
+		if !strings.HasPrefix(s, "hist(") {
+			continue
+		}
+		if flags.outputHist {
+			return nil, fmt.Errorf("only one histogram output is allowed")
+		}
+
+		flags.outputHist = true
+		flags.histExpr = strings.TrimSuffix(strings.TrimPrefix(s, "hist("), ")")
 	}
 
 	requiredLbr = outputLbr
