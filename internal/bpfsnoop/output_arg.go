@@ -57,6 +57,7 @@ type funcArgumentOutput struct {
 	isInt    bool
 	intType  string
 	isHist   bool
+	isTDig   bool
 }
 
 type argDataOutput struct {
@@ -297,6 +298,7 @@ func (arg *funcArgumentOutput) compile(params []btf.FuncParam, krnl, spec *btf.S
 
 	default:
 		arg.isHist = res.Type == cc.EvalResultTypeHist
+		arg.isTDig = res.Type == cc.EvalResultTypeTDigest
 		offset, err = arg.genDefaultInsns(&res, offset, size, labelExit)
 	}
 	if err != nil {

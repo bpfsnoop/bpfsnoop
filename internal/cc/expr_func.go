@@ -311,12 +311,16 @@ func compileFuncCall(expr *cc.Expr) (funcCallValue, error) {
 			val.dataSize = 8
 		}
 
-	case "hist":
+	case "hist", "tdigest":
 		if len(expr.List) != 1 {
 			return val, fmt.Errorf("%s() must have 1 argument", fnName)
 		}
 
-		val.typ = EvalResultTypeHist
+		if fnName == "tdigest" {
+			val.typ = EvalResultTypeTDigest
+		} else {
+			val.typ = EvalResultTypeHist
+		}
 		val.dataSize = 8 // Assuming histogram data size is 8 bytes, aka uint64
 
 	default:
@@ -429,7 +433,7 @@ func postCheckFuncCall(res *EvalResult, val evalValue, dataOffset, dataSize int6
 		res.Size = int(dataSize)
 		res.Int = fnName
 
-	case EvalResultTypeHist:
+	case EvalResultTypeHist, EvalResultTypeTDigest:
 		// hist() function
 		t := mybtf.UnderlyingType(val.btf)
 		_, isInt := t.(*btf.Int)

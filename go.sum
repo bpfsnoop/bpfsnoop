@@ -4,6 +4,8 @@ github.com/Asphaltt/mybtf v0.0.0-20250708022622-be6f548674b2 h1:IzK5ZB+DlIrLYX2/
 github.com/Asphaltt/mybtf v0.0.0-20250708022622-be6f548674b2/go.mod h1:ZxswciFofS8TXGsc2j5CWCY8O3XwKEysCnU7hoI1fnI=
 github.com/bpfsnoop/gapstone v0.0.0-20250326151126-f4ba393504da h1:jMqMpXXLc7sZrIUOatcnO6cmlV1MuLZPtDMmaXksu6I=
 github.com/bpfsnoop/gapstone v0.0.0-20250326151126-f4ba393504da/go.mod h1:z8pjvjRs6upeW3rOvXbyAua+ngoozVZg6HwTdRsALoM=
+github.com/caio/go-tdigest/v4 v4.0.1 h1:sx4ZxjmIEcLROUPs2j1BGe2WhOtHD6VSe6NNbBdKYh4=
+github.com/caio/go-tdigest/v4 v4.0.1/go.mod h1:Wsa+f0EZnV2gShdj1adgl0tQSoXRxtM0QioTgukFw8U=
 github.com/cilium/ebpf v0.17.4-0.20250310175843-23a70a77897a h1:Gwqct80mVVFXishYmIJKmnkSxSUsPIkoEHpLagVHIjU=
 github.com/cilium/ebpf v0.17.4-0.20250310175843-23a70a77897a/go.mod h1:z4P4PotUQMhVXjjIj1zZUD7KogbAIS/o6WtXnM8QG9U=
 github.com/cloudflare/cbpfc v0.0.0-20230809125630-31aa294050ff h1:SLLG1soGN/PYTXkYWiR1PAxWlP1URBvgZPYymC5+0WI=
@@ -34,6 +36,8 @@ github.com/kr/pretty v0.3.1 h1:flRD4NNwYAUpkphVc1HcthR4KEIFJ65n8Mw5qdRn3LE=
 github.com/kr/pretty v0.3.1/go.mod h1:hoEshYVHaxMs3cyo3Yncou5ZscifuDolrwPKZanG3xk=
 github.com/kr/text v0.2.0 h1:5Nx0Ya0ZqY2ygV366QzturHI13Jq95ApcVaJBhpS+AY=
 github.com/kr/text v0.2.0/go.mod h1:eLer722TekiGuMkidMxC/pM04lWEeraHUUmBw8l2grE=
+github.com/leesper/go_rng v0.0.0-20190531154944-a612b043e353 h1:X/79QL0b4YJVO5+OsPH9rF2u428CIrGL/jLmPsoOQQ4=
+github.com/leesper/go_rng v0.0.0-20190531154944-a612b043e353/go.mod h1:N0SVk0uhy+E1PZ3C9ctsPRlvOPAFPkCNlcPBDkt0N3U=
 github.com/mattn/go-colorable v0.1.13 h1:fFA4WZxdEF4tXPZVKMLwD8oUnCTTo08duU7wxecdEvA=
 github.com/mattn/go-colorable v0.1.13/go.mod h1:7S9/ev0klgBDR4GtXTXX8a3vIGJpMovkB8vQcUbaXHg=
 github.com/mattn/go-isatty v0.0.16/go.mod h1:kYGgaQfpe5nmfYZH+SKPsOc2e4SrIfOl2e/yFXSvRLM=
@@ -61,5 +65,7 @@ golang.org/x/sys v0.0.0-20220811171246-fbc7d0a398ab/go.mod h1:oPkhp1MJrh7nUepCBc
 golang.org/x/sys v0.6.0/go.mod h1:oPkhp1MJrh7nUepCBck5+mAzfO9JrbApNNgaTdGDITg=
 golang.org/x/sys v0.30.0 h1:QjkSwP/36a20jFYWkSue1YwXzLmsV5Gfq7Eiy72C1uc=
 golang.org/x/sys v0.30.0/go.mod h1:/VUhepiaJMQUp4+oa/7Zr1D23ma6VTLIYjOOTFZPUcA=
+gonum.org/v1/gonum v0.11.0 h1:f1IJhK4Km5tBJmaiJXtk/PkL4cdVX6J+tGiM187uT5E=
+gonum.org/v1/gonum v0.11.0/go.mod h1:fSG4YDCxxUZQJ7rKsQrj0gMOg00Il0Z96/qMA4bVQhA=
 rsc.io/c2go v0.0.0-20170620140410-520c22818a08 h1:AAIN5uzUq20OU2cNoPTVljUm7JDaD0Z/+Xl/uMBHJgU=
 rsc.io/c2go v0.0.0-20170620140410-520c22818a08/go.mod h1:hE73EMCiJ3lIDPgEDEK781LZrVhFDxT+I+ziQRoLVNE=

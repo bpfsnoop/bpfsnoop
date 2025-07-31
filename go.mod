@@ -8,6 +8,7 @@ require (
 	github.com/Asphaltt/addr2line v0.1.2
 	github.com/Asphaltt/mybtf v0.0.0-20250708022622-be6f548674b2
 	github.com/bpfsnoop/gapstone v0.0.0-20250326151126-f4ba393504da
+	github.com/caio/go-tdigest/v4 v4.0.1
 	github.com/cilium/ebpf v0.17.4-0.20250310175843-23a70a77897a
 	github.com/fatih/color v1.18.0
 	github.com/gobwas/glob v0.2.3
