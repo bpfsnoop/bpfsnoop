@@ -549,9 +549,10 @@ func TestPostCheckFuncCall(t *testing.T) {
 			res := &EvalResult{
 				Type: EvalResultTypeDeref,
 			}
+			typ, _ := testBtf.AnyTypeByName("unsigned int")
 			val := evalValue{
 				btf: &btf.Pointer{
-					Target: getU32Btf(t),
+					Target: typ,
 				},
 			}
 
@@ -580,15 +581,16 @@ func TestPostCheckFuncCall(t *testing.T) {
 			res := &EvalResult{
 				Type: EvalResultTypeBuf,
 			}
+			typ, _ := testBtf.AnyTypeByName("unsigned char")
 			val := evalValue{
 				btf: &btf.Pointer{
-					Target: getU8Btf(t),
+					Target: typ,
 				},
 			}
 
 			err := postCheckFuncCall(res, val, 0, 8, "buf")
 			test.AssertNoErr(t, err)
-			test.AssertEqual(t, res.Btf, val.btf)
+			test.AssertEqualBtf(t, res.Btf, val.btf)
 			test.AssertEqual(t, res.Size, int(8))
 		})
 	})
@@ -611,15 +613,16 @@ func TestPostCheckFuncCall(t *testing.T) {
 			res := &EvalResult{
 				Type: EvalResultTypeString,
 			}
+			typ, _ := testBtf.AnyTypeByName("unsigned char")
 			val := evalValue{
 				btf: &btf.Pointer{
-					Target: getU8Btf(t),
+					Target: typ,
 				},
 			}
 
 			err := postCheckFuncCall(res, val, 0, -1, "str")
 			test.AssertNoErr(t, err)
-			test.AssertEqual(t, res.Btf, val.btf)
+			test.AssertEqualBtf(t, res.Btf, val.btf)
 			test.AssertEqual(t, res.Size, int(64))
 		})
 
@@ -675,15 +678,16 @@ func TestPostCheckFuncCall(t *testing.T) {
 			res := &EvalResult{
 				Type: EvalResultTypePkt,
 			}
+			typ, _ := testBtf.AnyTypeByName("unsigned char")
 			val := evalValue{
 				btf: &btf.Pointer{
-					Target: getU8Btf(t),
+					Target: typ,
 				},
 			}
 
 			err := postCheckFuncCall(res, val, 0, 64, "pkt")
 			test.AssertNoErr(t, err)
-			test.AssertEqual(t, res.Btf, val.btf)
+			test.AssertEqualBtf(t, res.Btf, val.btf)
 			test.AssertEqual(t, res.Size, int(64))
 		})
 	})
@@ -721,9 +725,10 @@ func TestPostCheckFuncCall(t *testing.T) {
 			res := &EvalResult{
 				Type: EvalResultTypeSlice,
 			}
+			typ, _ := testBtf.AnyTypeByName("unsigned int")
 			val := evalValue{
 				btf: &btf.Pointer{
-					Target: getU32Btf(t),
+					Target: typ,
 				},
 			}
 
@@ -769,15 +774,16 @@ func TestPostCheckFuncCall(t *testing.T) {
 			res := &EvalResult{
 				Type: EvalResultTypeInt,
 			}
+			typ, _ := testBtf.AnyTypeByName("unsigned char")
 			val := evalValue{
 				btf: &btf.Pointer{
-					Target: getU8Btf(t),
+					Target: typ,
 				},
 			}
 
 			err := postCheckFuncCall(res, val, 0, 1, "u8")
 			test.AssertNoErr(t, err)
-			test.AssertEqual(t, res.Btf, val.btf)
+			test.AssertEqualBtf(t, res.Btf, val.btf)
 			test.AssertEqual(t, res.Size, int(1))
 			test.AssertEqual(t, res.Int, "u8")
 		})
