@@ -38,14 +38,18 @@ func dumpOutputArgBuf(data []byte) string {
 	return sb.String()
 }
 
-func outputFuncArgAttrs(sb *strings.Builder, info *funcInfo, data []byte, hist *histogram, f btfx.FindSymbol) error {
-	if len(info.args) != 1 || !info.args[0].isHist {
+func outputFuncArgAttrs(sb *strings.Builder, info *funcInfo, data []byte, hist *histogram, tdigest *TDigest, f btfx.FindSymbol) error {
+	histTdigestOnly := true
+	for _, arg := range info.args {
+		histTdigestOnly = histTdigestOnly && (arg.isHist || arg.isTDig)
+	}
+	if !histTdigestOnly {
 		fmt.Fprint(sb, "Arg attrs: ")
 	}
 
 	gray := color.RGB(0x88, 0x88, 0x88 /* gray */)
 	for i, arg := range info.args {
-		if i != 0 {
+		if i != 0 && !arg.isHist && !arg.isTDig {
 			fmt.Fprint(sb, ", ")
 		}
 
@@ -227,6 +231,12 @@ func outputFuncArgAttrs(sb *strings.Builder, info *funcInfo, data []byte, hist *
 			size, _ := btf.Sizeof(arg.t)
 			hist.add(data[:arg.trueDataSize], size)
 			// histogram will be rendered later
+			continue
+
+		case arg.isTDig:
+			size, _ := btf.Sizeof(arg.t)
+			tdigest.add(data[:arg.trueDataSize], size)
+			// t-digest will be rendered later
 			continue
 		}
 

@@ -76,6 +76,9 @@ func Run(reader *ringbuf.Reader, maps map[string]*ebpf.Map, w io.Writer, helpers
 	hist := newHistogram(helpers.Flags.histExpr)
 	defer hist.render(w)
 
+	tdigest := newTDigest(helpers.Flags.tdigestExpr)
+	defer tdigest.render(w)
+
 	var sb strings.Builder
 
 	var record ringbuf.Record
@@ -176,7 +179,7 @@ func Run(reader *ringbuf.Reader, maps map[string]*ebpf.Map, w io.Writer, helpers
 
 		if fnInfo.argData != 0 {
 			f := findSymbolHelper(uint64(event.FuncIP), helpers)
-			err := outputFuncArgAttrs(&sb, fnInfo, data[:fnInfo.argData], hist, f)
+			err := outputFuncArgAttrs(&sb, fnInfo, data[:fnInfo.argData], hist, tdigest, f)
 			if err != nil {
 				return fmt.Errorf("failed to output function arg attrs: %w", err)
 			}

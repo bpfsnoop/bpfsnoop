@@ -8,8 +8,6 @@ import (
 	"io"
 	"math/bits"
 	"strings"
-
-	"golang.org/x/exp/constraints"
 )
 
 type histogram struct {
@@ -25,7 +23,7 @@ func newHistogram(expr string) *histogram {
 	}
 }
 
-func (h *histogram) b2i(b []byte, size int) uint64 {
+func bytes2i(b []byte, size int) uint64 {
 	if size <= 0 || size > len(b) {
 		return 0
 	}
@@ -41,11 +39,11 @@ func (h *histogram) b2i(b []byte, size int) uint64 {
 func (h *histogram) i2h(v uint64) int {
 	// Convert a value to a histogram index.
 	index := bits.LeadingZeros64(v)
-	return 64 - index
+	return 63 - index
 }
 
 func (h *histogram) add(data []byte, size int) {
-	h.log2[h.i2h(h.b2i(data, size))]++
+	h.log2[h.i2h(bytes2i(data, size))]++
 	h.total++
 }
 
@@ -55,14 +53,15 @@ func (h *histogram) render(w io.Writer) {
 	}
 
 	fmt.Fprintf(w, "Histogram for '%s' (total %d):\n", h.expr, h.total)
-	printLog2Hist(w, h.log2[:])
+	h.log2hist(w, h.log2[:])
+	fmt.Fprintln(w)
 }
 
-func printStars[T constraints.Integer](w io.Writer, val, maxVal T, width int) {
+func printStars(w io.Writer, val, maxVal uint64, width int) {
 	var nStars, nSpaces int
 	var needPlus bool
 
-	nStars = int(min(val, maxVal) * T(width) / maxVal)
+	nStars = int(min(val, maxVal) * uint64(width) / maxVal)
 	nSpaces = width - nStars
 	needPlus = val > maxVal
 
@@ -74,9 +73,9 @@ func printStars[T constraints.Integer](w io.Writer, val, maxVal T, width int) {
 	}
 }
 
-func printLog2Hist[T constraints.Integer](w io.Writer, vals []T) {
+func (h *histogram) log2hist(w io.Writer, vals []uint64) {
 	var idxMax int = -1
-	var valMax T
+	var valMax uint64
 
 	for i, v := range vals {
 		if v > 0 {
