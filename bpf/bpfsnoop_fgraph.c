@@ -216,8 +216,8 @@ try_get_session(void *ctx, int *depth)
     return NULL; /* not found */
 }
 
-SEC("fexit")
-int BPF_PROG(bpfsnoop_fgraph)
+static __always_inline int
+bpfsnoop_fgraph(void *ctx)
 {
     struct bpfsnoop_fgraph_event *evt;
     struct bpfsnoop_sess *sess;
@@ -265,6 +265,18 @@ int BPF_PROG(bpfsnoop_fgraph)
     bpf_ringbuf_submit(evt, 0);
 
     return BPF_OK;
+}
+
+SEC("fentry")
+int BPF_PROG(bpfsnoop_fgraph_entry)
+{
+    return bpfsnoop_fgraph(ctx);
+}
+
+SEC("fexit")
+int BPF_PROG(bpfsnoop_fgraph_exit)
+{
+    return bpfsnoop_fgraph(ctx);
 }
 
 char __license[] SEC("license") = "GPL";

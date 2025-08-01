@@ -44,11 +44,7 @@ func detectTraceable(spec *ebpf.CollectionSpec, addrs []uintptr) ([]uintptr, err
 	}
 
 	spec.Programs["detect"].AttachTo = sysNanosleepSymbol
-	coll, err := ebpf.NewCollectionWithOptions(spec, ebpf.CollectionOptions{
-		Programs: ebpf.ProgramOptions{
-			LogDisabled: true,
-		},
-	})
+	coll, err := ebpf.NewCollection(spec)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create bpf collection: %w", err)
 	}

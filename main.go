@@ -93,7 +93,7 @@ func main() {
 	assert.NoErr(err, "Failed to set PID: %v")
 
 	maxArg, err := bpfsnoop.DetectSupportedMaxArg(bpfSpec, kallsyms)
-	assert.NoErr(err, "Failed to detect supported func max arg: %v")
+	assert.NoVerifierErr(err, "Failed to detect supported func max arg: %v")
 	bpfsnoop.VerboseLog("Max arg count limits to %d", maxArg)
 
 	kfuncs, err := bpfsnoop.FindKernelFuncs(flags.Kfuncs(), kallsyms, maxArg)
