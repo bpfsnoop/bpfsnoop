@@ -23,9 +23,13 @@ is_traceable(u64 addr)
 
 #if defined(bpf_target_x86)
     static const u64 nop5 = 0x0000441F0F;
+    u64 a, b;
+
     ptr = has_endbr ? buff + 4 : buff;
-    return ((*(u64 *)ptr)&0x000000FFFFFFFFFF) == nop5 /* nop5 */ ||
-           ptr[0] == 0xE8 /* callq */;
+    /* Avoid 'misaligned stack access off 0+-12+0 size 8' */
+    a = *(u32 *)ptr;
+    b = *(u8 *)(ptr + 4);
+    return ((b<<32)|a) == nop5 /* nop5 */ || ptr[0] == 0xE8 /* callq */;
 
 #elif defined(bpf_target_arm64)
     ptr = buff + 4;

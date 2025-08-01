@@ -46,7 +46,15 @@ func (t *bpfTracing) traceGraph(spec *ebpf.CollectionSpec,
 	reusedMaps map[string]*ebpf.Map, bp *ebpf.Program, params []FuncParamFlags,
 	ret FuncParamFlags, traceeName string, graph *FuncGraph, entry bool,
 ) error {
-	tracingProgName := "bpfsnoop_fgraph"
+	tracingProgName := ""
+	if entry {
+		tracingProgName = "bpfsnoop_fgraph_entry"
+		delete(spec.Programs, "bpfsnoop_fgraph_exit")
+	} else {
+		tracingProgName = "bpfsnoop_fgraph_exit"
+		delete(spec.Programs, "bpfsnoop_fgraph_entry")
+	}
+
 	progSpec := spec.Programs[tracingProgName]
 	fnArgsBufSize, err := injectOutputFuncArgs(progSpec, params, ret, !entry)
 	if err != nil {

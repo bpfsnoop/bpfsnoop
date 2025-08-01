@@ -71,6 +71,15 @@ func (t *bpfTracing) traceProg(spec *ebpf.CollectionSpec, reusedMaps map[string]
 	progSpec.AttachTo = info.funcName
 	progSpec.AttachType = attachType
 
+	progSpec.Name = tracingFuncName + "_entry"
+	if fexit {
+		progSpec.Name = tracingFuncName + "_exit"
+	}
+	progSpec.Instructions[0] = progSpec.Instructions[0].WithSymbol(progSpec.Name)
+	delete(spec.Programs, tracingFuncName)
+	spec.Programs[progSpec.Name] = progSpec
+	tracingFuncName = progSpec.Name
+
 	coll, err := ebpf.NewCollectionWithOptions(spec, ebpf.CollectionOptions{
 		MapReplacements: reusedMaps,
 	})
