@@ -7,3 +7,6 @@
 [submodule "lib/libpcap"]
 	path = lib/libpcap
 	url = https://github.com/the-tcpdump-group/libpcap.git
+[submodule "lib/musl"]
+	path = lib/musl
+	url = https://git.musl-libc.org/git/musl

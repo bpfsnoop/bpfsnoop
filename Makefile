@@ -19,7 +19,13 @@ $(LIBPCAP_OBJ): $(GIT_MODULES_DIR)
 	cd lib/libpcap && \
 		./autogen.sh && \
 		CC=$(CMD_CC) CXX=$(CMD_CXX) ./configure --disable-rdma --disable-shared --disable-usb --disable-netmap --disable-bluetooth --disable-dbus --without-libnl && \
-		make CFLAGS="-Qunused-arguments"
+		make CFLAGS="-Qunused-arguments" -j$(shell nproc)
+
+# Build musl libc for static linking
+$(LIBC_OBJ): $(GIT_MODULES_DIR)
+	cd lib/musl && \
+		CC=$(CMD_CC) CXX=$(CMD_CXX) ./configure --disable-shared --enable-debug --prefix=$(CURDIR)/lib/musl && \
+		make CFLAGS="-Qunused-arguments"  -j$(shell nproc)
 
 $(LIBBPF_OBJ): $(GIT_MODULES_DIR)
 
@@ -53,8 +59,8 @@ $(GRAPH_BPF_OBJ): $(GRAPH_BPF_SRC) $(VMLINUX_OBJ) $(LIBBPF_OBJ)
 $(BPFSNOOP_BPF_OBJ): $(BPFSNOOP_BPF_SRC) $(VMLINUX_OBJ) $(LIBBPF_OBJ)
 	$(BPF2GO) Bpfsnoop $(CURDIR)/bpf/bpfsnoop.c -- $(BPF2GO_EXTRA_FLAGS)
 
-$(BPFSNOOP_OBJ): $(BPF_OBJS) $(BPFSNOOP_SRC) $(LIBCAPSTONE_OBJ) $(LIBPCAP_OBJ)
-	$(GOBUILD_CGO_CFLAGS) $(GOBUILD_CGO_LDFLAGS) $(GOBUILD)
+$(BPFSNOOP_OBJ): $(BPF_OBJS) $(BPFSNOOP_SRC) $(LIBCAPSTONE_OBJ) $(LIBC_OBJ) $(LIBPCAP_OBJ)
+	$(GOBUILD_CGO_CC) $(GOBUILD_CGO_CFLAGS) $(GOBUILD_CGO_LDFLAGS) $(GOBUILD)
 
 .PHONY: local_release
 local_release: $(BPFSNOOP_OBJ)

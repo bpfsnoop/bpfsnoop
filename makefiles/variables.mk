@@ -17,12 +17,16 @@ CMD_GIT_MODULES ?= $(CMD_GIT) submodule
 
 DIR_BIN := ./bin
 DIR_BPF := ./internal/bpf
-
-GOBUILD := go build -v -trimpath
-GOBUILD_CGO_CFLAGS := CGO_CFLAGS='-O2 -I$(CURDIR)/lib/capstone/include -I$(CURDIR)/lib/libpcap'
-GOBUILD_CGO_LDFLAGS := CGO_LDFLAGS='-O2 -g -L$(CURDIR)/lib/capstone/build -lcapstone -L$(CURDIR)/lib/libpcap -lpcap -static'
+DIR_MUSL := $(CURDIR)/lib/musl
 
 UNAME_ARCH := $(shell uname -m)
+
+GOBUILD := go build -v -trimpath
+GOBUILD_CGO_CC := CC=$(CMD_CC) CXX=$(CMD_CXX)
+GOBUILD_CGO_CFLAGS_MUSL := -I$(DIR_MUSL)/include -I$(DIR_MUSL)/obj/include -I$(DIR_MUSL)/arch/generic  -I$(DIR_MUSL)/arch/$(UNAME_ARCH) -Wno-error=bitwise-op-parentheses -Wno-error=shift-op-parentheses
+GOBUILD_CGO_CFLAGS := CGO_CFLAGS='-O2 -I$(CURDIR)/lib/capstone/include -I$(CURDIR)/lib/libpcap $(GOBUILD_CGO_CFLAGS_MUSL)'
+GOBUILD_CGO_LDFLAGS := CGO_LDFLAGS='-O2 -g -L$(CURDIR)/lib/capstone/build -lcapstone -L$(CURDIR)/lib/libpcap -lpcap -L$(CURDIR)/lib/musl/lib -lc -lresolv -static'
+
 ifeq ($(UNAME_ARCH),x86_64)
 	TARGET_ARCH := x86
 else ifeq ($(UNAME_ARCH),aarch64)
@@ -80,6 +84,8 @@ RELEASE_NOTES ?= release_notes.txt
 LIBCAPSTONE_OBJ := lib/capstone/build/libcapstone.a
 
 LIBPCAP_OBJ := lib/libpcap/libpcap.a
+
+LIBC_OBJ := lib/musl/lib/libc.a
 
 LIBBPF_OBJ := lib/libbpf/src
 
