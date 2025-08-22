@@ -27,6 +27,7 @@ struct event {
     __u32 pid;
     __u8 comm[16];
     __s64 func_stack_id;
+    __s64 lbr_retval;
 };
 
 struct {

@@ -41,6 +41,7 @@ type Event struct {
 	Pid     uint32
 	Comm    [16]byte
 	StackID int64
+	LbrRet  int64
 }
 
 func ptr2bytes(p unsafe.Pointer, size int) []byte {
@@ -177,7 +178,7 @@ func Run(reader *ringbuf.Reader, maps map[string]*ebpf.Map, w io.Writer, helpers
 			data = data[fnInfo.argData:]
 		}
 
-		if fnInfo.lbrMode {
+		if fnInfo.lbrMode && event.LbrRet > 0 {
 			err := lbrStack.outputStack(&sb, helpers, &lbrData, lbrs, event)
 			if err != nil {
 				return fmt.Errorf("failed to output LBR stack: %w", err)

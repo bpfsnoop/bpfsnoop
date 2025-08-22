@@ -214,7 +214,8 @@ emit_bpfsnoop_event(void *ctx)
     evt->func_stack_id = -1;
     if (cfg->output_stack)
         evt->func_stack_id = bpf_get_stackid(ctx, &bpfsnoop_stacks, BPF_F_FAST_STACK_CMP);
-    if (cfg->output_lbr && can_output_lbr)
+    evt->lbr_retval = lbr->nr_bytes;
+    if (cfg->output_lbr && can_output_lbr && lbr->nr_bytes > 0)
         output_lbr_data(lbr, session_id);
     ptr = buffer + sizeof(*evt);
     output_fn_args(args, ptr, retval);
