@@ -281,7 +281,7 @@ func (p *FuncGraphParser) checkIncludedKfunc(funcName string) (*KFunc, error) {
 		if noIncludes {
 			params, ret, err := getFuncParams(fn)
 			if err != nil {
-				errIter = err
+				DebugLog("Failed to get params for %s: %v", fn.Name, err)
 				return true // stop on error
 			}
 

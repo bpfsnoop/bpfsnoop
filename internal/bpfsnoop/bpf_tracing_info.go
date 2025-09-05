@@ -36,6 +36,11 @@ func getFuncParams(fn *btf.Func) ([]FuncParamFlags, FuncParamFlags, error) {
 		isStr := v && !strUsed
 		strUsed = strUsed || v
 
+		if _, isUnion := mybtf.UnderlyingType(p.Type).(*btf.Union); isUnion {
+			// However, struct is allowed.
+			return nil, ret, fmt.Errorf("union type %v is not supported", p.Type)
+		}
+
 		size, err := btf.Sizeof(p.Type)
 		if err != nil {
 			return nil, ret, fmt.Errorf("failed to get size of type %v: %w", p.Type, err)
