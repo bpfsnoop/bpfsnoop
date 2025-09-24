@@ -9,6 +9,8 @@
 
 #include "bpfsnoop.h"
 
+volatile const __u32 COPY_LBR = 0;
+
 #define MAX_LBR_ENTRIES 32
 struct bpfsnoop_lbr_data {
     struct perf_branch_entry entries[MAX_LBR_ENTRIES];

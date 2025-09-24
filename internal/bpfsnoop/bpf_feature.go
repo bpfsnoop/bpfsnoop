@@ -17,6 +17,7 @@ import (
 var (
 	hasEndbr    bool
 	requiredLbr bool
+	copyLbr     bool
 )
 
 type BPFFeatures struct {

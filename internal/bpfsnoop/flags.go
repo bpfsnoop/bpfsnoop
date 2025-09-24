@@ -48,7 +48,8 @@ var (
 
 	kernelVmlinuxDir string
 
-	forceProbeReadKernel bool
+	forceProbeReadKernel   bool
+	forceGetBranchSnapshot bool
 )
 
 type Flags struct {
@@ -119,6 +120,7 @@ func ParseFlags() (*Flags, error) {
 	f.BoolVarP(&flags.noVmlinux, "no-vmlinux", "N", false, "do not load vmlinux")
 	f.DurationVar(&runDurationThreshold, "duration-threshold", 0, "threshold for run duration, e.g. 1s, 100ms, 0 to disable")
 	f.BoolVarP(&forceProbeReadKernel, "force-probe-read-kernel", "P", false, "force reading kernel memory using bpf_probe_read_kernel() helper")
+	f.BoolVar(&forceGetBranchSnapshot, "force-get-branch-snapshot", false, "force getting branch snapshot using bpf_get_branch_snapshot() helper")
 
 	f.MarkHidden("debug-log")
 	f.MarkHidden("output-flamegraph")
@@ -129,6 +131,7 @@ func ParseFlags() (*Flags, error) {
 	f.MarkHidden("duration-threshold")
 	f.MarkHidden("fgraph-debug")
 	f.MarkHidden("force-probe-read-kernel")
+	f.MarkHidden("force-get-branch-snapshot")
 
 	err := f.Parse(os.Args)
 

@@ -79,7 +79,8 @@ emit_bpfsnoop_event(void *ctx)
 
     can_output = !cfg->both_entry_exit || cfg->is_entry;
     if (cfg->output_lbr && can_output)
-        lbr->nr_bytes = bpf_get_branch_snapshot(lbr->entries, sizeof(lbr->entries), 0); /* required 5.16 kernel. */
+        /* COPY_LBR requires 6.19? kernel. */
+        lbr->nr_bytes = bpf_get_branch_snapshot(lbr->entries, sizeof(lbr->entries), COPY_LBR); /* required 5.16 kernel. */
 
     /* Other filters must be after bpf_get_branch_snapshot() to avoid polluting
      * LBR entries.

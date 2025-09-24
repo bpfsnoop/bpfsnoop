@@ -27,6 +27,8 @@ const (
 
 	bpfTraceModules = "bpf_trace_modules"
 
+	bpfBranchSnapshot = "bpf_branch_snapshot"
+
 	btfIDDeny = "btf_id_deny"
 
 	onAmd64 = runtime.GOARCH == archAMD64
@@ -188,6 +190,10 @@ func NewKallsyms() (*Kallsyms, error) {
 				if err != nil {
 					return nil, err
 				}
+
+			case bpfBranchSnapshot:
+				debugLogIf(!copyLbr && !forceGetBranchSnapshot, "Found %s, will use BPF_LBR_F_COPY", bpfBranchSnapshot)
+				copyLbr = true
 			}
 		} else if fields[1] == "R" || fields[1] == "r" {
 			switch fields[2] {
