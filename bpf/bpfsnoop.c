@@ -16,6 +16,7 @@
 #include "bpfsnoop_pkt_output.h"
 #include "bpfsnoop_sess.h"
 #include "bpfsnoop_stack.h"
+#include "bpfsnoop_tracing.h"
 
 volatile const __u32 PID = -1;
 volatile const __u32 CPU_MASK = 0xFFFF;
@@ -56,14 +57,82 @@ gen_session_id(__u64 fp)
     return ((__u64) rnd) << 32 | (fp & 0xFFFFFFFF);
 }
 
+enum bpfsnoop_mode {
+    BPFSNOOP_MODE_ENTRY = 0,
+    BPFSNOOP_MODE_EXIT,
+    BPFSNOOP_MODE_SESSION_ENTRY,
+    BPFSNOOP_MODE_SESSION_EXIT,
+};
+
+static __always_inline enum bpfsnoop_mode
+get_bpfsnoop_mode(void *ctx)
+{
+    bool is_entry = cfg->is_entry;
+
+    if (cfg->both_entry_exit && cfg->is_fsession)
+        is_entry = !bpf_session_is_return(ctx);
+
+    if (cfg->both_entry_exit)
+        return is_entry ? BPFSNOOP_MODE_SESSION_ENTRY : BPFSNOOP_MODE_SESSION_EXIT;
+
+    return is_entry ? BPFSNOOP_MODE_ENTRY : BPFSNOOP_MODE_EXIT;
+}
+
+static __always_inline bool
+init_session_entry(void *ctx, __u64 fp, __u64 *args, __u64 *session_id)
+{
+    struct bpfsnoop_sess sess_init = {};
+    __u64 *cookie, sid;
+
+    sid = gen_session_id(fp);
+    if (!filter(args, sid))
+        return false;
+
+    if (cfg->is_fsession) {
+        /* The cookie has been cleared in trampoline. */
+        cookie = bpf_session_cookie(ctx);
+        *cookie = sid;
+    } else {
+        sess_init.session_id = sid;
+        add_session(fp, &sess_init);
+    }
+
+    *session_id = sid;
+    return true;
+}
+
+static __always_inline bool
+init_session_exit(void *ctx, __u64 fp, __u64 *session_id)
+{
+    struct bpfsnoop_sess *sess;
+    __u64 *cookie, sid;
+
+    if (cfg->is_fsession) {
+        cookie = bpf_session_cookie(ctx);
+        sid = *cookie;
+        if (!sid)
+            return false;
+
+        *session_id = sid - 1;
+    } else {
+        sess = get_and_del_session(fp);
+        if (!sess)
+            return false;
+
+        *session_id = sess->session_id - 1;
+    }
+
+    return true;
+}
+
 static __always_inline int
 emit_bpfsnoop_event(void *ctx)
 {
-    struct bpfsnoop_sess *sess, sess_init = {};
     struct bpfsnoop_lbr_data *lbr;
     __u64 fp, session_id = 0;
+    enum bpfsnoop_mode mode;
     __u64 args[MAX_FN_ARGS];
-    bool can_output = false;
+    bool can_output_lbr;
     void *buffer, *ptr;
     struct event *evt;
     size_t buffer_sz;
@@ -77,15 +146,18 @@ emit_bpfsnoop_event(void *ctx)
     cpu = bpf_get_smp_processor_id() & CPU_MASK;
     lbr = &bpfsnoop_lbr_buff[cpu];
 
-    can_output = !cfg->both_entry_exit || cfg->is_entry;
-    if (cfg->output_lbr && can_output)
+    mode = get_bpfsnoop_mode(ctx);
+
+    can_output_lbr = !cfg->both_entry_exit || (mode == BPFSNOOP_MODE_SESSION_ENTRY);
+    if (cfg->output_lbr && can_output_lbr)
         lbr->nr_bytes = bpf_get_branch_snapshot(lbr->entries, sizeof(lbr->entries), 0); /* required 5.16 kernel. */
 
     /* Other filters must be after bpf_get_branch_snapshot() to avoid polluting
      * LBR entries.
      */
     (void) bpf_probe_read_kernel(args, 8*cfg->fn_args.args_nr, ctx);
-    if (cfg->fn_args.with_retval)
+    if (cfg->fn_args.with_retval && (mode == BPFSNOOP_MODE_EXIT ||
+                                     mode == BPFSNOOP_MODE_SESSION_EXIT))
         (void) bpf_probe_read_kernel(&retval, sizeof(retval), ctx + 8*cfg->fn_args.args_nr);
 
     pid = bpf_get_current_pid_tgid() >> 32;
@@ -94,31 +166,34 @@ emit_bpfsnoop_event(void *ctx)
     if (cfg->pid && pid != cfg->pid)
         return BPF_OK;
 
-    fp = get_tracee_caller_fp(ctx, cfg->fn_args.args_nr, cfg->both_entry_exit || cfg->fn_args.with_retval); /* fp of tracee caller */
-    if (cfg->both_entry_exit) {
-        if (cfg->is_entry) {
-            session_id = gen_session_id(fp);
-            if (!filter(args, session_id))
-                return BPF_OK;
+    /* fp of tracee caller */
+    fp = get_tracee_caller_fp(ctx, cfg->fn_args.args_nr,
+                              cfg->both_entry_exit || cfg->fn_args.with_retval);
 
-            sess_init.session_id = session_id;
-            add_session(fp, &sess_init);
-            event_type = BPFSNOOP_EVENT_TYPE_FUNC_ENTRY;
-        } else {
-            sess = get_and_del_session(fp);
-            if (!sess)
-                return BPF_OK;
+    switch (mode) {
+    case BPFSNOOP_MODE_SESSION_ENTRY:
+        if (!init_session_entry(ctx, fp, args, &session_id))
+            return BPF_OK;
 
-            session_id = sess->session_id - 1;
-            event_type = BPFSNOOP_EVENT_TYPE_FUNC_EXIT;
-        }
-    } else {
+        event_type = BPFSNOOP_EVENT_TYPE_FUNC_ENTRY;
+        break;
+
+    case BPFSNOOP_MODE_SESSION_EXIT:
+        if (!init_session_exit(ctx, fp, &session_id))
+            return BPF_OK;
+
+        event_type = BPFSNOOP_EVENT_TYPE_FUNC_EXIT;
+        break;
+
+    case BPFSNOOP_MODE_ENTRY:
+    case BPFSNOOP_MODE_EXIT:
         session_id = gen_session_id(fp);
         if (!filter(args, session_id))
             return BPF_OK;
 
-        event_type = cfg->is_entry ? BPFSNOOP_EVENT_TYPE_FUNC_ENTRY
-                                   : BPFSNOOP_EVENT_TYPE_FUNC_EXIT;
+        event_type = (mode == BPFSNOOP_MODE_ENTRY) ? BPFSNOOP_EVENT_TYPE_FUNC_ENTRY
+                                                   : BPFSNOOP_EVENT_TYPE_FUNC_EXIT;
+        break;
     }
 
     buffer_sz = sizeof(*evt) + cfg->fn_args.buf_size + cfg->fn_args.data_size;
@@ -139,7 +214,7 @@ emit_bpfsnoop_event(void *ctx)
     evt->func_stack_id = -1;
     if (cfg->output_stack)
         evt->func_stack_id = bpf_get_stackid(ctx, &bpfsnoop_stacks, BPF_F_FAST_STACK_CMP);
-    if (cfg->output_lbr && can_output)
+    if (cfg->output_lbr && can_output_lbr)
         output_lbr_data(lbr, session_id);
     ptr = buffer + sizeof(*evt);
     output_fn_args(args, ptr, retval);

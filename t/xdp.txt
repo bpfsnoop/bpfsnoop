@@ -4,10 +4,10 @@
 # These tests are for tracing XDP programs in the kernel.
 
 # install XDP program
-name: xdp::dev_xdp_install
+name: xdp::xdp_install
 tag: xdp,fnarg
-test: -k dev_xdp_install --output-arg 'prog->aux->id' --output-arg 'prog->aux->name' --output-arg 'prog->aux->used_maps[0]->map_type' --output-arg 'prog->aux->used_maps[0]->name' --output-arg 'dev->ifindex' --output-arg 'dev->name'
-match: (array(char[16]))'prog->aux->name'="crc"
+test: -k generic_xdp_install --output-arg 'xdp->prog->aux->id' --output-arg 'xdp->prog->aux->name' --output-arg 'xdp->prog->aux->used_maps[0]->map_type' --output-arg 'xdp->prog->aux->used_maps[0]->name' --output-arg 'dev->ifindex' --output-arg 'dev->name'
+match: (array(char[16]))'xdp->prog->aux->name'="crc"
 trigger: ./xdpcrc -d lo
 
 ---
@@ -25,7 +25,7 @@ trigger: ping -c 1 -s 64 127.0.0.1
 # both entry and exit mode
 name: xdp::entry_exit
 tag: xdp,pkt,fnarg
-test: -p 'n:crc' --filter-pkt 'host 127.0.0.1 and icmp' --output-arg '*ctx' --output-arg 'buf(ctx->data, 34)' -m 'entry,exit'
+test: -p 'n:crc' --filter-pkt 'host 127.0.0.1 and icmp' --output-arg '*ctx' --output-arg 'buf(ctx->data, 34)' -m 'entry,exit' -v
 match: → crc[bpf]
 prerequisite: ./xdpcrc -d lo
 trigger: ping -c 1 -s 64 127.0.0.1

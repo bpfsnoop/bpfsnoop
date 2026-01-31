@@ -10,6 +10,7 @@ const (
 	configFlagOutputArgIdx
 	configFlagBothEntryExitIdx
 	configFlagIsEntryIdx
+	configFlagIsFsessionIdx
 )
 
 type BpfsnoopConfig struct {
@@ -20,6 +21,12 @@ type BpfsnoopConfig struct {
 	Pad       [3]uint8
 	FnArgsBuf uint32
 	ArgDataSz uint32
+}
+
+func (cfg *BpfsnoopConfig) setFlags(v bool, idx int) {
+	if v {
+		cfg.Flags |= 1 << idx
+	}
 }
 
 func (cfg *BpfsnoopConfig) SetOutputLbr(v bool) {
@@ -56,4 +63,8 @@ func (cfg *BpfsnoopConfig) SetIsEntry(v bool) {
 	if v {
 		cfg.Flags |= 1 << configFlagIsEntryIdx
 	}
+}
+
+func (cfg *BpfsnoopConfig) SetIsFsession(v bool) {
+	cfg.setFlags(v, configFlagIsFsessionIdx)
 }

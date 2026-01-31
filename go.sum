@@ -4,8 +4,8 @@ github.com/Asphaltt/mybtf v0.0.0-20250708022622-be6f548674b2 h1:IzK5ZB+DlIrLYX2/
 github.com/Asphaltt/mybtf v0.0.0-20250708022622-be6f548674b2/go.mod h1:ZxswciFofS8TXGsc2j5CWCY8O3XwKEysCnU7hoI1fnI=
 github.com/BurntSushi/toml v1.1.0 h1:ksErzDEI1khOiGPgpwuI7x2ebx/uXQNw7xJpn9Eq1+I=
 github.com/BurntSushi/toml v1.1.0/go.mod h1:CxXYINrC8qIiEnFrOxCa7Jy5BFHlXnUU2pbicEuybxQ=
-github.com/bpfsnoop/ebpf v0.20.0-rb h1:1QZXzQEl9enJD0fE/K+yyaoOMTJmRwfxZ/p68zvN37Q=
-github.com/bpfsnoop/ebpf v0.20.0-rb/go.mod h1:pzLjFymM+uZPLk/IXZUL63xdx5VXEo+enTzxkZXdycw=
+github.com/bpfsnoop/ebpf v0.20.0-rb.0.20260130060452-2694cba928f0 h1:jKm+5FglUhm0gFgDzRYssh7QPGC49sCsrUoc+NgNjVY=
+github.com/bpfsnoop/ebpf v0.20.0-rb.0.20260130060452-2694cba928f0/go.mod h1:pzLjFymM+uZPLk/IXZUL63xdx5VXEo+enTzxkZXdycw=
 github.com/bpfsnoop/gapstone v0.0.0-20250326151126-f4ba393504da h1:jMqMpXXLc7sZrIUOatcnO6cmlV1MuLZPtDMmaXksu6I=
 github.com/bpfsnoop/gapstone v0.0.0-20250326151126-f4ba393504da/go.mod h1:z8pjvjRs6upeW3rOvXbyAua+ngoozVZg6HwTdRsALoM=
 github.com/caio/go-tdigest/v4 v4.0.1 h1:sx4ZxjmIEcLROUPs2j1BGe2WhOtHD6VSe6NNbBdKYh4=

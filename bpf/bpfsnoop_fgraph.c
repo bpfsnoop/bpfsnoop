@@ -9,6 +9,13 @@
 #include "bpfsnoop_fn_args_output.h"
 #include "bpfsnoop_sess.h"
 #include "bpfsnoop_stack.h"
+#include "bpfsnoop_tracing.h"
+
+enum bpfsnoop_hook_mode {
+    BPFSNOOP_HOOK_ENTRY = 0,
+    BPFSNOOP_HOOK_EXIT,
+    BPFSNOOP_HOOK_SESSION,
+};
 
 struct bpfsnoop_fn_args {
     __u32 args_nr;
@@ -20,7 +27,7 @@ struct bpfsnoop_fn_args {
 struct bpfsnoop_fgraph_configs {
     __u64 func_ip;
     __u32 max_depth;
-    __u8 entry; /* 1 for entry, 0 for exit */
+    __u8 hook_mode;
     __u8 tailcall_in_bpf2bpf; /* supported since v5.10 for x86_64 */
     __u8 pad[2];
     __u32 mypid;
@@ -224,6 +231,7 @@ int BPF_PROG(bpfsnoop_fgraph)
     __u64 args[MAX_FN_ARGS];
     __u64 retval = 0;
     size_t buffer_sz;
+    bool is_entry;
     int depth = 0;
     void *buffer;
 
@@ -242,14 +250,18 @@ int BPF_PROG(bpfsnoop_fgraph)
     if (!buffer)
         return BPF_OK;
 
+    is_entry = cfg->hook_mode == BPFSNOOP_HOOK_ENTRY;
+    if (cfg->hook_mode == BPFSNOOP_HOOK_SESSION)
+        is_entry = !bpf_session_is_return(ctx);
+
     (void) bpf_probe_read_kernel(args, 8*cfg->fn_args.args_nr, ctx);
-    if (cfg->fn_args.with_retval)
+    if (cfg->fn_args.with_retval && !is_entry)
         /* typeof(ctx) is 'unsigned long long *', not 'void *'. */
         (void) bpf_probe_read_kernel(&retval, sizeof(retval), (void *)ctx + 8*cfg->fn_args.args_nr);
 
     evt = (typeof(evt)) buffer;
-    evt->type = cfg->entry ? BPFSNOOP_EVENT_TYPE_GRAPH_ENTRY
-                           : BPFSNOOP_EVENT_TYPE_GRAPH_EXIT;
+    evt->type = is_entry ? BPFSNOOP_EVENT_TYPE_GRAPH_ENTRY
+                         : BPFSNOOP_EVENT_TYPE_GRAPH_EXIT;
     evt->length = buffer_sz;
     evt->kernel_ts = (__u32) bpf_ktime_get_ns();
     if (cfg->tailcall_in_bpf2bpf)

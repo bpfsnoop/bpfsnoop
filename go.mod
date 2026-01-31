@@ -44,4 +44,4 @@ require (
 	golang.org/x/sys v0.37.0
 )
 
-replace github.com/cilium/ebpf => github.com/bpfsnoop/ebpf v0.20.0-rb
+replace github.com/cilium/ebpf => github.com/bpfsnoop/ebpf v0.20.0-rb.0.20260130060452-2694cba928f0

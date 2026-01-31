@@ -23,7 +23,8 @@ struct bpfsnoop_config {
     __u32 output_arg:1;
     __u32 both_entry_exit:1;
     __u32 is_entry:1;
-    __u32 pad:26;
+    __u32 is_fsession:1;
+    __u32 pad:25;
     __u32 pid;
 
     struct bpfsnoop_fn_args fn_args;

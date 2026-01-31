@@ -64,7 +64,7 @@ func ignoreFuncTraceVerifierErr(err error, fnName string) bool {
 	return false
 }
 
-func (t *bpfTracing) traceFunc(spec *ebpf.CollectionSpec, reusedMaps map[string]*ebpf.Map, fn *KFunc, bothEntryExit, isExit, stack bool) error {
+func (t *bpfTracing) traceFunc(spec *ebpf.CollectionSpec, reusedMaps map[string]*ebpf.Map, fn *KFunc, bothEntryExit, isExit, fsession, stack bool) error {
 	spec = spec.Copy()
 
 	isTracepoint := fn.IsTp
@@ -100,13 +100,16 @@ func (t *bpfTracing) traceFunc(spec *ebpf.CollectionSpec, reusedMaps map[string]
 	}
 
 	if err := setBpfsnoopConfig(spec, fn.Ksym.addr, len(fn.Prms), fnArgsBufSize,
-		argDataSize, fn.Flag.lbr, stack, fn.Pkt, bothEntryExit, withRet); err != nil {
+		argDataSize, fn.Flag.lbr, stack, fn.Pkt, bothEntryExit, withRet, fsession); err != nil {
 		return fmt.Errorf("failed to set bpfsnoop config: %w", err)
 	}
 
 	attachType := ebpf.AttachTraceFEntry
 	if isExit {
 		attachType = ebpf.AttachTraceFExit
+	}
+	if bothEntryExit && fsession {
+		attachType = ebpf.AttachTraceFSession
 	}
 	if isTracepoint {
 		attachType = ebpf.AttachTraceRawTp
@@ -141,9 +144,10 @@ func (t *bpfTracing) traceFunc(spec *ebpf.CollectionSpec, reusedMaps map[string]
 		return fmt.Errorf("failed to attach tracing: %w", err)
 	}
 
-	verboseLogIf(!isTracepoint && isExit, "Tracing(fexit) kernel function %s", fnName)
-	verboseLogIf(!isTracepoint && !isExit, "Tracing(fentry) kernel function %s", fnName)
-	verboseLogIf(isTracepoint, "Tracing kernel tracepoint %s", fnName)
+	verboseLogIf(attachType == ebpf.AttachTraceFExit, "Tracing(fexit) kernel function %s", fnName)
+	verboseLogIf(attachType == ebpf.AttachTraceFEntry, "Tracing(fentry) kernel function %s", fnName)
+	verboseLogIf(attachType == ebpf.AttachTraceFSession, "Tracing(fsession) kernel function %s", fnName)
+	verboseLogIf(attachType == ebpf.AttachTraceRawTp, "Tracing kernel tracepoint %s", fnName)
 
 	t.llock.Lock()
 	t.progs = append(t.progs, prog)
@@ -167,22 +171,29 @@ func (t *bpfTracing) traceFuncs(errg *errgroup.Group, spec *ebpf.CollectionSpec,
 
 		if fn.IsTp {
 			errg.Go(func() error {
-				return t.traceFunc(spec, reusedMaps, fn, false, false, fn.Flag.stack)
+				return t.traceFunc(spec, reusedMaps, fn, false, false, false, fn.Flag.stack)
 			})
 			continue
 		}
 
 		if bothEntryExit {
+			if hasFsession {
+				errg.Go(func() error {
+					return t.traceFunc(spec, reusedMaps, fn, true, true, true, fn.Flag.stack)
+				})
+				continue
+			}
+
 			errg.Go(func() error {
-				return t.traceFunc(spec, reusedMaps, fn, true, false, false)
+				return t.traceFunc(spec, reusedMaps, fn, true, false, false, false)
 			})
 
 			errg.Go(func() error {
-				return t.traceFunc(spec, reusedMaps, fn, true, true, fn.Flag.stack)
+				return t.traceFunc(spec, reusedMaps, fn, true, true, false, fn.Flag.stack)
 			})
 		} else {
 			errg.Go(func() error {
-				return t.traceFunc(spec, reusedMaps, fn, false, hasModeExit(), fn.Flag.stack)
+				return t.traceFunc(spec, reusedMaps, fn, false, hasModeExit(), false, fn.Flag.stack)
 			})
 		}
 	}

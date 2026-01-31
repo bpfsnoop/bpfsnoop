@@ -17,6 +17,12 @@ import (
 	"github.com/bpfsnoop/bpfsnoop/internal/bpf"
 )
 
+const (
+	graphHookModeEntry int = iota
+	graphHookModeExit
+	graphHookModeSession
+)
+
 type tracingGraph struct {
 	l link.Link
 	p *ebpf.Program
@@ -32,7 +38,7 @@ func (t *tracingGraph) Close() {
 type bpfFgraphConfig struct {
 	FuncIP    uint64
 	MaxDepth  uint32
-	Entry     uint8 // 1 for entry, 0 for exit
+	Mode      uint8
 	TinBPF    uint8 // tailcall in bpf2bpf
 	Pad2      uint16
 	MyPID     uint32
@@ -44,11 +50,11 @@ type bpfFgraphConfig struct {
 
 func (t *bpfTracing) traceGraph(spec *ebpf.CollectionSpec,
 	reusedMaps map[string]*ebpf.Map, bp *ebpf.Program, params []FuncParamFlags,
-	ret FuncParamFlags, traceeName string, graph *FuncGraph, entry bool,
+	ret FuncParamFlags, traceeName string, graph *FuncGraph, entry, fsession bool,
 ) error {
 	tracingProgName := "bpfsnoop_fgraph"
 	progSpec := spec.Programs[tracingProgName]
-	fnArgsBufSize, err := injectOutputFuncArgs(progSpec, params, ret, !entry)
+	fnArgsBufSize, err := injectOutputFuncArgs(progSpec, params, ret, !entry || fsession)
 	if err != nil {
 		return fmt.Errorf("failed to inject output func args: %w", err)
 	}
@@ -58,10 +64,18 @@ func (t *bpfTracing) traceGraph(spec *ebpf.CollectionSpec,
 		graph.ArgsExSz = fnArgsBufSize
 	}
 
+	mode := graphHookModeEntry
+	if !entry {
+		mode = graphHookModeExit
+	}
+	if fsession {
+		mode = graphHookModeSession
+	}
+
 	var cfg bpfFgraphConfig
 	cfg.FuncIP = graph.IP
 	cfg.MaxDepth = uint32(graph.MaxDepth)
-	cfg.Entry = uint8(b2i(entry))
+	cfg.Mode = uint8(mode)
 	cfg.TinBPF = uint8(b2i(tailcallInfo.supportTailcallInBpf2bpf))
 	cfg.FnArgsNr = uint32(len(params))
 	cfg.WithRet = uint8(b2i(!entry))
@@ -75,6 +89,9 @@ func (t *bpfTracing) traceGraph(spec *ebpf.CollectionSpec,
 	attachType := ebpf.AttachTraceFExit
 	if entry {
 		attachType = ebpf.AttachTraceFEntry
+	}
+	if fsession {
+		attachType = ebpf.AttachTraceFSession
 	}
 
 	tailcallProgName := "bpfsnoop_fgraph_tailcallee"
@@ -119,8 +136,9 @@ func (t *bpfTracing) traceGraph(spec *ebpf.CollectionSpec,
 		return fmt.Errorf("failed to attach tracing graph target '%s': %w", traceeName, err)
 	}
 
-	verboseLogIf(entry, "Fentry func graph %s at %#x", traceeName, graph.IP)
-	verboseLogIf(!entry, "Fexit func graph %s at %#x", traceeName, graph.IP)
+	verboseLogIf(attachType == ebpf.AttachTraceFEntry, "Tracing(fentry) func graph %s at %#x", traceeName, graph.IP)
+	verboseLogIf(attachType == ebpf.AttachTraceFExit, "Tracing(fexit) func graph %s at %#x", traceeName, graph.IP)
+	verboseLogIf(attachType == ebpf.AttachTraceFSession, "Tracing(fsession) func graph %s at %#x", traceeName, graph.IP)
 
 	delete(coll.Maps, progArrayMapName)
 	delete(coll.Programs, tracingProgName)
@@ -139,12 +157,12 @@ func (t *bpfTracing) traceGraph(spec *ebpf.CollectionSpec,
 	return nil
 }
 
-func (t *bpfTracing) traceGraphFunc(spec *ebpf.CollectionSpec, reusedMaps map[string]*ebpf.Map, graph *FuncGraph, entry bool) error {
+func (t *bpfTracing) traceGraphFunc(spec *ebpf.CollectionSpec, reusedMaps map[string]*ebpf.Map, graph *FuncGraph, entry, fsession bool) error {
 	spec = spec.Copy()
 
 	fn := graph.Kfunc
 	traceeName := fn.Ksym.name
-	err := t.traceGraph(spec, reusedMaps, nil, fn.Prms, fn.Ret, traceeName, graph, entry)
+	err := t.traceGraph(spec, reusedMaps, nil, fn.Prms, fn.Ret, traceeName, graph, entry, fsession)
 	if err != nil {
 		return fmt.Errorf("failed to trace graph func '%s': %w", traceeName, err)
 	}
@@ -152,12 +170,12 @@ func (t *bpfTracing) traceGraphFunc(spec *ebpf.CollectionSpec, reusedMaps map[st
 	return nil
 }
 
-func (t *bpfTracing) traceGraphProg(spec *ebpf.CollectionSpec, reusedMaps map[string]*ebpf.Map, graph *FuncGraph, entry bool) error {
+func (t *bpfTracing) traceGraphProg(spec *ebpf.CollectionSpec, reusedMaps map[string]*ebpf.Map, graph *FuncGraph, entry, fsession bool) error {
 	spec = spec.Copy()
 
 	gp := graph.Bprog
 	traceeName := gp.funcName
-	err := t.traceGraph(spec, reusedMaps, gp.prog, gp.funcParams, gp.retParam, traceeName, graph, entry)
+	err := t.traceGraph(spec, reusedMaps, gp.prog, gp.funcParams, gp.retParam, traceeName, graph, entry, fsession)
 	if err != nil {
 		return fmt.Errorf("failed to trace graph prog '%s': %w", traceeName, err)
 	}
@@ -193,19 +211,32 @@ func (t *bpfTracing) traceGraphs(reusedMaps map[string]*ebpf.Map, graphs FuncGra
 
 	for _, graph := range graphs {
 		graph := graph
+		if hasFsession {
+			if graph.Kfunc != nil {
+				errg.Go(func() error {
+					return t.traceGraphFunc(spec, replacedMaps, graph, false, true)
+				})
+			} else {
+				errg.Go(func() error {
+					return t.traceGraphProg(spec, replacedMaps, graph, false, true)
+				})
+			}
+			continue
+		}
+
 		if graph.Kfunc != nil {
 			errg.Go(func() error {
-				return t.traceGraphFunc(spec, replacedMaps, graph, true)
+				return t.traceGraphFunc(spec, replacedMaps, graph, true, false)
 			})
 			errg.Go(func() error {
-				return t.traceGraphFunc(spec, replacedMaps, graph, false)
+				return t.traceGraphFunc(spec, replacedMaps, graph, false, false)
 			})
 		} else {
 			errg.Go(func() error {
-				return t.traceGraphProg(spec, replacedMaps, graph, true)
+				return t.traceGraphProg(spec, replacedMaps, graph, true, false)
 			})
 			errg.Go(func() error {
-				return t.traceGraphProg(spec, replacedMaps, graph, false)
+				return t.traceGraphProg(spec, replacedMaps, graph, false, false)
 			})
 		}
 	}

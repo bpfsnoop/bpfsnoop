@@ -17,6 +17,7 @@ import (
 var (
 	hasEndbr    bool
 	requiredLbr bool
+	hasFsession bool
 )
 
 type BPFFeatures struct {
@@ -64,22 +65,9 @@ func DetectBPFFeatures() error {
 		return errors.New("ringbuf map not supported")
 	}
 
-	krnl := getKernelBTF()
-	bpfFuncIDs, err := krnl.AnyTypeByName("bpf_func_id")
+	feat.HasBranchSnapshot, err = btfEnumValue("bpf_func_id", "BPF_FUNC_get_branch_snapshot")
 	if err != nil {
-		return fmt.Errorf("failed to find bpf_func_id type: %w", err)
-	}
-
-	enum, ok := bpfFuncIDs.(*btf.Enum)
-	if !ok {
-		return fmt.Errorf("bpf_func_id is not an enum")
-	}
-
-	for _, val := range enum.Values {
-		if val.Name == "BPF_FUNC_get_branch_snapshot" {
-			feat.HasBranchSnapshot = true
-			break
-		}
+		return err
 	}
 
 	if requiredLbr && !feat.HasBranchSnapshot {
@@ -90,10 +78,36 @@ func DetectBPFFeatures() error {
 		return errors.New("bpf_get_stackid() helper not supported for --output-stack")
 	}
 
+	hasFsession, err = btfEnumValue("bpf_attach_type", "BPF_TRACE_FSESSION")
+	if err != nil {
+		return err
+	}
+
 	hasEndbr, err = haveEndbrInsn(prog)
 	if err != nil {
 		return fmt.Errorf("failed to check endbr insn: %w", err)
 	}
 
 	return nil
+}
+
+func btfEnumValue(enum, value string) (bool, error) {
+	krnl := getKernelBTF()
+	bpfFuncIDs, err := krnl.AnyTypeByName(enum)
+	if err != nil {
+		return false, fmt.Errorf("failed to find %s type: %w", enum, err)
+	}
+
+	e, ok := bpfFuncIDs.(*btf.Enum)
+	if !ok {
+		return false, fmt.Errorf("%s is not an enum", enum)
+	}
+
+	for _, val := range e.Values {
+		if val.Name == value {
+			return true, nil
+		}
+	}
+
+	return false, nil
 }

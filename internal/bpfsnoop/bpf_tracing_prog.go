@@ -70,7 +70,7 @@ func correctArgTypeInParams(params []btf.FuncParam) ([]btf.FuncParam, error) {
 	return params, nil
 }
 
-func (t *bpfTracing) traceProg(spec *ebpf.CollectionSpec, reusedMaps map[string]*ebpf.Map, info *bpfTracingInfo, bprogs *bpfProgs, bothEntryExit, fexit, stack bool) error {
+func (t *bpfTracing) traceProg(spec *ebpf.CollectionSpec, reusedMaps map[string]*ebpf.Map, info *bpfTracingInfo, bprogs *bpfProgs, bothEntryExit, fexit, fsession, stack bool) error {
 	krnl := getKernelBTF()
 
 	params := info.fn.Type.(*btf.FuncProto).Params
@@ -110,13 +110,16 @@ func (t *bpfTracing) traceProg(spec *ebpf.CollectionSpec, reusedMaps map[string]
 
 	if err := setBpfsnoopConfig(spec, uint64(info.funcIP), len(info.params),
 		fnArgsBufSize, argDataSize, info.flag.lbr, stack,
-		bprog.pktOutput, bothEntryExit, fexit); err != nil {
+		bprog.pktOutput, bothEntryExit, fexit, fsession); err != nil {
 		return fmt.Errorf("failed to set bpfsnoop config: %w", err)
 	}
 
 	attachType := ebpf.AttachTraceFExit
 	if !fexit {
 		attachType = ebpf.AttachTraceFEntry
+	}
+	if bothEntryExit && fsession {
+		attachType = ebpf.AttachTraceFSession
 	}
 
 	progSpec.AttachTarget = info.prog
@@ -144,7 +147,9 @@ func (t *bpfTracing) traceProg(spec *ebpf.CollectionSpec, reusedMaps map[string]
 		return fmt.Errorf("failed to attach tracing prog %s: %w", traceeName, err)
 	}
 
-	VerboseLog("Tracing %s of prog %v", info.funcName, info.prog)
+	verboseLogIf(attachType == ebpf.AttachTraceFExit, "Tracing(fexit) prog %v func %s", info.prog, info.funcName)
+	verboseLogIf(attachType == ebpf.AttachTraceFEntry, "Tracing(fentry) prog %v func %s", info.prog, info.funcName)
+	verboseLogIf(attachType == ebpf.AttachTraceFSession, "Tracing(fsession) prog %v func %s", info.prog, info.funcName)
 
 	delete(coll.Programs, tracingFuncName)
 	t.llock.Lock()
@@ -168,16 +173,23 @@ func (t *bpfTracing) traceProgs(errg *errgroup.Group, spec *ebpf.CollectionSpec,
 		info := info
 
 		if bothEntryExit {
+			if hasFsession {
+				errg.Go(func() error {
+					return t.traceProg(spec, reusedMaps, info, bprogs, true, true, true, info.flag.stack)
+				})
+				continue
+			}
+
 			errg.Go(func() error {
-				return t.traceProg(spec, reusedMaps, info, bprogs, true, false, false)
+				return t.traceProg(spec, reusedMaps, info, bprogs, true, false, false, false)
 			})
 
 			errg.Go(func() error {
-				return t.traceProg(spec, reusedMaps, info, bprogs, true, true, info.flag.stack)
+				return t.traceProg(spec, reusedMaps, info, bprogs, true, true, false, info.flag.stack)
 			})
 		} else {
 			errg.Go(func() error {
-				return t.traceProg(spec, reusedMaps, info, bprogs, false, hasModeExit(), info.flag.stack)
+				return t.traceProg(spec, reusedMaps, info, bprogs, false, hasModeExit(), false, info.flag.stack)
 			})
 		}
 	}
