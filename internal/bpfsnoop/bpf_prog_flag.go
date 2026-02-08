@@ -23,6 +23,9 @@ type progFlagImmInfo struct {
 	lbr      bool
 	both     bool
 	pkt      bool
+	multi    bool
+	argName  string // matched arg name, used for multi grouping
+	argType  string // matched arg type, used for multi grouping
 }
 
 type progFlags struct {

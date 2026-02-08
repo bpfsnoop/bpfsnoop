@@ -92,18 +92,16 @@ func (a tcAction) Action() string {
 func outputFnRetval(sb *strings.Builder, info *funcInfo, s string, data []byte, f btfx.FindSymbol) {
 	var retval string
 
-	if info.isProg {
-		if info.progType == ebpf.XDP {
-			u32 := *(*uint32)(unsafe.Pointer(&data[0]))
-			retval = xdpAction(u32).Action()
-			goto L_output
-		}
+	if info.progType == ebpf.XDP {
+		u32 := *(*uint32)(unsafe.Pointer(&data[0]))
+		retval = xdpAction(u32).Action()
+		goto L_output
+	}
 
-		if info.progType == ebpf.SchedCLS {
-			u32 := *(*uint32)(unsafe.Pointer(&data[0]))
-			retval = tcAction(u32).Action()
-			goto L_output
-		}
+	if info.progType == ebpf.SchedCLS {
+		u32 := *(*uint32)(unsafe.Pointer(&data[0]))
+		retval = tcAction(u32).Action()
+		goto L_output
 	}
 
 	if info.proto != nil {
@@ -208,7 +206,7 @@ func outputFnArgs(sb *strings.Builder, info *funcInfo, helpers *Helpers, data []
 	}
 
 	retStr := ""
-	if info.retParam.IsStr {
+	if info.retParam.IsStr && len(data) >= maxOutputStrLen {
 		retStr = strx.NullTerminated(data[:maxOutputStrLen])
 	}
 	outputFnRetval(sb, info, retStr, data, f)

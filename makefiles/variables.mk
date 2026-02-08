@@ -70,7 +70,7 @@ define gen_bpf2go_vars3
 endef
 
 BPF2GO_MAP := Bpfsnoop Read Traceable Tracepoint Tracepoint_module Tailcall \
-	Feat=feature Graph=bpfsnoop_fgraph Insn=bpfsnoop_insn
+	Feat=feature Graph=bpfsnoop_fgraph Insn=bpfsnoop_insn Kmulti=bpfsnoop_kmulti
 
 $(foreach ent,$(BPF2GO_MAP),\
 	$(eval $(call gen_bpf2go_vars1,$(ent))) \

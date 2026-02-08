@@ -19,21 +19,19 @@ type funcInfo struct {
 	args     []funcArgumentOutput
 	params   []FuncParamFlags
 	retParam FuncParamFlags
-	argEntry int
-	argExit  int
-	argData  int
-	lbrMode  bool
-	stckMode bool
-	insnMode bool
-	grphMode bool
-	bothMode bool
-	pktTuple bool
-	isTp     bool
-	isProg   bool
 	progType ebpf.ProgramType
 }
 
-func getFuncInfo(funcIP uintptr, helpers *Helpers, graph *FuncGraph) *funcInfo {
+func findKfuncInMulti(funcIP uintptr, helpers *Helpers) *KFunc {
+	for _, km := range helpers.KfnsMulti {
+		if fn, ok := km.fns[funcIP]; ok {
+			return fn
+		}
+	}
+	return nil
+}
+
+func getFuncInfo(funcIP uintptr, helpers *Helpers, graph *FuncGraph, traceeFlags uint32) *funcInfo {
 	var info funcInfo
 	info.funcIP = funcIP
 
@@ -47,15 +45,6 @@ func getFuncInfo(funcIP uintptr, helpers *Helpers, graph *FuncGraph) *funcInfo {
 		info.args = progInfo.funcArgs
 		info.params = progInfo.funcParams
 		info.retParam = progInfo.retParam
-		info.pktTuple = progInfo.pktOutput
-		info.argEntry = progInfo.argEntrySz
-		info.argExit = progInfo.argExitSz
-		info.argData = progInfo.argDataSz
-		info.lbrMode = progInfo.flag.lbr
-		info.stckMode = progInfo.flag.stack
-		info.grphMode = progInfo.flag.graph
-		info.bothMode = progInfo.flag.both
-		info.isProg = true
 		info.progType = progInfo.progType
 		return &info
 	}
@@ -67,9 +56,16 @@ func getFuncInfo(funcIP uintptr, helpers *Helpers, graph *FuncGraph) *funcInfo {
 		info.name = fmt.Sprintf("0x%x", funcIP)
 	}
 
-	fn, ok := helpers.Kfuncs[funcIP]
-	if !ok && graph != nil {
-		fn = graph.Kfunc
+	var fn *KFunc
+	if haveFlag(traceeFlags, traceeFlagKmultiMode) {
+		fn = findKfuncInMulti(funcIP, helpers)
+	}
+	if fn == nil {
+		var ok bool
+		fn, ok = helpers.Kfuncs[funcIP]
+		if !ok && graph != nil {
+			fn = graph.Kfunc
+		}
 	}
 	if fn == nil {
 		return &info
@@ -79,30 +75,20 @@ func getFuncInfo(funcIP uintptr, helpers *Helpers, graph *FuncGraph) *funcInfo {
 	info.args = fn.Args
 	info.params = fn.Prms
 	info.retParam = fn.Ret
-	info.argEntry = fn.Ent
-	info.argExit = fn.Exit
-	info.argData = fn.Data
-	info.lbrMode = fn.Flag.lbr
-	info.stckMode = fn.Flag.stack
-	info.insnMode = fn.Insn
-	info.grphMode = fn.Flag.graph
-	info.bothMode = fn.Flag.both
-	info.pktTuple = fn.Pkt
 
 	if fn.IsTp {
 		info.name = fn.Func.Name + "[tp]"
-		info.isTp = true
 	}
 
 	return &info
 }
 
-func outputFuncInfo(sb *strings.Builder, fnInfo *funcInfo, helpers *Helpers, entrySz, exitSz int, exit, graph bool, data []byte) []byte {
+func outputFuncInfo(sb *strings.Builder, fnInfo *funcInfo, helpers *Helpers, entrySz, exitSz int, exit, isTp bool, data []byte) []byte {
 	fnName := fnInfo.name
 	if exit {
 		fnName = "← " + fnName
 	} else if !exit {
-		if !fnInfo.isTp {
+		if !isTp {
 			fnName = "→ " + fnName
 		} else {
 			fnName = "- " + fnName

@@ -93,7 +93,7 @@ func ParseFlags() (*Flags, error) {
 
 	f := flag.NewFlagSet("bpfsnoop", flag.ExitOnError)
 	f.StringSliceVarP(&flags.progs, "prog", "p", nil, "bpf prog info for bpfsnoop in format PROG[,PROG,..], PROG: PROGID[:<prog function name>], PROGID: <prog ID> or 'i/id:<prog ID>' or 'p/pinned:<pinned file>' or 't/tag:<prog tag>' or 'n/name:<prog full name>' or 'pid:<pid>'; all bpf progs will be traced if '*' is specified")
-	f.StringSliceVarP(&flags.kfuncs, "kfunc", "k", nil, "filter kernel functions, '(i)' prefix means insn tracing, '<kfunc>[:<arg>][:<type>]' format, e.g. 'tcp_v4_connect:sk:struct sock *', '*:(struct sk_buff *)skb'")
+	f.StringSliceVarP(&flags.kfuncs, "kfunc", "k", nil, "filter kernel functions, '(i)' prefix means insn tracing, '(m)' prefix means kprobe.multi tracing (requires typed arg), '<kfunc>[:<arg>][:<type>]' format")
 	f.StringSliceVarP(&flags.ktps, "tracepoint", "t", nil, "filter kernel tracepoints")
 	f.BoolVar(&kfuncAllKmods, "kfunc-all-kmods", false, "filter functions in all kernel modules")
 	f.StringSliceVar(&kfuncKmods, "kfunc-kmods", nil, "filter functions in specified kernel modules")
@@ -110,9 +110,9 @@ func ParseFlags() (*Flags, error) {
 	f.BoolVar(&outputFuncInsns, "output-insns", false, "output function's insns exec path, same as '(i)' in -k, only works with -k")
 	f.BoolVarP(&outputFuncGraph, "output-fgraph", "g", false, "output function call graph, works with -k,-p")
 	f.UintVar(&flags.fgraphDepth, "fgraph-max-depth", 5, "maximum depth of function call graph, larger means slower to start bpfsnoop, 5 by default")
-	f.StringSliceVar(&flags.fgraphInclude, "fgraph-include", nil, "limited functions in function call graph, empty means all functions, rules are same as -k")
-	f.StringSliceVar(&flags.fgraphExclude, "fgraph-exclude", nil, "exclude functions in function call graph, empty means no exclude, rules are same as -k")
-	f.StringSliceVar(&flags.fgraphExtra, "fgraph-extra", nil, "extra functions in function call graph as depth 1, rules are same as -k")
+	f.StringSliceVar(&flags.fgraphInclude, "fgraph-include", nil, "limited functions in function call graph, empty means all functions, rules are same as -k, '(m)' is not supported here yet")
+	f.StringSliceVar(&flags.fgraphExclude, "fgraph-exclude", nil, "exclude functions in function call graph, empty means no exclude, rules are same as -k, '(m)' is not supported here yet")
+	f.StringSliceVar(&flags.fgraphExtra, "fgraph-extra", nil, "extra functions in function call graph as depth 1, rules are same as -k, '(m)' is not supported here yet")
 	f.BoolVar(&flags.fgraphProto, "fgraph-proto", false, "output function prototype in function call graph, like --show-func-proto")
 	f.BoolVar(&flags.fgraphDebug, "fgraph-debug", false, "debug deadlock caused by fgraph")
 	f.BoolVar(&outputPkt, "output-pkt", false, "output packet's tuple info if tracee has skb/xdp argument")
@@ -181,6 +181,27 @@ func ParseFlags() (*Flags, error) {
 	}
 	if flags.fgraphDepth > 500 {
 		return nil, fmt.Errorf("--fgraph-max-depth is larger than limit 500")
+	}
+
+	for _, k := range flags.kfuncs {
+		if strings.Contains(k, "(m)") && strings.Contains(k, "(g)") {
+			return nil, fmt.Errorf("fgraph does not support '(m)' yet, got kfunc %q", k)
+		}
+	}
+	for _, k := range flags.fgraphInclude {
+		if strings.Contains(k, "(m)") {
+			return nil, fmt.Errorf("--fgraph-include does not support '(m)' yet, got %q", k)
+		}
+	}
+	for _, k := range flags.fgraphExclude {
+		if strings.Contains(k, "(m)") {
+			return nil, fmt.Errorf("--fgraph-exclude does not support '(m)' yet, got %q", k)
+		}
+	}
+	for _, k := range flags.fgraphExtra {
+		if strings.Contains(k, "(m)") {
+			return nil, fmt.Errorf("--fgraph-extra does not support '(m)' yet, got %q", k)
+		}
 	}
 
 	// check histogram
@@ -271,7 +292,23 @@ func hasModeExit() bool {
 }
 
 func (f *Flags) Kfuncs() []string {
-	return f.kfuncs
+	var kfuncs []string
+	for _, kf := range f.kfuncs {
+		if !strings.Contains(kf, "(m)") {
+			kfuncs = append(kfuncs, kf)
+		}
+	}
+	return kfuncs
+}
+
+func (f *Flags) KfuncsMulti() []string {
+	var kfuncs []string
+	for _, kf := range f.kfuncs {
+		if strings.Contains(kf, "(m)") {
+			kfuncs = append(kfuncs, kf)
+		}
+	}
+	return kfuncs
 }
 
 func (f *Flags) Ktps() []string {

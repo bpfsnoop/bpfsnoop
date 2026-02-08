@@ -106,6 +106,9 @@ func main() {
 	kfuncs, err = bpfsnoop.DetectTraceable(kfuncs)
 	assert.NoVerifierErr(err, "Failed to detect traceable for kfuncs: %v")
 
+	kfuncsMulti, err := bpfsnoop.FindKernelFuncsMulti(flags.KfuncsMulti(), kallsyms)
+	assert.NoErr(err, "Failed to find kernel functions for multi-mode: %v")
+
 	tpTs := time.Now()
 	ktps, err := bpfsnoop.FindKernelTracepoints(flags.Ktps(), kallsyms)
 	assert.NoVerifierErr(err, "Failed to detect tracepoints: %v")
@@ -161,7 +164,7 @@ func main() {
 	bpfsnoop.WarnLogIf(len(graphs) != 0, "funcgraph is possible to crash your kernel, please use it with caution!")
 
 	tracingTargets := bpfProgs.Tracings()
-	assert.True(len(tracingTargets)+len(kfuncs)+len(insns)+len(graphs) != 0, "No tracing target")
+	assert.True(len(tracingTargets)+len(kfuncs)+len(insns)+len(graphs)+len(kfuncsMulti) != 0, "No tracing target")
 
 	bpfsnoop.VerboseLog("Tracing bpf progs or kernel functions/tracepoints ..")
 
@@ -174,7 +177,7 @@ func main() {
 	bpfsnoop.LogIf(len(graphs) > 20, "bpfsnoop is tracing %d graph functions/progs, this may take a while", len(graphs))
 
 	tstarted := time.Now()
-	tracings, err := bpfsnoop.NewBPFTracing(bpfSpec, reusedMaps, bpfProgs, kfuncs, insns, graphs)
+	tracings, err := bpfsnoop.NewBPFTracing(bpfSpec, reusedMaps, bpfProgs, kfuncs, insns, graphs, kfuncsMulti)
 	assert.NoVerifierErr(err, "Failed to trace: %v")
 	bpfsnoop.DebugLog("Tracing %d tracees costs %s", len(tracings.Progs()), time.Since(tstarted))
 	var tended time.Time
@@ -227,6 +230,7 @@ func main() {
 			Kfuncs:    kfuncs,
 			Insns:     insns,
 			Graphs:    graphs,
+			KfnsMulti: kfuncsMulti,
 		})
 	})
 

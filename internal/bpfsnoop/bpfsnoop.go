@@ -32,15 +32,19 @@ const (
 )
 
 type Event struct {
-	Type    uint16
-	Length  uint16
-	KernNs  uint32
-	SessID  uint64
-	FuncIP  uintptr
-	CPU     uint32
-	Pid     uint32
-	Comm    [16]byte
-	StackID int64
+	Type             uint16
+	Length           uint16
+	KernNs           uint32
+	SessID           uint64
+	FuncIP           uintptr
+	CPU              uint32
+	Pid              uint32
+	Comm             [16]byte
+	StackID          int64
+	TraceeFlags      uint32
+	TraceeArgEntrySz uint32
+	TraceeArgExitSz  uint32
+	TraceeArgDataSz  uint32
 }
 
 func ptr2bytes(p unsafe.Pointer, size int) []byte {
@@ -55,6 +59,7 @@ type Helpers struct {
 	Kfuncs    KFuncs
 	Insns     FuncInsns
 	Graphs    FuncGraphs
+	KfnsMulti []kfuncInfoMulti
 }
 
 func Run(reader *ringbuf.Reader, maps map[string]*ebpf.Map, w io.Writer, helpers *Helpers) error {
@@ -104,9 +109,9 @@ func Run(reader *ringbuf.Reader, maps map[string]*ebpf.Map, w io.Writer, helpers
 			}
 
 			isExit := typ == eventTypeGraphExit
-			fnInfo := getFuncInfo(uintptr(event.FuncIP), helpers, graph)
+			fnInfo := getFuncInfo(uintptr(event.FuncIP), helpers, graph, 0)
 			data := data[sizeOfGraphEvent : sizeOfGraphEvent+int(event.Length)]
-			outputFuncInfo(&sb, fnInfo, helpers, graph.ArgsEnSz, graph.ArgsExSz, isExit, true, data)
+			outputFuncInfo(&sb, fnInfo, helpers, graph.ArgsEnSz, graph.ArgsExSz, isExit, false, data)
 			s := sb.String()
 			sb.Reset()
 
@@ -120,15 +125,20 @@ func Run(reader *ringbuf.Reader, maps map[string]*ebpf.Map, w io.Writer, helpers
 		}
 
 		event := (*Event)(unsafe.Pointer(&data[0]))
-		fnInfo := getFuncInfo(event.FuncIP, helpers, nil)
+		fnInfo := getFuncInfo(event.FuncIP, helpers, nil, event.TraceeFlags)
 		data = data[sizeOfEvent:]
 
 		var sess *Session
 		var duration time.Duration
-		requiredSession := fnInfo.insnMode || fnInfo.grphMode || (fnInfo.bothMode && !fnInfo.isTp)
+		isTp := haveFlag(event.TraceeFlags, traceeFlagIsTp)
+		isGraph := haveFlag(event.TraceeFlags, traceeFlagGraphMode)
+		requiredSession := haveFlag(event.TraceeFlags, traceeFlagInsnMode) ||
+			(isGraph && !isTp) ||
+			(haveFlag(event.TraceeFlags, traceeFlagBothMode) && !isTp) ||
+			haveFlag(event.TraceeFlags, traceeFlagSession)
 		if requiredSession {
 			if event.Type == eventTypeFuncEntry {
-				sess = sessions.Add(event.SessID, event.KernNs, fgraphMaxDepth, fnInfo.grphMode)
+				sess = sessions.Add(event.SessID, event.KernNs, fgraphMaxDepth, isGraph)
 			} else {
 				s, ok := sessions.GetAndDel(event.SessID + 1)
 				if ok {
@@ -143,7 +153,7 @@ func Run(reader *ringbuf.Reader, maps map[string]*ebpf.Map, w io.Writer, helpers
 			}
 		}
 
-		data = outputFuncInfo(&sb, fnInfo, helpers, fnInfo.argEntry, fnInfo.argExit, event.Type == eventTypeFuncExit, false, data)
+		data = outputFuncInfo(&sb, fnInfo, helpers, int(event.TraceeArgEntrySz), int(event.TraceeArgExitSz), event.Type == eventTypeFuncExit, isTp, data)
 
 		haveRetval := event.Type == eventTypeFuncExit
 		if colorfulOutput {
@@ -162,29 +172,29 @@ func Run(reader *ringbuf.Reader, maps map[string]*ebpf.Map, w io.Writer, helpers
 		}
 		fmt.Fprintln(&sb)
 
-		if fnInfo.pktTuple {
+		if haveFlag(event.TraceeFlags, traceeFlagOutputPkt) {
 			outputPktTuple(&sb, fnInfo, data[:sizeOfPktData], event)
 			data = data[sizeOfPktData:]
 		}
 
-		if fnInfo.argData != 0 {
+		if argDataSz := int(event.TraceeArgDataSz); argDataSz != 0 {
 			f := findSymbolHelper(uint64(event.FuncIP), helpers)
-			err := outputFuncArgAttrs(&sb, fnInfo.args, data[:fnInfo.argData], hist, tdigest, f)
+			err := outputFuncArgAttrs(&sb, fnInfo.args, data[:argDataSz], hist, tdigest, f)
 			if err != nil {
 				return fmt.Errorf("failed to output function arg attrs: %w", err)
 			}
 
-			data = data[fnInfo.argData:]
+			data = data[argDataSz:]
 		}
 
-		if fnInfo.lbrMode {
+		if haveFlag(event.TraceeFlags, traceeFlagOutputLbr) {
 			err := lbrStack.outputStack(&sb, helpers, &lbrData, lbrs, event)
 			if err != nil {
 				return fmt.Errorf("failed to output LBR stack: %w", err)
 			}
 		}
 
-		if fnInfo.stckMode && event.StackID >= 0 {
+		if haveFlag(event.TraceeFlags, traceeFlagOutputStack) && event.StackID >= 0 {
 			err := fnStack.output(&sb, helpers, stacks, fg, event)
 			if err != nil {
 				return fmt.Errorf("failed to output function stack: %w", err)

@@ -17,17 +17,30 @@ struct bpfsnoop_fn_args {
 } __attribute__((packed));
 
 struct bpfsnoop_config {
-    __u32 output_lbr:1;
-    __u32 output_stack:1;
-    __u32 output_pkt:1;
-    __u32 output_arg:1;
-    __u32 both_entry_exit:1;
-    __u32 is_entry:1;
-    __u32 is_fsession:1;
-    __u32 pad:25;
+    union {
+        struct {
+            __u32 output_lbr:1;
+            __u32 output_stack:1;
+            __u32 output_pkt:1;
+            __u32 output_arg:1;
+            __u32 both_entry_exit:1;
+            __u32 is_entry:1;
+            __u32 is_session:1;
+            __u32 insn_mode:1;
+            __u32 graph_mode:1;
+            __u32 is_tp:1;
+            __u32 is_prog:1;
+            __u32 kmulti_mode:1;
+            __u32 pad:20;
+        } flags;
+        __u32 tracee_flags;
+    };
     __u32 pid;
 
     struct bpfsnoop_fn_args fn_args;
+    __u32 tracee_arg_entry_size;
+    __u32 tracee_arg_exit_size;
+    __u32 tracee_arg_data_size;
 } __attribute__((packed));
 
 volatile const struct bpfsnoop_config bpfsnoop_config = {};

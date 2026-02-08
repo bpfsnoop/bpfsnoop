@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/Asphaltt/mybtf"
+	"github.com/bpfsnoop/bpfsnoop/internal/slicex"
 	"github.com/cilium/ebpf/btf"
 )
 
@@ -235,11 +236,7 @@ func inferenceKfuncKmods(kfuncs, kmods []string, ksyms *Kallsyms) ([]string, err
 	return slices.Compact(kmods), nil
 }
 
-func FindKernelFuncs(funcs []string, ksyms *Kallsyms, maxArgs int) (KFuncs, error) {
-	if len(funcs) == 0 {
-		return KFuncs{}, nil
-	}
-
+func prepareKmods(funcs []string, ksyms *Kallsyms) ([]string, error) {
 	kmods, err := inferenceKfuncKmods(funcs, kfuncKmods, ksyms)
 	if err != nil {
 		return nil, fmt.Errorf("failed to inference kernel modules: %w", err)
@@ -253,8 +250,18 @@ func FindKernelFuncs(funcs []string, ksyms *Kallsyms, maxArgs int) (KFuncs, erro
 		}
 	}
 
-	slices.Sort(kmods)
-	kmods = slices.Compact(kmods)
+	return slicex.SortCompact(kmods), nil
+}
+
+func FindKernelFuncs(funcs []string, ksyms *Kallsyms, maxArgs int) (KFuncs, error) {
+	if len(funcs) == 0 {
+		return KFuncs{}, nil
+	}
+
+	kmods, err := prepareKmods(funcs, ksyms)
+	if err != nil {
+		return nil, err
+	}
 
 	return searchKernelFuncs(funcs, kmods, ksyms, maxArgs)
 }

@@ -44,6 +44,10 @@ func parseKfuncFlag(k string) (KfuncFlag, error) {
 			kf.pkt = true
 			k = k[3:]
 		}
+		if strings.HasPrefix(k, "(m)") {
+			kf.multi = true
+			k = k[3:]
+		}
 	}
 	kf.insn = kf.insn || outputFuncInsns
 	kf.graph = kf.graph || outputFuncGraph
@@ -53,6 +57,9 @@ func parseKfuncFlag(k string) (KfuncFlag, error) {
 	kf.pkt = kf.pkt || outputPkt
 	if kf.insn && kf.graph {
 		return kf, fmt.Errorf("kfunc %s cannot be traced with both insn and graph", k)
+	}
+	if kf.multi && kf.insn {
+		return kf, fmt.Errorf("kfunc %s cannot be traced with both multi and insn", k)
 	}
 
 	fields := strings.Split(k, ":")
@@ -81,6 +88,15 @@ func parseKfuncFlag(k string) (KfuncFlag, error) {
 
 	default:
 		return kf, fmt.Errorf("invalid kfunc flag: %s", k)
+	}
+
+	if kf.multi && kf.typ == "" {
+		return kf, fmt.Errorf("multi mode requires typed argument, e.g. '(m)*:(struct sk_buff *)skb', got '%s'", k)
+	}
+
+	if kf.multi {
+		kf.argName = kf.arg
+		kf.argType = kf.typ
 	}
 
 	return kf, nil
