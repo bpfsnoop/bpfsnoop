@@ -49,6 +49,7 @@ func parseKfuncFlag(k string) (KfuncFlag, error) {
 			k = k[3:]
 		}
 	}
+	kf.fltrExpr = k
 	kf.insn = kf.insn || outputFuncInsns
 	kf.graph = kf.graph || outputFuncGraph
 	kf.stack = kf.stack || outputFuncStack

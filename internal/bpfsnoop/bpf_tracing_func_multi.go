@@ -37,6 +37,7 @@ func skipKprobeMultiSymbol(sym string) bool {
 }
 
 type kfuncMultiGroupInfo struct {
+	flt string
 	fns []string
 	fn  *KFunc
 }
@@ -105,7 +106,8 @@ func (t *bpfTracing) traceFuncsMulti(errg *errgroup.Group, reusedMaps map[string
 			g, ok := groups[idx]
 			if !ok {
 				g = &kfuncMultiGroupInfo{
-					fn: kf,
+					flt: kf.Flag.fltrExpr,
+					fn:  kf,
 				}
 				groups[idx] = g
 			}
@@ -118,10 +120,10 @@ func (t *bpfTracing) traceFuncsMulti(errg *errgroup.Group, reusedMaps map[string
 
 		symbols, skipped := filterKprobeMultiSymbols(g.fns, availableFilterFuncs)
 		if len(skipped) != 0 {
-			DebugLog("Skip unavailable kprobe.multi symbols: %v", skipped)
+			DebugLog("Skip unavailable kprobe.multi symbols: %v for filter [%s]", skipped, g.flt)
 		}
 		if len(symbols) == 0 {
-			VerboseLog("Skipped attaching kprobe.multi, no available symbols from %v", g.fns)
+			VerboseLog("Skipped attaching kprobe.multi, no available symbols for filter [%s]", g.flt)
 			continue
 		}
 
