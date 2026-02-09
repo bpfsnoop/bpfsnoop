@@ -53,6 +53,9 @@ var tracingDenyFuncs = []string{
 	"__rcu_read_lock",
 	"__rcu_read_unlock",
 
+	// tools/testing/selftests/bpf/trace_helpers.c::trace_blacklist
+	"bpf_get_numa_node_id",
+
 	// check func_graph.go::fgraphDenyList for more explanation.
 	"bpf_dispatcher_xdp_func",
 }

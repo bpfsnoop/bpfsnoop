@@ -19,6 +19,23 @@ import (
 	"github.com/bpfsnoop/bpfsnoop/internal/mathx"
 )
 
+// tools/testing/selftests/bpf/trace_helpers.c::skip_entry()
+var kprobe_trace_skip_entry = []string{
+	"arch_cpu_idle",
+	"default_idle",
+	"rcu_",
+	"__ftrace_invalid_address__",
+}
+
+func skipKprobeMultiSymbol(sym string) bool {
+	for _, entry := range kprobe_trace_skip_entry {
+		if strings.HasPrefix(sym, entry) {
+			return true
+		}
+	}
+	return false
+}
+
 type kfuncMultiGroupInfo struct {
 	fns []string
 	fn  *KFunc
@@ -60,6 +77,11 @@ func filterKprobeMultiSymbols(symbols []string, funcs map[string]struct{}) ([]st
 	keep := make([]string, 0, len(symbols))
 	skip := make([]string, 0)
 	for _, sym := range symbols {
+		if skipKprobeMultiSymbol(sym) {
+			skip = append(skip, sym)
+			continue
+		}
+
 		if _, ok := funcs[sym]; ok {
 			keep = append(keep, sym)
 		} else {
