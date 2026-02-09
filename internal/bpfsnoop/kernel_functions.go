@@ -95,7 +95,7 @@ func isValistParam(p btf.FuncParam) bool {
 	return p.Name == "" && isVoid
 }
 
-func checkKfuncTraceable(fn *btf.Func, ksyms *Kallsyms, silent bool) (*KsymEntry, bool) {
+func checkKfuncTraceable(fn *btf.Func, ksyms *Kallsyms, allowDuped, silent bool) (*KsymEntry, bool) {
 	funcProto := fn.Type.(*btf.FuncProto)
 
 	if isValist := len(funcProto.Params) != 0 && isValistParam(funcProto.Params[len(funcProto.Params)-1]); isValist {
@@ -113,7 +113,7 @@ func checkKfuncTraceable(fn *btf.Func, ksyms *Kallsyms, silent bool) (*KsymEntry
 		verboseLogIf(!silent, "Failed to find ksym for %s", fn.Name)
 		return nil, false
 	}
-	if ksym.duped {
+	if ksym.duped && !allowDuped {
 		verboseLogIf(!silent, "Skip multiple-addrs ksym %s", fn.Name)
 		return nil, false
 	}
@@ -132,7 +132,7 @@ func matchKernelFunc(matches []*kfuncMatch, fn *btf.Func, maxArgs int, ksyms *Ka
 		return nil, false
 	}
 
-	ksym, traceable := checkKfuncTraceable(fn, ksyms, silent)
+	ksym, traceable := checkKfuncTraceable(fn, ksyms, match.flag.multi, silent)
 	if !traceable {
 		return nil, false
 	}

@@ -272,7 +272,7 @@ func (p *FuncGraphParser) checkIncludedKfunc(funcName string) (*KFunc, error) {
 			return false // skip if not a function type
 		}
 
-		_, traceable := checkKfuncTraceable(fn, p.ksyms, false)
+		_, traceable := checkKfuncTraceable(fn, p.ksyms, false, false)
 		if !traceable {
 			DebugLog("Function %s is not traceable\n", funcName)
 			return false // skip if not traceable
