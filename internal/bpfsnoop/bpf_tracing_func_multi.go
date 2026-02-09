@@ -4,8 +4,10 @@
 package bpfsnoop
 
 import (
+	"bufio"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/btf"
@@ -22,7 +24,57 @@ type kfuncMultiGroupInfo struct {
 	fn  *KFunc
 }
 
+func loadAvailableFilterFunctions() (map[string]struct{}, error) {
+	var f *os.File
+	var err error
+
+	// Linux v6.17+ enforce this new path for tracing functionality.
+	f, err = os.Open("/sys/kernel/tracing/available_filter_functions")
+	if err != nil {
+		f, err = os.Open("/sys/kernel/debug/tracing/available_filter_functions")
+		if err != nil {
+			return nil, fmt.Errorf("failed to open available_filter_functions: %w", err)
+		}
+	}
+	defer f.Close()
+
+	funcs := make(map[string]struct{}, 4096)
+	scanner := bufio.NewScanner(f)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" {
+			continue
+		}
+		// Usually "<symbol> [module]".
+		name := strings.Fields(line)[0]
+		funcs[name] = struct{}{}
+	}
+	if err := scanner.Err(); err != nil {
+		return nil, fmt.Errorf("failed to read available_filter_functions: %w", err)
+	}
+
+	return funcs, nil
+}
+
+func filterKprobeMultiSymbols(symbols []string, funcs map[string]struct{}) ([]string, []string) {
+	keep := make([]string, 0, len(symbols))
+	skip := make([]string, 0)
+	for _, sym := range symbols {
+		if _, ok := funcs[sym]; ok {
+			keep = append(keep, sym)
+		} else {
+			skip = append(skip, sym)
+		}
+	}
+	return keep, skip
+}
+
 func (t *bpfTracing) traceFuncsMulti(errg *errgroup.Group, reusedMaps map[string]*ebpf.Map, fns []kfuncInfoMulti) error {
+	availableFilterFuncs, err := loadAvailableFilterFunctions()
+	if err != nil {
+		return fmt.Errorf("failed to load kprobe.multi available symbols: %w", err)
+	}
+
 	groups := make(map[int]*kfuncMultiGroupInfo)
 	for _, fn := range fns {
 		for _, kf := range fn.fns {
@@ -41,6 +93,17 @@ func (t *bpfTracing) traceFuncsMulti(errg *errgroup.Group, reusedMaps map[string
 
 	for _, g := range groups {
 		g := g
+
+		symbols, skipped := filterKprobeMultiSymbols(g.fns, availableFilterFuncs)
+		if len(skipped) != 0 {
+			DebugLog("Skip unavailable kprobe.multi symbols: %v", skipped)
+		}
+		if len(symbols) == 0 {
+			VerboseLog("Skipped attaching kprobe.multi, no available symbols from %v", g.fns)
+			continue
+		}
+
+		g.fns = symbols
 		errg.Go(func() error {
 			return t.traceKfuncMulti(reusedMaps, g)
 		})
@@ -90,6 +153,9 @@ func (t *bpfTracing) traceKfuncMultiMode(reusedMaps map[string]*ebpf.Map, g *kfu
 
 	fn := g.fn
 	bothEntryExit := sessionMode
+	if err := validateKmultiArgOutput(fn); err != nil {
+		return err
+	}
 
 	tracingFuncName := "bpfsnoop_kmulti"
 	progSpec := spec.Programs[tracingFuncName]
@@ -111,9 +177,9 @@ func (t *bpfTracing) traceKfuncMultiMode(reusedMaps map[string]*ebpf.Map, g *kfu
 	fn.Data = argDataSize
 
 	withRet := sessionMode || isExit
-	fnArgsBufSize, err := injectOutputFuncArgs(progSpec, fn.Prms, fn.Ret, withRet)
+	fnArgsBufSize, err := injectOutputKmultiFnArgs(progSpec, maxArgsKmulti, withRet)
 	if err != nil {
-		return fmt.Errorf("failed to inject output func args: %w", err)
+		return fmt.Errorf("failed to inject output func args for kmulti: %w", err)
 	}
 
 	argEntrySize, argExitSize := 0, 0
@@ -197,6 +263,22 @@ func (t *bpfTracing) traceKfuncMultiMode(reusedMaps map[string]*ebpf.Map, g *kfu
 		p: prog,
 	})
 	t.llock.Unlock()
+
+	return nil
+}
+
+func validateKmultiArgOutput(fn *KFunc) error {
+	if len(argOutput.args) == 0 {
+		return nil
+	}
+
+	for _, a := range argOutput.args {
+		for _, v := range a.vars {
+			if v != fn.Flag.argName {
+				return fmt.Errorf("kmulti --output-arg '%s' must match trace arg '%s'", a.expr, fn.Flag.argName)
+			}
+		}
+	}
 
 	return nil
 }

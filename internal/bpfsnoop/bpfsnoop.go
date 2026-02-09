@@ -111,7 +111,7 @@ func Run(reader *ringbuf.Reader, maps map[string]*ebpf.Map, w io.Writer, helpers
 			isExit := typ == eventTypeGraphExit
 			fnInfo := getFuncInfo(uintptr(event.FuncIP), helpers, graph, 0)
 			data := data[sizeOfGraphEvent : sizeOfGraphEvent+int(event.Length)]
-			outputFuncInfo(&sb, fnInfo, helpers, graph.ArgsEnSz, graph.ArgsExSz, isExit, false, data)
+			outputFuncInfo(&sb, fnInfo, helpers, graph.ArgsEnSz, graph.ArgsExSz, isExit, false, false, data)
 			s := sb.String()
 			sb.Reset()
 
@@ -132,6 +132,7 @@ func Run(reader *ringbuf.Reader, maps map[string]*ebpf.Map, w io.Writer, helpers
 		var duration time.Duration
 		isTp := haveFlag(event.TraceeFlags, traceeFlagIsTp)
 		isGraph := haveFlag(event.TraceeFlags, traceeFlagGraphMode)
+		isKmulti := haveFlag(event.TraceeFlags, traceeFlagKmultiMode)
 		requiredSession := haveFlag(event.TraceeFlags, traceeFlagInsnMode) ||
 			(isGraph && !isTp) ||
 			(haveFlag(event.TraceeFlags, traceeFlagBothMode) && !isTp) ||
@@ -153,7 +154,7 @@ func Run(reader *ringbuf.Reader, maps map[string]*ebpf.Map, w io.Writer, helpers
 			}
 		}
 
-		data = outputFuncInfo(&sb, fnInfo, helpers, int(event.TraceeArgEntrySz), int(event.TraceeArgExitSz), event.Type == eventTypeFuncExit, isTp, data)
+		data = outputFuncInfo(&sb, fnInfo, helpers, int(event.TraceeArgEntrySz), int(event.TraceeArgExitSz), event.Type == eventTypeFuncExit, isTp, isKmulti, data)
 
 		haveRetval := event.Type == eventTypeFuncExit
 		if colorfulOutput {

@@ -83,7 +83,7 @@ func getFuncInfo(funcIP uintptr, helpers *Helpers, graph *FuncGraph, traceeFlags
 	return &info
 }
 
-func outputFuncInfo(sb *strings.Builder, fnInfo *funcInfo, helpers *Helpers, entrySz, exitSz int, exit, isTp bool, data []byte) []byte {
+func outputFuncInfo(sb *strings.Builder, fnInfo *funcInfo, helpers *Helpers, entrySz, exitSz int, exit, isTp, isKmulti bool, data []byte) []byte {
 	fnName := fnInfo.name
 	if exit {
 		fnName = "← " + fnName
@@ -103,19 +103,45 @@ func outputFuncInfo(sb *strings.Builder, fnInfo *funcInfo, helpers *Helpers, ent
 	}
 
 	withRetval := exit
-	argSz := entrySz
-	if withRetval {
-		argSz = exitSz
-	}
-	if argSz != 0 {
-		outputFnArgs(sb, fnInfo, helpers, data[:argSz], withRetval)
-		data = data[argSz:]
-	} else {
-		fmt.Fprint(sb, "=()")
-		if withRetval {
-			fmt.Fprint(sb, " retval=(void)")
-		}
+	argSz := getArgSize(entrySz, exitSz, withRetval)
+	if argSz == 0 {
+		outputEmptyArgs(sb, withRetval, isKmulti)
+		return data
 	}
 
+	argsData := data[:argSz]
+	if isKmulti {
+		outputFuncArgsKmulti(sb, fnInfo, helpers, argsData, withRetval)
+	} else {
+		outputFnArgs(sb, fnInfo, helpers, argsData, withRetval)
+	}
+
+	data = data[argSz:]
+
 	return data
+}
+
+func getArgSize(entrySz, exitSz int, withRetval bool) int {
+	if withRetval {
+		return exitSz
+	}
+	return entrySz
+}
+
+func outputEmptyArgs(sb *strings.Builder, withRetval, isKmulti bool) {
+	fmt.Fprint(sb, "=()")
+	if withRetval && !isKmulti {
+		fmt.Fprint(sb, " retval=(void)")
+	}
+}
+
+func outputFuncArgsKmulti(sb *strings.Builder, fnInfo *funcInfo, helpers *Helpers, argsData []byte, withRetval bool) {
+	outputFnArgsKmulti(sb, fnInfo, helpers, argsData)
+
+	if !withRetval || len(argsData) < (maxArgsKmulti+1)*8 {
+		return
+	}
+
+	f := findSymbolHelper(uint64(fnInfo.funcIP), helpers)
+	outputFnRetvalKmulti(sb, fnInfo, argsData[maxArgsKmulti*8:], f)
 }

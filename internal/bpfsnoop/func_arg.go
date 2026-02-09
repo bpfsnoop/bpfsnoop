@@ -146,3 +146,41 @@ func injectOutputFuncArgs(prog *ebpf.ProgramSpec, prms []FuncParamFlags, ret Fun
 
 	return size, nil
 }
+
+func genOutputKmultiFnArgs(argsNr int, withRetval bool) (asm.Instructions, int) {
+	// output_fn_args(__u64 *args, void *buff, __u64 retval)
+	// For kprobe.multi, use fixed raw argument slots only.
+	const regArg = asm.R3
+
+	var insns asm.Instructions
+	var off int16 = 0
+
+	for i := 0; i < argsNr; i++ {
+		insns = append(insns,
+			asm.LoadMem(regArg, asm.R1, off, asm.DWord),
+			asm.StoreMem(asm.R2, off, regArg, asm.DWord),
+		)
+		off += 8
+	}
+
+	if withRetval {
+		insns = append(insns,
+			asm.StoreMem(asm.R2, off, regArg, asm.DWord),
+		)
+		off += 8
+	}
+
+	insns = append(insns, asm.Return())
+	return insns, int(off)
+}
+
+func injectOutputKmultiFnArgs(prog *ebpf.ProgramSpec, argsNr int, withRetval bool) (int, error) {
+	if argsNr == 0 {
+		clearOutputFuncArgs(prog)
+		return 0, nil
+	}
+
+	insns, size := genOutputKmultiFnArgs(argsNr, withRetval)
+	injectInsns(prog, outputFnArgsStub, insns)
+	return size, nil
+}
