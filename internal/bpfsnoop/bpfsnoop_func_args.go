@@ -144,22 +144,22 @@ func readStr(data []byte) (string, []byte) {
 	return readStrN(data, maxOutputStrLen)
 }
 
-func outputFnArgs(sb *strings.Builder, info *funcInfo, helpers *Helpers, data []byte, withRetval bool) {
-	funcParamColors := []*color.Color{
-		color.RGB(0x9d, 0x9d, 0x9d),
-		color.RGB(0x7a, 0x7a, 0x7a),
-		color.RGB(0x54, 0x54, 0x54),
-		color.RGB(0x9c, 0x91, 0x91),
-		color.RGB(0x7c, 0x74, 0x74),
-		color.RGB(0x5c, 0x54, 0x54),
-		color.RGB(0x9d, 0x9d, 0x9d),
-		color.RGB(0x7a, 0x7a, 0x7a),
-		color.RGB(0x54, 0x54, 0x54),
-		color.RGB(0x9c, 0x91, 0x91),
-		color.RGB(0x7c, 0x74, 0x74),
-		color.RGB(0x5c, 0x54, 0x54),
-	}
+var funcParamColors = []*color.Color{
+	color.RGB(0x9d, 0x9d, 0x9d),
+	color.RGB(0x7a, 0x7a, 0x7a),
+	color.RGB(0x54, 0x54, 0x54),
+	color.RGB(0x9c, 0x91, 0x91),
+	color.RGB(0x7c, 0x74, 0x74),
+	color.RGB(0x5c, 0x54, 0x54),
+	color.RGB(0x9d, 0x9d, 0x9d),
+	color.RGB(0x7a, 0x7a, 0x7a),
+	color.RGB(0x54, 0x54, 0x54),
+	color.RGB(0x9c, 0x91, 0x91),
+	color.RGB(0x7c, 0x74, 0x74),
+	color.RGB(0x5c, 0x54, 0x54),
+}
 
+func outputFnArgs(sb *strings.Builder, info *funcInfo, helpers *Helpers, data []byte, withRetval bool) {
 	fmt.Fprintf(sb, "=(")
 
 	f := findSymbolHelper(uint64(info.funcIP), helpers)
@@ -246,7 +246,11 @@ func outputFnArgsKmulti(sb *strings.Builder, info *funcInfo, helpers *Helpers, d
 		}
 
 		fp := btfx.ReprFuncParam(&param, i, false, false, arg, 0, valNext, "", f)
-		fmt.Fprintf(sb, "%s", fp)
+		if colorfulOutput {
+			funcParamColors[i%len(funcParamColors)].Fprint(sb, fp)
+		} else {
+			fmt.Fprintf(sb, "%s", fp)
+		}
 	}
 	if showEllipsis {
 		if limit != 0 {
