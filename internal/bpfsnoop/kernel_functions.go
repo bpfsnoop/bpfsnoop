@@ -161,6 +161,28 @@ func matchKernelFunc(matches []*kfuncMatch, fn *btf.Func, maxArgs int, ksyms *Ka
 		return &kf, true
 	}
 
+	// For kprobe.multi, allow functions with more total args as long as the
+	// matched trace argument is still retrievable from register-passed args.
+	if match.flag.multi {
+		for i, p := range funcProto.Params {
+			if p.Name != match.flag.argName {
+				continue
+			}
+			if i < maxArgs {
+				kf := KFunc{Ksym: ksym, Func: fn}
+				kf.Prms = params
+				kf.Insn = match.flag.insn
+				kf.Flag = match.flag.progFlagImmInfo
+				kf.Ret = ret
+				return &kf, true
+			}
+
+			verboseLogIf(!silent, "Skip function %s because matched arg %s index %d exceeds limit %d args\n",
+				fn.Name, match.flag.argName, i, maxArgs)
+			return nil, false
+		}
+	}
+
 	verboseLogIf(!silent, "Skip function %s with %d args because of limit %d args\n",
 		fn.Name, len(funcProto.Params), maxArgs)
 
