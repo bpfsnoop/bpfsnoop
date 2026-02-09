@@ -13,6 +13,7 @@
 #include "bpfsnoop_event_output.h"
 #include "bpfsnoop_fn_args_output.h"
 #include "bpfsnoop_lbr.h"
+#include "bpfsnoop_mode.h"
 #include "bpfsnoop_pkt_filter.h"
 #include "bpfsnoop_pkt_output.h"
 #include "bpfsnoop_sess.h"
@@ -48,74 +49,6 @@ gen_session_id(__u64 fp)
     __u32 rnd = bpf_get_prandom_u32();
 
     return ((__u64) rnd) << 32 | (fp & 0xFFFFFFFF);
-}
-
-enum bpfsnoop_mode {
-    BPFSNOOP_MODE_ENTRY = 0,
-    BPFSNOOP_MODE_EXIT,
-    BPFSNOOP_MODE_SESSION_ENTRY,
-    BPFSNOOP_MODE_SESSION_EXIT,
-};
-
-static __always_inline enum bpfsnoop_mode
-get_bpfsnoop_mode(void *ctx)
-{
-    bool is_entry = cfg->flags.is_entry;
-
-    if (cfg->flags.both_entry_exit && cfg->flags.is_session)
-        is_entry = !bpf_session_is_return(ctx);
-
-    if (cfg->flags.both_entry_exit)
-        return is_entry ? BPFSNOOP_MODE_SESSION_ENTRY : BPFSNOOP_MODE_SESSION_EXIT;
-
-    return is_entry ? BPFSNOOP_MODE_ENTRY : BPFSNOOP_MODE_EXIT;
-}
-
-static __always_inline bool
-init_session_entry(void *ctx, __u64 fp, __u64 *args, __u64 *session_id)
-{
-    struct bpfsnoop_sess sess_init = {};
-    __u64 *cookie, sid;
-
-    sid = gen_session_id(fp);
-    if (!filter(args, sid))
-        return false;
-
-    if (cfg->flags.is_session) {
-        /* The cookie has been cleared in trampoline. */
-        cookie = bpf_session_cookie(ctx);
-        *cookie = sid;
-    } else {
-        sess_init.session_id = sid;
-        add_session(fp, &sess_init);
-    }
-
-    *session_id = sid;
-    return true;
-}
-
-static __always_inline bool
-init_session_exit(void *ctx, __u64 fp, __u64 *session_id)
-{
-    struct bpfsnoop_sess *sess;
-    __u64 *cookie, sid;
-
-    if (cfg->flags.is_session) {
-        cookie = bpf_session_cookie(ctx);
-        sid = *cookie;
-        if (!sid)
-            return false;
-
-        *session_id = sid - 1;
-    } else {
-        sess = get_and_del_session(fp);
-        if (!sess)
-            return false;
-
-        *session_id = sess->session_id - 1;
-    }
-
-    return true;
 }
 
 static __always_inline int
@@ -162,14 +95,16 @@ emit_bpfsnoop_event(void *ctx)
 
     switch (mode) {
     case BPFSNOOP_MODE_SESSION_ENTRY:
-        if (!init_session_entry(ctx, fp, args, &session_id))
+        session_id = gen_session_id(fp);
+        if (!bpfsnoop_session_enter(ctx, fp, session_id, filter(args, session_id),
+                                    &session_id, cfg->flags.is_session))
             return BPF_OK;
 
         event_type = BPFSNOOP_EVENT_TYPE_FUNC_ENTRY;
         break;
 
     case BPFSNOOP_MODE_SESSION_EXIT:
-        if (!init_session_exit(ctx, fp, &session_id))
+        if (!bpfsnoop_session_exit(ctx, fp, &session_id, cfg->flags.is_session))
             return BPF_OK;
 
         event_type = BPFSNOOP_EVENT_TYPE_FUNC_EXIT;

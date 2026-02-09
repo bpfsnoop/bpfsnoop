@@ -152,7 +152,7 @@ func (t *bpfTracing) traceKfuncMultiMode(reusedMaps map[string]*ebpf.Map, g *kfu
 	}
 
 	fn := g.fn
-	bothEntryExit := sessionMode
+	bothEntryExit := fn.Flag.both
 	if err := validateKmultiArgOutput(fn); err != nil {
 		return err
 	}

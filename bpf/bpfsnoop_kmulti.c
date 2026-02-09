@@ -13,6 +13,7 @@
 #include "bpfsnoop_event_output.h"
 #include "bpfsnoop_fn_args_output.h"
 #include "bpfsnoop_lbr.h"
+#include "bpfsnoop_mode.h"
 #include "bpfsnoop_pkt_filter.h"
 #include "bpfsnoop_pkt_output.h"
 #include "bpfsnoop_sess.h"
@@ -25,15 +26,6 @@ volatile const __u32 CPU_MASK = 0xFFFF;
 volatile const __u64 FUNC_IP = 0;
 
 __u32 ready SEC(".data.ready") = 0;
-
-static __always_inline bool
-is_kprobe_session_ctx(void)
-{
-    /* bpf_session_cookie() is only valid on kprobe.session/fsession contexts.
-     * Keep this helper so call sites are readable.
-     */
-    return cfg->flags.is_session;
-}
 
 static __always_inline __u32
 read_args_from_ctx(struct pt_regs *ctx, __u64 *args)
@@ -69,9 +61,8 @@ read_args_from_ctx(struct pt_regs *ctx, __u64 *args)
 }
 
 static __always_inline bool
-filter_kmulti(struct pt_regs *ctx, __u64 *args, __u64 session_id)
+filter_kmulti(__u64 *args, __u64 session_id)
 {
-    (void) ctx;
     return filter_arg(args) && filter_pkt(args, session_id);
 }
 
@@ -88,13 +79,20 @@ gen_session_id(struct pt_regs *ctx)
     return ((__u64) rnd) << 32 | (fnip & 0xFFFFFFFF);
 }
 
+static __always_inline __u64
+get_kmulti_session_key(struct pt_regs *ctx)
+{
+    return bpf_get_func_ip(ctx);
+}
+
 static __always_inline int
 emit_bpfsnoop_kmulti_event(struct pt_regs *ctx)
 {
-    struct bpfsnoop_lbr_data *lbr;
-    __u64 args[MAX_FN_ARGS] = {};
+    __u64 args[MAX_FN_ARGS] = {}, key = 0;
     __u64 retval = 0, session_id = 0;
-    bool is_entry = true, can_output_lbr;
+    struct bpfsnoop_lbr_data *lbr;
+    enum bpfsnoop_mode mode;
+    bool can_output_lbr;
     __u16 event_type;
     __u32 cpu, pid;
 
@@ -103,18 +101,14 @@ emit_bpfsnoop_kmulti_event(struct pt_regs *ctx)
 
     cpu = bpf_get_smp_processor_id() & CPU_MASK;
     lbr = &bpfsnoop_lbr_buff[cpu];
+    mode = get_bpfsnoop_mode(ctx);
 
-    if (is_kprobe_session_ctx())
-        is_entry = !bpf_session_is_return(ctx);
-    else
-        is_entry = cfg->flags.is_entry;
-
-    can_output_lbr = !cfg->flags.both_entry_exit || is_entry;
+    can_output_lbr = !cfg->flags.both_entry_exit || (mode == BPFSNOOP_MODE_SESSION_ENTRY);
     if (cfg->flags.output_lbr && can_output_lbr)
         lbr->nr_bytes = bpf_get_branch_snapshot(lbr->entries, sizeof(lbr->entries), 0);
 
     (void) read_args_from_ctx(ctx, args);
-    if (!is_entry)
+    if (mode == BPFSNOOP_MODE_EXIT || mode == BPFSNOOP_MODE_SESSION_EXIT)
         retval = PT_REGS_RC(ctx);
 
     pid = bpf_get_current_pid_tgid() >> 32;
@@ -123,31 +117,35 @@ emit_bpfsnoop_kmulti_event(struct pt_regs *ctx)
     if (cfg->pid && pid != cfg->pid)
         return BPF_OK;
 
-    /* For multi mode, prefer session cookie when available. */
-    if (is_kprobe_session_ctx()) {
-        __u64 *cookie = bpf_session_cookie(ctx);
+    key = get_kmulti_session_key(ctx);
 
-        if (is_entry) {
-            session_id = gen_session_id(ctx);
-            if (!filter_kmulti(ctx, args, session_id))
-                return BPF_OK;
-
-            *cookie = session_id;
-            event_type = BPFSNOOP_EVENT_TYPE_FUNC_ENTRY;
-        } else {
-            session_id = *cookie ? (*cookie - 1) : 0;
-            if (!session_id)
-                return BPF_OK;
-
-            event_type = BPFSNOOP_EVENT_TYPE_FUNC_EXIT;
-        }
-    } else {
+    switch (mode) {
+    case BPFSNOOP_MODE_SESSION_ENTRY:
         session_id = gen_session_id(ctx);
-        if (is_entry && !filter_kmulti(ctx, args, session_id))
+        if (!bpfsnoop_session_enter(ctx, key, session_id,
+                                    filter_kmulti(args, session_id),
+                                    &session_id, cfg->flags.is_session))
             return BPF_OK;
 
-        event_type = is_entry ? BPFSNOOP_EVENT_TYPE_FUNC_ENTRY
-                              : BPFSNOOP_EVENT_TYPE_FUNC_EXIT;
+        event_type = BPFSNOOP_EVENT_TYPE_FUNC_ENTRY;
+        break;
+
+    case BPFSNOOP_MODE_SESSION_EXIT:
+        if (!bpfsnoop_session_exit(ctx, key, &session_id, cfg->flags.is_session))
+            return BPF_OK;
+
+        event_type = BPFSNOOP_EVENT_TYPE_FUNC_EXIT;
+        break;
+
+    case BPFSNOOP_MODE_ENTRY:
+    case BPFSNOOP_MODE_EXIT:
+        session_id = gen_session_id(ctx);
+        if (!filter_kmulti(args, session_id))
+            return BPF_OK;
+
+        event_type = (mode == BPFSNOOP_MODE_ENTRY) ? BPFSNOOP_EVENT_TYPE_FUNC_ENTRY
+                                                   : BPFSNOOP_EVENT_TYPE_FUNC_EXIT;
+        break;
     }
 
     return output_event(ctx, event_type, session_id, bpf_get_func_ip(ctx),
