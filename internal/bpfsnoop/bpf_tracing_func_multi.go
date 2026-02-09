@@ -91,7 +91,7 @@ func (t *bpfTracing) traceFuncsMulti(errg *errgroup.Group, reusedMaps map[string
 		}
 	}
 
-	for _, g := range groups {
+	for i, g := range groups {
 		g := g
 
 		symbols, skipped := filterKprobeMultiSymbols(g.fns, availableFilterFuncs)
@@ -105,31 +105,31 @@ func (t *bpfTracing) traceFuncsMulti(errg *errgroup.Group, reusedMaps map[string
 
 		g.fns = symbols
 		errg.Go(func() error {
-			return t.traceKfuncMulti(reusedMaps, g)
+			return t.traceKfuncMulti(reusedMaps, g, i)
 		})
 	}
 
 	return nil
 }
 
-func (t *bpfTracing) traceKfuncMulti(reusedMaps map[string]*ebpf.Map, g *kfuncMultiGroupInfo) error {
+func (t *bpfTracing) traceKfuncMulti(reusedMaps map[string]*ebpf.Map, g *kfuncMultiGroupInfo, idx int) error {
 	fn := g.fn
 	sessionMode := fn.Flag.both && hasKprobeSession
 	if sessionMode {
-		return t.traceKfuncMultiMode(reusedMaps, g, false, true)
+		return t.traceKfuncMultiMode(reusedMaps, g, false, true, idx)
 	}
 
 	if fn.Flag.both {
-		if err := t.traceKfuncMultiMode(reusedMaps, g, false, false); err != nil {
+		if err := t.traceKfuncMultiMode(reusedMaps, g, false, false, idx); err != nil {
 			return err
 		}
-		return t.traceKfuncMultiMode(reusedMaps, g, true, false)
+		return t.traceKfuncMultiMode(reusedMaps, g, true, false, idx)
 	}
 
-	return t.traceKfuncMultiMode(reusedMaps, g, hasModeExit(), false)
+	return t.traceKfuncMultiMode(reusedMaps, g, hasModeExit(), false, idx)
 }
 
-func (t *bpfTracing) traceKfuncMultiMode(reusedMaps map[string]*ebpf.Map, g *kfuncMultiGroupInfo, isExit, sessionMode bool) error {
+func (t *bpfTracing) traceKfuncMultiMode(reusedMaps map[string]*ebpf.Map, g *kfuncMultiGroupInfo, isExit, sessionMode bool, idx int) error {
 	spec, err := bpf.LoadKmulti()
 	if err != nil {
 		return fmt.Errorf("failed to load kmulti bpf spec: %w", err)
@@ -252,9 +252,9 @@ func (t *bpfTracing) traceKfuncMultiMode(reusedMaps map[string]*ebpf.Map, g *kfu
 		return fmt.Errorf("failed to attach tracing in multi mode %v: %w", symbols, err)
 	}
 
-	verboseLogIf(opts.Session, "Tracing(ksession) %d kernel functions: %v", len(symbols), symbols)
-	verboseLogIf(!opts.Session && isExit, "Tracing(kretprobe.multi) %d kernel functions: %v", len(symbols), symbols)
-	verboseLogIf(!opts.Session && !isExit, "Tracing(kprobe.multi) %d kernel functions: %v", len(symbols), symbols)
+	verboseLogIf(opts.Session, "Tracing(ksession) %d kernel functions[%d:%s]: %v", len(symbols), idx, fn.Flag.argName, symbols)
+	verboseLogIf(!opts.Session && isExit, "Tracing(kretprobe.multi) %d kernel functions[%d:%s]: %v", len(symbols), idx, fn.Flag.argName, symbols)
+	verboseLogIf(!opts.Session && !isExit, "Tracing(kprobe.multi) %d kernel functions[%d:%s]: %v", len(symbols), idx, fn.Flag.argName, symbols)
 
 	t.llock.Lock()
 	t.progs = append(t.progs, prog)
