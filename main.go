@@ -83,6 +83,9 @@ func main() {
 	bpfSpec, err := bpf.LoadBpfsnoop()
 	assert.NoErr(err, "Failed to load bpf spec: %v")
 
+	err = bpfsnoop.PatchBPFSessionInsns(bpfSpec)
+	assert.NoErr(err, "Failed to patch BPF session insns: %v")
+
 	numCPU, err := ebpf.PossibleCPU()
 	assert.NoErr(err, "Failed to get possible cpu count: %v")
 

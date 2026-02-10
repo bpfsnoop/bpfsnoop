@@ -33,7 +33,6 @@ func FindKernelFuncsMulti(kfuncs []string, ksyms *Kallsyms) ([]kfuncInfoMulti, e
 	if !hasKprobeMulti {
 		return nil, fmt.Errorf("kprobe.multi is not supported")
 	}
-	DebugLog("kprobe.multi is supported")
 
 	kmulti := make([]kfuncInfoMulti, 0, len(kfuncs))
 

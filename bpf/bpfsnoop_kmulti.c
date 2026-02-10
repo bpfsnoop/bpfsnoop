@@ -17,6 +17,7 @@
 #include "bpfsnoop_pkt_filter.h"
 #include "bpfsnoop_pkt_output.h"
 #include "bpfsnoop_sess.h"
+#include "bpfsnoop_session.h"
 #include "bpfsnoop_stack.h"
 #include "bpfsnoop_stack_map.h"
 #include "bpfsnoop_tracing.h"

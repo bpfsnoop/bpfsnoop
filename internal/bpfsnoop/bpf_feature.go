@@ -88,10 +88,12 @@ func DetectBPFFeatures() error {
 	if err != nil {
 		return err
 	}
+	debugLogIf(hasKprobeMulti, "kprobe.multi is supported")
 	hasKprobeSession, err = btfEnumValue("bpf_attach_type", "BPF_TRACE_KPROBE_SESSION")
 	if err != nil {
 		return err
 	}
+	debugLogIf(hasKprobeSession, "kprobe.session is supported")
 
 	hasEndbr, err = haveEndbrInsn(prog)
 	if err != nil {

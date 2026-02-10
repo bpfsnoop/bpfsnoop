@@ -8,7 +8,7 @@
 
 #include "bpf_helpers.h"
 
-__u64 *bpf_session_cookie(void *ctx) __weak __ksym;
-bool bpf_session_is_return(void *ctx) __weak __ksym;
+extern __u64 *bpf_session_cookie(void *ctx) __weak __ksym;
+extern bool bpf_session_is_return(void *ctx) __weak __ksym;
 
 #endif // __BPFSNOOP_TRACING_H_

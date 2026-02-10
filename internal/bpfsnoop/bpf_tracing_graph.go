@@ -193,6 +193,10 @@ func (t *bpfTracing) traceGraphs(reusedMaps map[string]*ebpf.Map, graphs FuncGra
 		return fmt.Errorf("failed to load graph bpf spec: %w", err)
 	}
 
+	if err := PatchBPFSessionInsns(spec); err != nil {
+		return fmt.Errorf("failed to patch BPF session insns: %w", err)
+	}
+
 	traceeIPsMapName := "bpfsnoop_fgraph_tracee_ips"
 	traceeIPs, err := ebpf.NewMap(spec.Maps[traceeIPsMapName])
 	if err != nil {

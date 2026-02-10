@@ -160,7 +160,11 @@ func (t *bpfTracing) traceKfuncMultiMode(reusedMaps map[string]*ebpf.Map, g *kfu
 	}
 
 	if err := updateMapsSpec(spec); err != nil {
-		return fmt.Errorf("failed to update .data.lbrs map spec for kmulti: %w", err)
+		return fmt.Errorf("failed to update maps spec for kmulti: %w", err)
+	}
+
+	if err := PatchBPFSessionInsns(spec); err != nil {
+		return fmt.Errorf("failed to patch BPF session insns: %w", err)
 	}
 
 	numCPU, err := ebpf.PossibleCPU()
@@ -256,9 +260,6 @@ func (t *bpfTracing) traceKfuncMultiMode(reusedMaps map[string]*ebpf.Map, g *kfu
 		MapReplacements: reusedMaps,
 	})
 	if err != nil {
-		if ignoreFuncTraceVerifierErr(err, fn.Func.Name) {
-			return nil
-		}
 		return fmt.Errorf("failed to create bpf collection for tracing in multi mode: %w", err)
 	}
 	defer coll.Close()
@@ -273,19 +274,22 @@ func (t *bpfTracing) traceKfuncMultiMode(reusedMaps map[string]*ebpf.Map, g *kfu
 	}
 
 	var l link.Link
-	if isExit && !opts.Session {
+	if isExit && !sessionMode {
 		l, err = link.KretprobeMulti(prog, opts)
 	} else {
 		l, err = link.KprobeMulti(prog, opts)
 	}
 	if err != nil {
 		_ = prog.Close()
-		return fmt.Errorf("failed to attach tracing in multi mode %v: %w", symbols, err)
+		debugLogIf(sessionMode, "Tracing mode is kprobe.session")
+		debugLogIf(!sessionMode && isExit, "Tracing mode is kretprobe.multi")
+		debugLogIf(!sessionMode && !isExit, "Tracing mode is kprobe.multi")
+		return fmt.Errorf("failed to attach tracing prog to target %v in multi mode (attach type: %s): %w", symbols, attachType, err)
 	}
 
-	verboseLogIf(opts.Session, "Tracing(ksession) %d kernel functions[%d:%s]: %v", len(symbols), idx, fn.Flag.argName, symbols)
-	verboseLogIf(!opts.Session && isExit, "Tracing(kretprobe.multi) %d kernel functions[%d:%s]: %v", len(symbols), idx, fn.Flag.argName, symbols)
-	verboseLogIf(!opts.Session && !isExit, "Tracing(kprobe.multi) %d kernel functions[%d:%s]: %v", len(symbols), idx, fn.Flag.argName, symbols)
+	verboseLogIf(sessionMode, "Tracing(kprobe.session) %d kernel functions[%d:%s]: %v", len(symbols), idx, fn.Flag.argName, symbols)
+	verboseLogIf(!sessionMode && isExit, "Tracing(kretprobe.multi) %d kernel functions[%d:%s]: %v", len(symbols), idx, fn.Flag.argName, symbols)
+	verboseLogIf(!sessionMode && !isExit, "Tracing(kprobe.multi) %d kernel functions[%d:%s]: %v", len(symbols), idx, fn.Flag.argName, symbols)
 
 	t.llock.Lock()
 	t.progs = append(t.progs, prog)

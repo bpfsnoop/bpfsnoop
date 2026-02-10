@@ -8,6 +8,7 @@
 #include "bpfsnoop_event.h"
 #include "bpfsnoop_fn_args_output.h"
 #include "bpfsnoop_sess.h"
+#include "bpfsnoop_session.h"
 #include "bpfsnoop_stack.h"
 #include "bpfsnoop_tracing.h"
 
