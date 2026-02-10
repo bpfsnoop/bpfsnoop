@@ -17,6 +17,7 @@ type KfuncFlag struct {
 }
 
 func parseKfuncFlag(k string) (KfuncFlag, error) {
+	skbMode := false
 	var kf KfuncFlag
 
 	for strings.HasPrefix(k, "(") {
@@ -48,6 +49,14 @@ func parseKfuncFlag(k string) (KfuncFlag, error) {
 			kf.multi = true
 			k = k[3:]
 		}
+		if strings.HasPrefix(strings.ToLower(k), "(skb)") {
+			skbMode = true
+			k = k[5:]
+		}
+	}
+	if skbMode {
+		kf.arg = "skb"
+		kf.typ = "struct sk_buff *"
 	}
 	kf.fltrExpr = k
 	kf.insn = kf.insn || outputFuncInsns
