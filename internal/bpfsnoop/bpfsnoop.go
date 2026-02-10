@@ -154,7 +154,8 @@ func Run(reader *ringbuf.Reader, maps map[string]*ebpf.Map, w io.Writer, helpers
 			}
 		}
 
-		data = outputFuncInfo(&sb, fnInfo, helpers, int(event.TraceeArgEntrySz), int(event.TraceeArgExitSz), event.Type == eventTypeFuncExit, isTp, isKmulti, data)
+		entrySz, exitSz, isExit := event.TraceeArgEntrySz, event.TraceeArgExitSz, event.Type == eventTypeFuncExit
+		data = outputFuncInfo(&sb, fnInfo, helpers, int(entrySz), int(exitSz), isExit, isTp, isKmulti, data)
 
 		haveRetval := event.Type == eventTypeFuncExit
 		if colorfulOutput {
