@@ -33,4 +33,10 @@ func TestExtractVarNames(t *testing.T) {
 		test.AssertNoErr(t, err)
 		test.AssertEqualSlice(t, names, []string{"a", "b"})
 	})
+
+	t.Run("vars in func call", func(t *testing.T) {
+		names, err := ExtractVarNames("str(skb->dev->name)")
+		test.AssertNoErr(t, err)
+		test.AssertEqualSlice(t, names, []string{"skb"})
+	})
 }
