@@ -88,6 +88,8 @@ get_kmulti_session_key(struct pt_regs *ctx)
 static __always_inline int
 emit_bpfsnoop_kmulti_event(struct pt_regs *ctx)
 {
+    bool output_pkt = cfg->flags.output_pkt;
+    bool output_arg = cfg->flags.output_arg;
     __u64 args[MAX_FN_ARGS] = {}, key = 0;
     __u64 retval = 0, session_id = 0;
     struct bpfsnoop_lbr_data *lbr;
@@ -135,6 +137,8 @@ emit_bpfsnoop_kmulti_event(struct pt_regs *ctx)
             return BPF_OK;
 
         event_type = BPFSNOOP_EVENT_TYPE_FUNC_EXIT;
+        output_pkt = false;
+        output_arg = false;
         break;
 
     case BPFSNOOP_MODE_ENTRY:
@@ -149,7 +153,8 @@ emit_bpfsnoop_kmulti_event(struct pt_regs *ctx)
     }
 
     return output_event(ctx, event_type, session_id, bpf_get_func_ip(ctx),
-                        cpu, pid, lbr, can_output_lbr, args, retval);
+                        cpu, pid, lbr, can_output_lbr, args, retval, output_pkt,
+                        output_arg);
 }
 
 SEC("kprobe.multi")

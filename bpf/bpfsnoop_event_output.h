@@ -20,7 +20,8 @@
 static __always_inline int
 output_event(void *ctx, __u16 event_type, __u64 session_id, __u64 func_ip,
              __u32 cpu, __u32 pid, struct bpfsnoop_lbr_data *lbr,
-             bool can_output_lbr, __u64 *args, __u64 retval)
+             bool can_output_lbr, __u64 *args, __u64 retval, bool can_output_pkt,
+             bool can_output_arg)
 {
     void *buffer, *ptr;
     struct event *evt;
@@ -54,13 +55,15 @@ output_event(void *ctx, __u16 event_type, __u64 session_id, __u64 func_ip,
     ptr = buffer + sizeof(*evt);
     output_fn_args(args, ptr, retval);
     ptr += cfg->fn_args.buf_size;
-    if (cfg->flags.output_pkt) {
+    if (can_output_pkt) {
         output_pkt(args, ptr);
         ptr += sizeof(struct bpfsnoop_pkt_data);
     }
-    if (cfg->flags.output_arg) {
+    if (can_output_arg) {
         output_arg(args, ptr);
         ptr += cfg->fn_args.data_size;
+    } else {
+        evt->tracee_arg_data_size = 0;
     }
 
     bpf_ringbuf_submit(evt, 0);

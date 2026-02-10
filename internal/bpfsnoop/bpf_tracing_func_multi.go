@@ -186,19 +186,26 @@ func (t *bpfTracing) traceKfuncMultiMode(reusedMaps map[string]*ebpf.Map, g *kfu
 	funcProto := fn.Func.Type.(*btf.FuncProto)
 	params := funcProto.Params
 
-	fn.Pkt = t.injectPktOutput(fn.Flag.pkt, progSpec, params, fn.Func.Name)
-	if err := t.injectPktFilter(progSpec, params, fn.Func.Name); err != nil {
-		return err
+	if isExit {
+		clearFilterArgSubprog(progSpec)
+		pktFilter.clear(progSpec)
+		clearOutputArgSubprog(progSpec)
+		clearOutputPktSubprogs(progSpec)
+	} else {
+		fn.Pkt = t.injectPktOutput(fn.Flag.pkt, progSpec, params, fn.Func.Name)
+		if err := t.injectPktFilter(progSpec, params, fn.Func.Name); err != nil {
+			return err
+		}
+		if err := t.injectArgFilter(progSpec, params, fn.Btf, fn.Func.Name); err != nil {
+			return err
+		}
+		args, argDataSize, err := t.injectArgOutput(progSpec, params, fn.Btf, fn.Func.Name)
+		if err != nil {
+			return err
+		}
+		fn.Args = args
+		fn.Data = argDataSize
 	}
-	if err := t.injectArgFilter(progSpec, params, fn.Btf, fn.Func.Name); err != nil {
-		return err
-	}
-	args, argDataSize, err := t.injectArgOutput(progSpec, params, fn.Btf, fn.Func.Name)
-	if err != nil {
-		return err
-	}
-	fn.Args = args
-	fn.Data = argDataSize
 
 	withRet := sessionMode || isExit
 	fnArgsBufSize, err := injectOutputKmultiFnArgs(progSpec, maxArgsKmulti, withRet)
@@ -222,7 +229,7 @@ func (t *bpfTracing) traceKfuncMultiMode(reusedMaps map[string]*ebpf.Map, g *kfu
 		fnArgsBufSz:   fnArgsBufSize,
 		argEntrySz:    argEntrySize,
 		argExitSz:     argExitSize,
-		argDataSz:     argDataSize,
+		argDataSz:     fn.Data,
 		outputLbr:     fn.Flag.lbr,
 		outputStack:   fn.Flag.stack,
 		outputPkt:     fn.Pkt,

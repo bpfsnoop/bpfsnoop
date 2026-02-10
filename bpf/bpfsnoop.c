@@ -122,7 +122,8 @@ emit_bpfsnoop_event(void *ctx)
     }
 
     return output_event(ctx, event_type, session_id, FUNC_IP, cpu, pid,
-                        lbr, can_output_lbr, args, retval);
+                        lbr, can_output_lbr, args, retval, cfg->flags.output_pkt,
+                        cfg->flags.output_arg);
 }
 
 SEC("fexit")

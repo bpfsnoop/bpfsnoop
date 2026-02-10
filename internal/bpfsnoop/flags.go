@@ -103,7 +103,7 @@ func ParseFlags() (*Flags, error) {
 	f.BoolVar(&disasmIntelSyntax, "disasm-intel-syntax", false, "use Intel asm syntax for disasm, ATT asm syntax by default")
 	f.BoolVarP(&verbose, "verbose", "v", false, "output verbose log")
 	f.BoolVarP(&debugLog, "debug-log", "D", false, "output many debug logs")
-	f.StringSliceVarP(&modes, "mode", "m", []string{TracingModeExit}, "mode of bpfsnoop, exit and/or entry")
+	f.StringSliceVarP(&modes, "mode", "m", []string{}, "mode of bpfsnoop, exit and/or entry")
 	f.BoolVar(&outputLbr, "output-lbr", false, "output LBR perf event")
 	f.BoolVar(&outputFuncStack, "output-stack", false, "output function call stack")
 	f.StringVar(&outputFlameGraph, "output-flamegraph", "", "output flamegraph fold data")
@@ -172,8 +172,13 @@ func ParseFlags() (*Flags, error) {
 		os.Exit(0)
 	}
 
+	modes = flags.setDefaultModes()
+
 	if e := flags.checkMode(); e != nil {
 		return nil, e
+	}
+	if err := flags.checkMultiExitFilterConflict(); err != nil {
+		return nil, err
 	}
 
 	if flags.fgraphDepth == 0 {
@@ -183,25 +188,8 @@ func ParseFlags() (*Flags, error) {
 		return nil, fmt.Errorf("--fgraph-max-depth is larger than limit 500")
 	}
 
-	for _, k := range flags.kfuncs {
-		if strings.Contains(k, "(m)") && strings.Contains(k, "(g)") {
-			return nil, fmt.Errorf("fgraph does not support '(m)' yet, got kfunc %q", k)
-		}
-	}
-	for _, k := range flags.fgraphInclude {
-		if strings.Contains(k, "(m)") {
-			return nil, fmt.Errorf("--fgraph-include does not support '(m)' yet, got %q", k)
-		}
-	}
-	for _, k := range flags.fgraphExclude {
-		if strings.Contains(k, "(m)") {
-			return nil, fmt.Errorf("--fgraph-exclude does not support '(m)' yet, got %q", k)
-		}
-	}
-	for _, k := range flags.fgraphExtra {
-		if strings.Contains(k, "(m)") {
-			return nil, fmt.Errorf("--fgraph-extra does not support '(m)' yet, got %q", k)
-		}
+	if err := flags.checkFgraphMultiUnsupported(); err != nil {
+		return nil, err
 	}
 
 	// check histogram
@@ -262,6 +250,25 @@ func (f *Flags) ParseProgs() ([]ProgFlag, error) {
 	return parseProgsFlag(f.progs)
 }
 
+func (f *Flags) multiModeOnly() bool {
+	for _, kf := range f.kfuncs {
+		if !strings.Contains(kf, "(m)") {
+			return false
+		}
+	}
+	return true
+}
+
+func (f *Flags) setDefaultModes() []string {
+	if len(modes) != 0 {
+		return modes
+	}
+	if f.multiModeOnly() {
+		return []string{TracingModeEntry}
+	}
+	return []string{TracingModeExit}
+}
+
 func (f *Flags) checkMode() error {
 	switch len(modes) {
 	case 1:
@@ -283,12 +290,69 @@ func (f *Flags) checkMode() error {
 	return nil
 }
 
+func (f *Flags) checkFgraphMultiUnsupported() error {
+	for _, k := range f.kfuncs {
+		if strings.Contains(k, "(m)") && strings.Contains(k, "(g)") {
+			return fmt.Errorf("fgraph does not support '(m)' yet, got kfunc %q", k)
+		}
+	}
+
+	for _, k := range f.fgraphInclude {
+		if strings.Contains(k, "(m)") {
+			return fmt.Errorf("--fgraph-include does not support '(m)' yet, got %q", k)
+		}
+	}
+
+	for _, k := range f.fgraphExclude {
+		if strings.Contains(k, "(m)") {
+			return fmt.Errorf("--fgraph-exclude does not support '(m)' yet, got %q", k)
+		}
+	}
+
+	for _, k := range f.fgraphExtra {
+		if strings.Contains(k, "(m)") {
+			return fmt.Errorf("--fgraph-extra does not support '(m)' yet, got %q", k)
+		}
+	}
+
+	return nil
+}
+
 func hasModeEntry() bool {
 	return slices.Contains(modes, TracingModeEntry)
 }
 
 func hasModeExit() bool {
 	return slices.Contains(modes, TracingModeExit)
+}
+
+func (f *Flags) checkMultiExitFilterConflict() error {
+	if len(f.KfuncsMulti()) == 0 {
+		return nil
+	}
+	if !hasModeExit() || hasModeEntry() {
+		return nil
+	}
+
+	var used []string
+	if len(filterArg) != 0 {
+		used = append(used, "--filter-arg")
+	}
+	if filterPkt != "" {
+		used = append(used, "--filter-pkt")
+	}
+	if len(outputArg) != 0 {
+		used = append(used, "--output-arg")
+	}
+	if outputPkt {
+		used = append(used, "--output-pkt")
+	}
+	if len(used) == 0 {
+		return nil
+	}
+
+	return fmt.Errorf("exit-only mode with kprobe.multi does not support %s; use -m entry or -m entry,exit",
+		strings.Join(used, ", "))
 }
 
 func (f *Flags) Kfuncs() []string {

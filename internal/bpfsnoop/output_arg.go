@@ -392,6 +392,10 @@ func (arg *argDataOutput) genInsns(args []funcArgumentOutput) asm.Instructions {
 	return insns
 }
 
+func clearOutputArgSubprog(prog *ebpf.ProgramSpec) {
+	clearOutputSubprog(prog, outputArgStub)
+}
+
 func (arg *argDataOutput) clear(prog *ebpf.ProgramSpec) {
 	clearOutputSubprog(prog, outputArgStub)
 }
