@@ -44,12 +44,16 @@ output_event(void *ctx, __u16 event_type, __u64 session_id, __u64 func_ip,
     bpf_get_current_comm(evt->comm, sizeof(evt->comm));
     evt->func_stack_id = -1;
     evt->tracee_flags = cfg->tracee_flags;
+    evt->flags.output_lbr &= can_output_lbr;
+    evt->flags.output_pkt &= can_output_pkt;
+    evt->flags.output_arg &= can_output_arg;
     evt->tracee_arg_entry_size = cfg->tracee_arg_entry_size;
     evt->tracee_arg_exit_size = cfg->tracee_arg_exit_size;
     evt->tracee_arg_data_size = cfg->tracee_arg_data_size;
+    evt->lbr_retval = lbr->nr_bytes;
     if (cfg->flags.output_stack)
         evt->func_stack_id = bpf_get_stackid(ctx, &bpfsnoop_stacks, BPF_F_FAST_STACK_CMP);
-    if (cfg->flags.output_lbr && can_output_lbr)
+    if (can_output_lbr)
         output_lbr_data(lbr, session_id);
 
     ptr = buffer + sizeof(*evt);

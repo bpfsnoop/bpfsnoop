@@ -107,8 +107,11 @@ emit_bpfsnoop_kmulti_event(struct pt_regs *ctx)
     mode = get_bpfsnoop_mode(ctx);
 
     can_output_lbr = !cfg->flags.both_entry_exit || (mode == BPFSNOOP_MODE_SESSION_ENTRY);
-    if (cfg->flags.output_lbr && can_output_lbr)
+    can_output_lbr &= cfg->flags.output_lbr;
+    if (can_output_lbr)
         lbr->nr_bytes = bpf_get_branch_snapshot(lbr->entries, sizeof(lbr->entries), 0);
+    else
+        lbr->nr_bytes = 0;
 
     (void) read_args_from_ctx(ctx, args);
     if (mode == BPFSNOOP_MODE_EXIT || mode == BPFSNOOP_MODE_SESSION_EXIT)

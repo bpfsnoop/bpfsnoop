@@ -73,8 +73,11 @@ emit_bpfsnoop_event(void *ctx)
     mode = get_bpfsnoop_mode(ctx);
 
     can_output_lbr = !cfg->flags.both_entry_exit || (mode == BPFSNOOP_MODE_SESSION_ENTRY);
-    if (cfg->flags.output_lbr && can_output_lbr)
+    can_output_lbr &= cfg->flags.output_lbr;
+    if (can_output_lbr)
         lbr->nr_bytes = bpf_get_branch_snapshot(lbr->entries, sizeof(lbr->entries), 0); /* required 5.16 kernel. */
+    else
+        lbr->nr_bytes = 0;
 
     /* Other filters must be after bpf_get_branch_snapshot() to avoid polluting
      * LBR entries.

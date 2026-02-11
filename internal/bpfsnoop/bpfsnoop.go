@@ -45,6 +45,7 @@ type Event struct {
 	TraceeArgEntrySz uint32
 	TraceeArgExitSz  uint32
 	TraceeArgDataSz  uint32
+	LBRRetval        int64
 }
 
 func ptr2bytes(p unsafe.Pointer, size int) []byte {
@@ -189,7 +190,7 @@ func Run(reader *ringbuf.Reader, maps map[string]*ebpf.Map, w io.Writer, helpers
 			data = data[argDataSz:]
 		}
 
-		if haveFlag(event.TraceeFlags, traceeFlagOutputLbr) {
+		if haveFlag(event.TraceeFlags, traceeFlagOutputLbr) && event.LBRRetval > 0 {
 			err := lbrStack.outputStack(&sb, helpers, &lbrData, lbrs, event)
 			if err != nil {
 				return fmt.Errorf("failed to output LBR stack: %w", err)
