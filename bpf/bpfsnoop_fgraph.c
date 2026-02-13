@@ -253,7 +253,7 @@ int BPF_PROG(bpfsnoop_fgraph)
 
     is_entry = cfg->hook_mode == BPFSNOOP_HOOK_ENTRY;
     if (cfg->hook_mode == BPFSNOOP_HOOK_SESSION)
-        is_entry = !bpf_session_is_return(ctx);
+        is_entry = !bpfsnoop_session_is_return(ctx);
 
     (void) bpf_probe_read_kernel(args, 8*cfg->fn_args.args_nr, ctx);
     if (cfg->fn_args.with_retval && !is_entry)

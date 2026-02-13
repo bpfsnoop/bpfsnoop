@@ -24,7 +24,7 @@ get_bpfsnoop_mode(void *ctx)
     bool is_entry = cfg->flags.is_entry;
 
     if (cfg->flags.both_entry_exit && cfg->flags.is_session)
-        is_entry = !bpf_session_is_return(ctx);
+        is_entry = !bpfsnoop_session_is_return(ctx);
 
     if (cfg->flags.both_entry_exit)
         return is_entry ? BPFSNOOP_MODE_SESSION_ENTRY : BPFSNOOP_MODE_SESSION_EXIT;

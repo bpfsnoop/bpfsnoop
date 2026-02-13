@@ -21,7 +21,7 @@ bpfsnoop_session_enter(void *ctx, __u64 key, __u64 sid, bool pass, __u64 *sessio
         return false;
 
     if (is_session) {
-        __u64 *cookie = bpf_session_cookie(ctx);
+        __u64 *cookie = bpfsnoop_session_cookie(ctx);
         *cookie = sid;
     } else {
         sess_init.session_id = sid;
@@ -36,7 +36,7 @@ static __always_inline bool
 bpfsnoop_session_exit(void *ctx, __u64 key, __u64 *session_id, bool is_session)
 {
     if (is_session) {
-        __u64 *cookie = bpf_session_cookie(ctx);
+        __u64 *cookie = bpfsnoop_session_cookie(ctx);
         __u64 sid = *cookie;
 
         if (!sid)

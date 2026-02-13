@@ -12,6 +12,9 @@ import (
 )
 
 const (
+	bpfsnoopSessionCookieFunc   = "bpfsnoop_session_cookie"
+	bpfsnoopSessionIsReturnFunc = "bpfsnoop_session_is_return"
+
 	bpfSessionCookieKfunc   = "bpf_session_cookie"
 	bpfSessionIsReturnKfunc = "bpf_session_is_return"
 )
@@ -74,12 +77,15 @@ func patchBPFSessionInsns(prog *ebpf.ProgramSpec) error {
 	}
 
 	for i := range prog.Instructions {
-		if ref := prog.Instructions[i].Reference(); ref == bpfSessionCookieKfunc {
+		if ref := prog.Instructions[i].Reference(); ref == bpfsnoopSessionCookieFunc {
 			prog.Instructions[i] = bpfKfuncCall(bpfSessionCookieKfuncID)
-		} else if ref == bpfSessionIsReturnKfunc {
+		} else if ref == bpfsnoopSessionIsReturnFunc {
 			prog.Instructions[i] = bpfKfuncCall(bpfSessionIsReturnKfuncID)
 		}
 	}
+
+	injectInsns(prog, bpfsnoopSessionCookieFunc, nil)
+	injectInsns(prog, bpfsnoopSessionIsReturnFunc, nil)
 
 	return nil
 }
