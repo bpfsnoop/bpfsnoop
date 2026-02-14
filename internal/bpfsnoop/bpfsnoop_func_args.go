@@ -92,18 +92,16 @@ func (a tcAction) Action() string {
 func outputFnRetval(sb *strings.Builder, info *funcInfo, s string, data []byte, f btfx.FindSymbol) {
 	var retval string
 
-	if info.isProg {
-		if info.progType == ebpf.XDP {
-			u32 := *(*uint32)(unsafe.Pointer(&data[0]))
-			retval = xdpAction(u32).Action()
-			goto L_output
-		}
+	if info.progType == ebpf.XDP {
+		u32 := *(*uint32)(unsafe.Pointer(&data[0]))
+		retval = xdpAction(u32).Action()
+		goto L_output
+	}
 
-		if info.progType == ebpf.SchedCLS {
-			u32 := *(*uint32)(unsafe.Pointer(&data[0]))
-			retval = tcAction(u32).Action()
-			goto L_output
-		}
+	if info.progType == ebpf.SchedCLS {
+		u32 := *(*uint32)(unsafe.Pointer(&data[0]))
+		retval = tcAction(u32).Action()
+		goto L_output
 	}
 
 	if info.proto != nil {
@@ -146,22 +144,22 @@ func readStr(data []byte) (string, []byte) {
 	return readStrN(data, maxOutputStrLen)
 }
 
-func outputFnArgs(sb *strings.Builder, info *funcInfo, helpers *Helpers, data []byte, withRetval bool) {
-	funcParamColors := []*color.Color{
-		color.RGB(0x9d, 0x9d, 0x9d),
-		color.RGB(0x7a, 0x7a, 0x7a),
-		color.RGB(0x54, 0x54, 0x54),
-		color.RGB(0x9c, 0x91, 0x91),
-		color.RGB(0x7c, 0x74, 0x74),
-		color.RGB(0x5c, 0x54, 0x54),
-		color.RGB(0x9d, 0x9d, 0x9d),
-		color.RGB(0x7a, 0x7a, 0x7a),
-		color.RGB(0x54, 0x54, 0x54),
-		color.RGB(0x9c, 0x91, 0x91),
-		color.RGB(0x7c, 0x74, 0x74),
-		color.RGB(0x5c, 0x54, 0x54),
-	}
+var funcParamColors = []*color.Color{
+	color.RGB(0x9d, 0x9d, 0x9d),
+	color.RGB(0x7a, 0x7a, 0x7a),
+	color.RGB(0x54, 0x54, 0x54),
+	color.RGB(0x9c, 0x91, 0x91),
+	color.RGB(0x7c, 0x74, 0x74),
+	color.RGB(0x5c, 0x54, 0x54),
+	color.RGB(0x9d, 0x9d, 0x9d),
+	color.RGB(0x7a, 0x7a, 0x7a),
+	color.RGB(0x54, 0x54, 0x54),
+	color.RGB(0x9c, 0x91, 0x91),
+	color.RGB(0x7c, 0x74, 0x74),
+	color.RGB(0x5c, 0x54, 0x54),
+}
 
+func outputFnArgs(sb *strings.Builder, info *funcInfo, helpers *Helpers, data []byte, withRetval bool) {
 	fmt.Fprintf(sb, "=(")
 
 	f := findSymbolHelper(uint64(info.funcIP), helpers)
@@ -208,10 +206,81 @@ func outputFnArgs(sb *strings.Builder, info *funcInfo, helpers *Helpers, data []
 	}
 
 	retStr := ""
-	if info.retParam.IsStr {
+	if info.retParam.IsStr && len(data) >= maxOutputStrLen {
 		retStr = strx.NullTerminated(data[:maxOutputStrLen])
 	}
 	outputFnRetval(sb, info, retStr, data, f)
+}
+
+func outputFnArgsKmulti(sb *strings.Builder, info *funcInfo, helpers *Helpers, data []byte) {
+	fmt.Fprintf(sb, "=(")
+
+	if info.proto == nil {
+		fmt.Fprint(sb, ")")
+		return
+	}
+
+	f := findSymbolHelper(uint64(info.funcIP), helpers)
+	params := info.proto.Type.(*btf.FuncProto).Params
+	limit := len(params)
+	showEllipsis := false
+	if limit > maxArgsKmulti {
+		limit = maxArgsKmulti
+		showEllipsis = true
+	}
+
+	for i := 0; i < limit; i++ {
+		param := params[i]
+		if i != 0 {
+			fmt.Fprint(sb, ", ")
+		}
+
+		arg := uint64(0)
+		if i < maxArgsKmulti && len(data) >= (i+1)*8 {
+			arg = getU64(data[i*8:])
+		}
+
+		valNext := uint64(0)
+		if i+1 < maxArgsKmulti && len(data) >= (i+2)*8 {
+			valNext = getU64(data[(i+1)*8:])
+		}
+
+		fp := btfx.ReprFuncParam(&param, i, false, false, arg, 0, valNext, "", f)
+		if colorfulOutput {
+			funcParamColors[i%len(funcParamColors)].Fprint(sb, fp)
+		} else {
+			fmt.Fprintf(sb, "%s", fp)
+		}
+	}
+	if showEllipsis {
+		if limit != 0 {
+			fmt.Fprint(sb, ", ")
+		}
+		fmt.Fprint(sb, "...")
+	}
+
+	fmt.Fprintf(sb, ")")
+}
+
+func outputFnRetvalKmulti(sb *strings.Builder, info *funcInfo, data []byte, f btfx.FindSymbol) {
+	num := uint64(0)
+	if len(data) >= 8 {
+		num = getU64(data)
+	}
+
+	retval := fmt.Sprintf("%#x/%d", num, num)
+	if info.proto != nil {
+		rettyp := info.proto.Type.(*btf.FuncProto).Return
+		retval = btfx.ReprFuncReturn(rettyp, false, false, num, 0, "", f)
+	}
+
+	if colorfulOutput {
+		color.New(color.FgGreen).Fprintf(sb, " retval")
+		fmt.Fprint(sb, "=")
+		color.New(color.FgRed).Fprintf(sb, "%s", retval)
+	} else {
+		fmt.Fprintf(sb, " retval=%s", retval)
+	}
 }
 
 func findSymbolHelper(addr uint64, helpers *Helpers) btfx.FindSymbol {

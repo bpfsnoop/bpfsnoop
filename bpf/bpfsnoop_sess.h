@@ -7,6 +7,7 @@
 #include "vmlinux.h"
 
 #include "bpf_helpers.h"
+#include "bpf_tracing.h"
 
 #include "bpfsnoop.h"
 

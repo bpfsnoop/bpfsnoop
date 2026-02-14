@@ -9,3 +9,30 @@ tag: kfuncs,pkt,fnarg
 test: -k 'icmp_rcv' --filter-pkt 'host 127.0.0.1' --output-pkt --output-arg 'skb->dev->name' -m 'entry,exit' -v
 match: → icmp_rcv
 trigger: ping -c 1 -s 64 127.0.0.1
+
+---
+
+# icmp_rcv in kprobe.multi mode
+name: kfuncs::icmp_rcv:kmulti
+tag: kfuncs,pkt,multi
+test: -k '(m)icmp_rcv:(struct sk_buff *)skb' --filter-pkt 'host 127.0.0.1' --output-pkt -v
+match: → icmp_rcv
+trigger: ping -c 1 -s 64 127.0.0.1
+
+---
+
+# icmp_rcv in kprobe.multi exit mode
+name: kfuncs::icmp_rcv:kmulti:exit
+tag: kfuncs,pkt,multi
+test: -k '(m)icmp_rcv:(struct sk_buff *)skb' -m 'exit'
+match: ← icmp_rcv
+trigger: ping -c 1 -s 64 127.0.0.1
+
+---
+
+# icmp_rcv in kprobe.multi both mode
+name: kfuncs::icmp_rcv:kmulti:both
+tag: kfuncs,pkt,multi
+test: -k '(b)(m)icmp_rcv:(struct sk_buff *)skb' --filter-pkt 'host 127.0.0.1' --output-pkt
+match: Pkt tuple: 127.0.0.1 -> 127.0.0.1 (ICMP)
+trigger: ping -c 1 -s 64 127.0.0.1

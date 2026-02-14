@@ -24,29 +24,57 @@ type bpfTracing struct {
 	grphs []tracingGraph
 }
 
+type traceeConfig struct {
+	funcIP        uint64
+	fnArgsNr      int
+	fnArgsBufSz   int
+	argEntrySz    int
+	argExitSz     int
+	argDataSz     int
+	outputLbr     bool
+	outputStack   bool
+	outputPkt     bool
+	insnMode      bool
+	graphMode     bool
+	bothEntryExit bool
+	isTp          bool
+	isProg        bool
+	kmultiMode    bool
+	withRet       bool
+	session       bool
+}
+
 func (t *bpfTracing) Progs() []*ebpf.Program {
 	return t.progs
 }
 
-func setBpfsnoopConfig(spec *ebpf.CollectionSpec, funcIP uint64, fnArgsNr, fnArgsBufSize, argDataSize int, lbr, stack, pkt, bothEntryExit, withRet, fsession bool) error {
+func setBpfsnoopConfig(spec *ebpf.CollectionSpec, c traceeConfig) error {
 	var cfg BpfsnoopConfig
-	cfg.SetOutputLbr(lbr)
-	cfg.SetOutputStack(stack)
-	cfg.SetOutputPktTuple(pkt)
-	cfg.SetOutputArg(argDataSize != 0)
-	cfg.SetBothEntryExit(bothEntryExit)
-	cfg.SetIsEntry(!withRet)
-	cfg.SetIsFsession(fsession)
+	cfg.SetOutputLbr(c.outputLbr)
+	cfg.SetOutputStack(c.outputStack)
+	cfg.SetOutputPktTuple(c.outputPkt)
+	cfg.SetOutputArg(c.argDataSz != 0)
+	cfg.SetBothEntryExit(c.bothEntryExit)
+	cfg.SetIsEntry(!c.withRet)
+	cfg.SetIsSession(c.session)
+	cfg.SetInsnMode(c.insnMode)
+	cfg.SetGraphMode(c.graphMode)
+	cfg.SetIsTp(c.isTp)
+	cfg.SetIsProg(c.isProg)
+	cfg.SetKmultiMode(c.kmultiMode)
 	cfg.FilterPid = filterPid
-	cfg.FnArgsNr = uint32(fnArgsNr)
-	cfg.WithRet = withRet
-	cfg.FnArgsBuf = uint32(fnArgsBufSize)
-	cfg.ArgDataSz = uint32(argDataSize)
+	cfg.FnArgsNr = uint32(c.fnArgsNr)
+	cfg.WithRet = c.withRet
+	cfg.FnArgsBuf = uint32(c.fnArgsBufSz)
+	cfg.ArgDataSz = uint32(c.argDataSz)
+	cfg.TraceeArgEntrySz = uint32(c.argEntrySz)
+	cfg.TraceeArgExitSz = uint32(c.argExitSz)
+	cfg.TraceeArgDataSz = uint32(c.argDataSz)
 
 	if err := spec.Variables["bpfsnoop_config"].Set(cfg); err != nil {
 		return fmt.Errorf("failed to set bpfsnoop config: %w", err)
 	}
-	if err := spec.Variables["FUNC_IP"].Set(funcIP); err != nil {
+	if err := spec.Variables["FUNC_IP"].Set(c.funcIP); err != nil {
 		return fmt.Errorf("failed to set FUNC_IP: %w", err)
 	}
 	if err := spec.Variables["SKIP_TUNNEL"].Set(uint32(b2i(skipTunnel))); err != nil {
@@ -56,12 +84,18 @@ func setBpfsnoopConfig(spec *ebpf.CollectionSpec, funcIP uint64, fnArgsNr, fnArg
 	return nil
 }
 
-func NewBPFTracing(spec *ebpf.CollectionSpec, reusedMaps map[string]*ebpf.Map, bprogs *bpfProgs, kfuncs KFuncs, insns FuncInsns, graphs FuncGraphs) (*bpfTracing, error) {
+func NewBPFTracing(spec *ebpf.CollectionSpec, reusedMaps map[string]*ebpf.Map, bprogs *bpfProgs, kfuncs KFuncs, insns FuncInsns, graphs FuncGraphs, kfuncsMulti []kfuncInfoMulti) (*bpfTracing, error) {
 	var errg errgroup.Group
 	var t bpfTracing
 
 	t.traceProgs(&errg, spec, reusedMaps, bprogs)
-	t.traceFuncs(&errg, spec, reusedMaps, kfuncs)
+	if err := t.traceFuncs(&errg, spec, reusedMaps, kfuncs); err != nil {
+		return nil, fmt.Errorf("failed to prepare tracing funcs: %w", err)
+	}
+
+	if err := t.traceFuncsMulti(&errg, reusedMaps, kfuncsMulti); err != nil {
+		return nil, fmt.Errorf("failed to trace kfunc in multi-mode: %w", err)
+	}
 
 	if err := t.traceInsns(&errg, reusedMaps, insns); err != nil {
 		return nil, fmt.Errorf("failed to trace kfunc insns: %w", err)

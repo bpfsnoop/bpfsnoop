@@ -71,7 +71,7 @@ func detectKfuncTraceable(fnName string, ksyms *Kallsyms, fexit, silent bool) (b
 		return false, nil
 	}
 
-	ksym, ok := checkKfuncTraceable(fn, ksyms, silent)
+	ksym, ok := checkKfuncTraceable(fn, ksyms, false, silent)
 	if !ok {
 		return false, nil
 	}

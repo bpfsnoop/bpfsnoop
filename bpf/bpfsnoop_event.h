@@ -7,6 +7,7 @@
 #include "vmlinux.h"
 
 #include "bpfsnoop.h"
+#include "bpfsnoop_cfg_flags.h"
 
 enum {
     BPFSNOOP_EVENT_TYPE_UNSPEC = 0,
@@ -27,6 +28,11 @@ struct event {
     __u32 pid;
     __u8 comm[16];
     __s64 func_stack_id;
+    TRACEE_FLAGS;
+    __u32 tracee_arg_entry_size;
+    __u32 tracee_arg_exit_size;
+    __u32 tracee_arg_data_size;
+    __s64 lbr_retval;
 };
 
 struct {

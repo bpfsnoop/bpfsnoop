@@ -17,12 +17,16 @@ import (
 )
 
 type progFlagImmInfo struct {
+	fltrExpr string // filter expression for logging
 	funcName string
 	graph    bool
 	stack    bool
 	lbr      bool
 	both     bool
 	pkt      bool
+	multi    bool
+	argName  string // matched arg name, used for multi grouping
+	argType  string // matched arg type, used for multi grouping
 }
 
 type progFlags struct {
@@ -45,6 +49,7 @@ func newProgFlags(pflags []ProgFlag) progFlags {
 
 	for _, f := range pflags {
 		imm := progFlagImmInfo{
+			fltrExpr: f.fltrExpr,
 			funcName: f.funcName,
 			graph:    f.graph,
 			stack:    f.stack,

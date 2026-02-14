@@ -16,6 +16,10 @@ func ExtractVarNames(expr string) ([]string, error) {
 		return nil, fmt.Errorf("failed to parse expression: %w", err)
 	}
 
+	if e.Op == cc.Call {
+		e = e.List[0]
+	}
+
 	var names []string
 	cc.Walk(e, func(node cc.Syntax) {
 		if v, ok := node.(*cc.Expr); ok {

@@ -6,7 +6,7 @@
 # pointer deref
 name: cc::ptr-deref
 tag: cc,ptr-deref,xdp
-test: -k dev_xdp_install --output-arg '*prog' --output-arg '*prog->aux' --output-arg '*prog->aux->used_maps[0]' --output-arg '*dev' --output-arg '*dev->netdev_ops'
+test: -k generic_xdp_install --output-arg '*xdp->prog' --output-arg '*xdp->prog->aux' --output-arg '*xdp->prog->aux->used_maps[0]' --output-arg '*dev' --output-arg '*dev->netdev_ops'
 match: "type": BPF_PROG_TYPE_XDP
 trigger: ./xdpcrc -d lo
 
@@ -61,8 +61,8 @@ trigger: curl -s http://127.0.0.1:8081 --output /dev/null
 # slice()
 name: cc::slice
 tag: cc,slice
-test: -k dev_xdp_install --output-arg 'slice(prog->aux->used_maps, 1)'
-match: (struct bpf_map *)'slice(prog->aux->used_maps, 1)'=[0xff
+test: -k generic_xdp_install --output-arg 'slice(xdp->prog->aux->used_maps, 1)'
+match: (struct bpf_map *)'slice(xdp->prog->aux->used_maps, 1)'=[0xff
 trigger: ./xdpcrc -d lo
 
 ---
@@ -109,7 +109,7 @@ trigger: ping -c 1 -s 64 127.0.0.1
 # output bitfield in struct
 name: cc::output-struct
 tag: cc,struct
-test: -k '__sys_bpf' --filter-arg 'cmd == 5'
+test: -k 'bpf_check'
 match: is_kernel=0x0
 trigger: ./xdpcrc -d lo
 

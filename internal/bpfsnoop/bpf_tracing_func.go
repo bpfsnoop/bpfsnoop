@@ -99,8 +99,34 @@ func (t *bpfTracing) traceFunc(spec *ebpf.CollectionSpec, reusedMaps map[string]
 		fn.Ent = fnArgsBufSize
 	}
 
-	if err := setBpfsnoopConfig(spec, fn.Ksym.addr, len(fn.Prms), fnArgsBufSize,
-		argDataSize, fn.Flag.lbr, stack, fn.Pkt, bothEntryExit, withRet, fsession); err != nil {
+	argEntrySize, argExitSize := 0, 0
+	if bothEntryExit {
+		argEntrySize = fnArgsBufSize
+		argExitSize = fnArgsBufSize
+	} else if withRet {
+		argExitSize = fnArgsBufSize
+	} else {
+		argEntrySize = fnArgsBufSize
+	}
+	if err := setBpfsnoopConfig(spec, traceeConfig{
+		funcIP:        fn.Ksym.addr,
+		fnArgsNr:      len(fn.Prms),
+		fnArgsBufSz:   fnArgsBufSize,
+		argEntrySz:    argEntrySize,
+		argExitSz:     argExitSize,
+		argDataSz:     argDataSize,
+		outputLbr:     fn.Flag.lbr,
+		outputStack:   stack,
+		outputPkt:     fn.Pkt,
+		insnMode:      fn.Insn,
+		graphMode:     fn.Flag.graph,
+		bothEntryExit: bothEntryExit,
+		isTp:          fn.IsTp,
+		isProg:        false,
+		kmultiMode:    false,
+		withRet:       withRet,
+		session:       fsession,
+	}); err != nil {
 		return fmt.Errorf("failed to set bpfsnoop config: %w", err)
 	}
 
@@ -160,9 +186,9 @@ func (t *bpfTracing) traceFunc(spec *ebpf.CollectionSpec, reusedMaps map[string]
 	return nil
 }
 
-func (t *bpfTracing) traceFuncs(errg *errgroup.Group, spec *ebpf.CollectionSpec, reusedMaps map[string]*ebpf.Map, kfuncs KFuncs) {
+func (t *bpfTracing) traceFuncs(errg *errgroup.Group, spec *ebpf.CollectionSpec, reusedMaps map[string]*ebpf.Map, kfuncs KFuncs) error {
 	if len(kfuncs) == 0 {
-		return
+		return nil
 	}
 
 	for _, fn := range kfuncs {
@@ -197,4 +223,6 @@ func (t *bpfTracing) traceFuncs(errg *errgroup.Group, spec *ebpf.CollectionSpec,
 			})
 		}
 	}
+
+	return nil
 }

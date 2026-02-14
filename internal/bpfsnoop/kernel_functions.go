@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/Asphaltt/mybtf"
+	"github.com/bpfsnoop/bpfsnoop/internal/slicex"
 	"github.com/cilium/ebpf/btf"
 )
 
@@ -52,6 +53,9 @@ var tracingDenyFuncs = []string{
 	"__rcu_read_lock",
 	"__rcu_read_unlock",
 
+	// tools/testing/selftests/bpf/trace_helpers.c::trace_blacklist
+	"bpf_get_numa_node_id",
+
 	// check func_graph.go::fgraphDenyList for more explanation.
 	"bpf_dispatcher_xdp_func",
 }
@@ -91,7 +95,7 @@ func isValistParam(p btf.FuncParam) bool {
 	return p.Name == "" && isVoid
 }
 
-func checkKfuncTraceable(fn *btf.Func, ksyms *Kallsyms, silent bool) (*KsymEntry, bool) {
+func checkKfuncTraceable(fn *btf.Func, ksyms *Kallsyms, allowDuped, silent bool) (*KsymEntry, bool) {
 	funcProto := fn.Type.(*btf.FuncProto)
 
 	if isValist := len(funcProto.Params) != 0 && isValistParam(funcProto.Params[len(funcProto.Params)-1]); isValist {
@@ -109,7 +113,7 @@ func checkKfuncTraceable(fn *btf.Func, ksyms *Kallsyms, silent bool) (*KsymEntry
 		verboseLogIf(!silent, "Failed to find ksym for %s", fn.Name)
 		return nil, false
 	}
-	if ksym.duped {
+	if ksym.duped && !allowDuped {
 		verboseLogIf(!silent, "Skip multiple-addrs ksym %s", fn.Name)
 		return nil, false
 	}
@@ -128,7 +132,7 @@ func matchKernelFunc(matches []*kfuncMatch, fn *btf.Func, maxArgs int, ksyms *Ka
 		return nil, false
 	}
 
-	ksym, traceable := checkKfuncTraceable(fn, ksyms, silent)
+	ksym, traceable := checkKfuncTraceable(fn, ksyms, match.flag.multi, silent)
 	if !traceable {
 		return nil, false
 	}
@@ -158,6 +162,28 @@ func matchKernelFunc(matches []*kfuncMatch, fn *btf.Func, maxArgs int, ksyms *Ka
 		kf.Flag = match.flag.progFlagImmInfo
 		kf.Ret = ret
 		return &kf, true
+	}
+
+	// For kprobe.multi, allow functions with more total args as long as the
+	// matched trace argument is still retrievable from register-passed args.
+	if match.flag.multi {
+		for i, p := range funcProto.Params {
+			if p.Name != match.flag.argName {
+				continue
+			}
+			if i < maxArgs {
+				kf := KFunc{Ksym: ksym, Func: fn}
+				kf.Prms = params
+				kf.Insn = match.flag.insn
+				kf.Flag = match.flag.progFlagImmInfo
+				kf.Ret = ret
+				return &kf, true
+			}
+
+			verboseLogIf(!silent, "Skip function %s because matched arg %s index %d exceeds limit %d args\n",
+				fn.Name, match.flag.argName, i, maxArgs)
+			return nil, false
+		}
 	}
 
 	verboseLogIf(!silent, "Skip function %s with %d args because of limit %d args\n",
@@ -235,11 +261,7 @@ func inferenceKfuncKmods(kfuncs, kmods []string, ksyms *Kallsyms) ([]string, err
 	return slices.Compact(kmods), nil
 }
 
-func FindKernelFuncs(funcs []string, ksyms *Kallsyms, maxArgs int) (KFuncs, error) {
-	if len(funcs) == 0 {
-		return KFuncs{}, nil
-	}
-
+func prepareKmods(funcs []string, ksyms *Kallsyms) ([]string, error) {
 	kmods, err := inferenceKfuncKmods(funcs, kfuncKmods, ksyms)
 	if err != nil {
 		return nil, fmt.Errorf("failed to inference kernel modules: %w", err)
@@ -253,8 +275,18 @@ func FindKernelFuncs(funcs []string, ksyms *Kallsyms, maxArgs int) (KFuncs, erro
 		}
 	}
 
-	slices.Sort(kmods)
-	kmods = slices.Compact(kmods)
+	return slicex.SortCompact(kmods), nil
+}
+
+func FindKernelFuncs(funcs []string, ksyms *Kallsyms, maxArgs int) (KFuncs, error) {
+	if len(funcs) == 0 {
+		return KFuncs{}, nil
+	}
+
+	kmods, err := prepareKmods(funcs, ksyms)
+	if err != nil {
+		return nil, err
+	}
 
 	return searchKernelFuncs(funcs, kmods, ksyms, maxArgs)
 }

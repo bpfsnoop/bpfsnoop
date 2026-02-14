@@ -50,9 +50,13 @@ func (p *packetOutput) outputXdpFrame(prog *ebpf.ProgramSpec, index int) {
 	p.injectStub(prog, index, outputXdpFrameFunc, outputSkbFunc, outputXdpBuffFunc)
 }
 
-func (p *packetOutput) clear(prog *ebpf.ProgramSpec) {
+func clearOutputPktSubprogs(prog *ebpf.ProgramSpec) {
 	clearOutputSubprog(prog, outputPktFunc)
 	clearOutputSubprog(prog, outputSkbFunc)
 	clearOutputSubprog(prog, outputXdpBuffFunc)
 	clearOutputSubprog(prog, outputXdpFrameFunc)
+}
+
+func (p *packetOutput) clear(prog *ebpf.ProgramSpec) {
+	clearOutputPktSubprogs(prog)
 }

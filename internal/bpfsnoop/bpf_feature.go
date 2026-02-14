@@ -15,9 +15,11 @@ import (
 )
 
 var (
-	hasEndbr    bool
-	requiredLbr bool
-	hasFsession bool
+	hasEndbr         bool
+	requiredLbr      bool
+	hasFsession      bool
+	hasKprobeMulti   bool
+	hasKprobeSession bool
 )
 
 type BPFFeatures struct {
@@ -82,6 +84,16 @@ func DetectBPFFeatures() error {
 	if err != nil {
 		return err
 	}
+	hasKprobeMulti, err = btfEnumValue("bpf_attach_type", "BPF_TRACE_KPROBE_MULTI")
+	if err != nil {
+		return err
+	}
+	debugLogIf(hasKprobeMulti, "kprobe.multi is supported")
+	hasKprobeSession, err = btfEnumValue("bpf_attach_type", "BPF_TRACE_KPROBE_SESSION")
+	if err != nil {
+		return err
+	}
+	debugLogIf(hasKprobeSession, "kprobe.session is supported")
 
 	hasEndbr, err = haveEndbrInsn(prog)
 	if err != nil {
