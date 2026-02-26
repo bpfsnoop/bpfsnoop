@@ -13,6 +13,22 @@ volatile const u32 has_endbr SEC(".rodata.endbr") = 0;
 bool traceables[ADDR_CAP];
 bool run SEC(".data.run");
 
+static inline bool loongarch_is_call_insn(u32 insn)
+{
+    u32 op = insn >> 26;        // bits [31:26]
+    u32 rd = insn & 0x1f;       // bits [4:0]
+
+    /* BL */
+    if (op == 0x15)                  // bl
+        return true;
+
+    /* JIRL with link: rd == $ra (1) */
+    if (op == 0x13 && rd == 1)       // jirl && LOONGARCH_GPR_RA
+        return true;
+
+    return false;
+}
+
 static __noinline bool
 is_traceable(u64 addr)
 {
@@ -38,6 +54,13 @@ is_traceable(u64 addr)
     return insn == 0xD503201F /* nop */ || ptr[3] == 0x97 /* bl */ ||
            ptr[3] == 0x94 /* blr */;
 
+#elif defined(bpf_target_loongarch)
+    static const u64 nop = 0x03400000;
+
+    ptr = buff + 4;
+    u32 insn = *(u32 *) ptr;
+
+    return insn == nop || loongarch_is_call_insn(insn);
 #else
 # error "Unsupported architecture"
 #endif

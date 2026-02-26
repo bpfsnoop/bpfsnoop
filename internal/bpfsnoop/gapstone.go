@@ -14,6 +14,8 @@ import (
 const (
 	archAMD64 = "amd64"
 	archARM64 = "arm64"
+
+	archLoongArch64 = "loong64"
 )
 
 func createGapstoneEngine() (*gapstone.Engine, error) {

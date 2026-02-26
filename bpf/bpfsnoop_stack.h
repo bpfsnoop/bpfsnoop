@@ -24,6 +24,25 @@
  * | ... |
  * +-----+ SP of current prog
  *
+ * Stack layout on loongarch:
+ * +-----+ FP of tracee's caller
+ * | ... |
+ * | ret | return address
+ * | rbp | FP of tracee's caller
+ * +-----+ FP of trampoline
+ * | ret | return address
+ * | rbp | FP of tracee
+ * | R0  | retval on stack
+ * | A0  | retval on stack
+ * | arg | args[...]
+ * +-----+ ctx of current prog
+ * | ... |
+ * | rip | IP of trampoline
+ * | rbp | FP of trampoline
+ * +-----+ FP of current prog
+ * | ... |
+ * +-----+ SP of current prog
+ *
  * Stack layout on arm64:
  * |  r9  |
  * |  fp  | FP of tracee's caller
@@ -63,6 +82,18 @@ static __always_inline u64
 get_tramp_fp(void *ctx, __u32 args_nr, bool retval)
 {
 	return __get_ptr(ctx, args_nr, retval);
+}
+
+#elif defined(bpf_target_loongarch)
+static __always_inline u64
+get_tramp_fp(void *ctx, __u32 args_nr, bool retval)
+{
+	int offset;
+
+	offset = (args_nr & 0xF) * 8; /* each arg is 8 bytes */
+	offset += retval ? 16 : 0; /* retval */
+	offset += 16; /* room for return address and frame pointer */
+	return (__u64) ctx + offset;
 }
 
 #elif defined(bpf_target_arm64)

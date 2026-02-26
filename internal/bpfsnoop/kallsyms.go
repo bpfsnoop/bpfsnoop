@@ -32,6 +32,8 @@ const (
 
 	onAmd64 = runtime.GOARCH == archAMD64
 	onArm64 = runtime.GOARCH == archARM64
+
+	onLoong64 = runtime.GOARCH == archLoongArch64
 )
 
 var (
@@ -47,6 +49,10 @@ func init() {
 	case archARM64:
 		sysBPFSymbol = "__arm64_sys_bpf"
 		sysNanosleepSymbol = "__arm64_sys_nanosleep"
+
+	case archLoongArch64:
+		sysBPFSymbol = "__se_sys_bpf"
+		sysNanosleepSymbol = "__se_sys_nanosleep"
 
 	default:
 		log.Fatalf("unsupported architecture %s", runtime.GOARCH)
