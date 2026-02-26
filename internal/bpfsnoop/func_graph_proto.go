@@ -232,6 +232,8 @@ func (p *fgraphProto) parse(ctx context.Context, ip uint64, bytes, depth uint) {
 }
 
 func ShowFuncGraphProto(flags *Flags) {
+	assert.True(canDisasm(), "Current architecture does not support fgraph")
+
 	ksyms, err := NewKallsyms()
 	assert.NoErr(err, "Failed to create kallsyms: %v")
 

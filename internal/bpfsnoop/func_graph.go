@@ -123,6 +123,10 @@ func (fg FuncGraphs) Close() {
 }
 
 func FindGraphFuncs(ctx context.Context, flags *Flags, kfuncs KFuncs, bprogs *bpfProgs, ksyms *Kallsyms, maxArgs int) (FuncGraphs, error) {
+	if !canDisasm() {
+		return nil, fmt.Errorf("current architecture does not support fgraph")
+	}
+
 	var kfs []*KFunc
 	for _, kf := range kfuncs {
 		if kf.Flag.graph {

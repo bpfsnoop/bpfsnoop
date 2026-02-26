@@ -25,8 +25,15 @@ const (
 	kcorePath = "/proc/kcore"
 )
 
+func canDisasm() bool {
+	supportedArchs := []string{archAMD64, archARM64}
+	return slices.Contains(supportedArchs, runtime.GOARCH)
+}
+
 func Disasm(f *Flags) {
 	assert.False(len(f.progs) != 0 && len(f.kfuncs) != 0, "progs %v or kfuncs %v to be disassembled?", f.progs, f.kfuncs)
+
+	assert.True(canDisasm(), "Unsupported arch %s", runtime.GOARCH)
 
 	if len(f.progs) != 0 {
 		progs, err := f.ParseProgs()
@@ -152,9 +159,6 @@ func parseDisasmKfunc(kfunc string, kmods []string, ksyms *Kallsyms, a2l *Addr2L
 }
 
 func dumpKfunc(kfunc string, kmods []string, bytes uint) {
-	supportedArchs := []string{archAMD64, archARM64}
-	assert.True(slices.Contains(supportedArchs, runtime.GOARCH), "Unsupported arch %s", runtime.GOARCH)
-
 	VerboseLog("Reading /proc/kallsyms ..")
 	kallsyms, err := NewKallsyms()
 	assert.NoErr(err, "Failed to read /proc/kallsyms: %v")
