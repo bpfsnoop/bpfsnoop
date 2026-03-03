@@ -39,7 +39,7 @@ read_args_from_ctx(struct pt_regs *ctx, __u64 *args)
     args[4] = PT_REGS_PARM5(ctx);
     args[5] = PT_REGS_PARM6(ctx);
     return 6;
-#elif defined(bpf_target_arm64)
+#elif defined(bpf_target_arm64) || defined(bpf_target_loongarch)
     args[0] = PT_REGS_PARM1(ctx);
     args[1] = PT_REGS_PARM2(ctx);
     args[2] = PT_REGS_PARM3(ctx);
