@@ -109,7 +109,14 @@ func findKernelModuleFileUnderDir(mod, dir string) (string, error) {
 			return err
 		}
 
-		if slices.Contains([]string{modKo, modKoZst}, filepath.Base(path)) {
+		/*
+		 * All hyphens (-) in the kmod's name are converted to
+		 * underscores (_) when the kmod is inserted into the kernel.
+		 *
+		 * Do the same when comparing filenames.
+		 */
+		compFilename := strings.ReplaceAll(filepath.Base(path), "-", "_")
+		if slices.Contains([]string{modKo, modKoZst}, compFilename) {
 			modKoFile = path
 			return errFound
 		}
