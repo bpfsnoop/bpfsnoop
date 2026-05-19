@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/Asphaltt/addr2line"
@@ -19,7 +20,8 @@ import (
 )
 
 const (
-	debugModulesPath = "/usr/lib/debug/lib/modules/"
+	debugModulesPath     = "/usr/lib/debug/lib/modules/"
+	sysfsModKTextPathFmt = "/sys/module/%s/sections/.text"
 )
 
 type kmodAddr2line struct {
@@ -245,9 +247,20 @@ func (a2l *Addr2Line) addKmod(modName string) error {
 		return fmt.Errorf("failed to find section .text in %s: %w", modKo, err)
 	}
 
+	sysfsModKTextAddr := fmt.Sprintf(sysfsModKTextPathFmt, modName)
+	rawModKTextAddr, err := os.ReadFile(sysfsModKTextAddr)
+	if err != nil {
+		return fmt.Errorf("failed to read file %s: %w", sysfsModKTextAddr, err)
+	}
+
+	modKTextAddr, err := strconv.ParseUint(strings.TrimSpace(string(rawModKTextAddr)), 0, 64)
+	if err != nil {
+		return fmt.Errorf("failed to parse %s: %w", sysfsModKTextAddr, err)
+	}
+
 	kmod = kmodAddr2line{}
 	kmod.Addr2Line = li
-	kmod.kaslr = NewKaslr(a2l.stext, sec.Addr)
+	kmod.kaslr = NewKaslr(modKTextAddr, sec.Addr)
 
 	a2l.kmods[modName] = kmod
 
