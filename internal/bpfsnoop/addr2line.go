@@ -160,7 +160,7 @@ func zst2readerAt(fd *os.File) (io.ReaderAt, error) {
 	return newBufferReaderAt(&buf), nil
 }
 
-func findSymbolInKmod(modKo, symbol string) (*elf.Symbol, error) {
+func findSectionInKmod(modKo, section string) (*elf.Section, error) {
 	var elfFile *elf.File
 
 	if strings.HasSuffix(modKo, ".ko.zst") {
@@ -197,15 +197,9 @@ func findSymbolInKmod(modKo, symbol string) (*elf.Symbol, error) {
 		elfFile = e
 	}
 
-	symbols, err := elfFile.Symbols()
-	if err != nil {
-		return nil, fmt.Errorf("failed to get symbols from ELF file %s: %w", modKo, err)
-	}
-
-	for _, sym := range symbols {
-		if sym.Name == symbol {
-			return &sym, nil
-		}
+	elfSection := elfFile.Section(section)
+	if elfSection != nil {
+		return elfSection, nil
 	}
 
 	return nil, ErrNotFound
@@ -246,14 +240,14 @@ func (a2l *Addr2Line) addKmod(modName string) error {
 		verboseLogIf(err != nil, "Failed to create addr2line for %s: %v", modName, err)
 	}
 
-	sym, err := findSymbolInKmod(modKo, ".text")
+	sec, err := findSectionInKmod(modKo, ".text")
 	if err != nil {
-		return fmt.Errorf("failed to find symbol .text in %s: %w", modKo, err)
+		return fmt.Errorf("failed to find section .text in %s: %w", modKo, err)
 	}
 
 	kmod = kmodAddr2line{}
 	kmod.Addr2Line = li
-	kmod.kaslr = NewKaslr(a2l.stext, sym.Value)
+	kmod.kaslr = NewKaslr(a2l.stext, sec.Addr)
 
 	a2l.kmods[modName] = kmod
 
