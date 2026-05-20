@@ -17,7 +17,7 @@ jobs:
     steps:
       - uses: actions/setup-go@v5
         with:
-          go-version: "1.24.0"
+          go-version: "1.26.0"
       - name: Install Compilers
         run: |
           sudo apt-get update
@@ -25,14 +25,21 @@ jobs:
             linux-tools-common \
             linux-tools-generic \
             libcapstone-dev \
-            llvm-18 \
-            clang-18
+            llvm-20 \
+            clang-20
           for tool in "clang" "llc" "llvm-strip"
           do
             sudo rm -f /usr/bin/$tool
-            sudo ln -s /usr/bin/$tool-18 /usr/bin/$tool
+            sudo ln -s /usr/bin/$tool-20 /usr/bin/$tool
           done
         shell: bash
+
+      - name: Install static bpftool
+        run: |
+          curl -sLO https://github.com/libbpf/bpftool/releases/download/v7.7.0/bpftool-v7.7.0-amd64.tar.gz
+          tar -xzf bpftool-v7.7.0-amd64.tar.gz
+          sudo mv bpftool /usr/local/sbin/
+
       - uses: actions/checkout@v4
         with:
           submodules: "recursive"
