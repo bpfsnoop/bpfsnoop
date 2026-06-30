@@ -28,7 +28,7 @@ func findStructUnionType(typeName string) (btf.Type, error) {
 	var err error
 
 	err = iterateKernelBtfs(true, nil, func(spec *btf.Spec) bool {
-		t, err := spec.AnyTypeByName(typeName)
+		types, err := spec.AnyTypesByName(typeName)
 		if errors.Is(err, btf.ErrNotFound) {
 			return false
 		}
@@ -37,8 +37,15 @@ func findStructUnionType(typeName string) (btf.Type, error) {
 			return true // stop iterating on error
 		}
 
-		typ = t
-		return true
+		for _, t := range types {
+			switch t.(type) {
+			case *btf.Struct, *btf.Union:
+				typ = t
+				return true
+			}
+		}
+
+		return false
 	})
 
 	return typ, err

@@ -215,6 +215,15 @@ func (p *FuncGraphParser) parse(ip uint64, bytes uint, depth uint, isBPF bool, t
 	return nil
 }
 
+func findFuncInTypes(types []btf.Type) (*btf.Func, bool) {
+	for _, typ := range types {
+		if fn, ok := typ.(*btf.Func); ok {
+			return fn, true
+		}
+	}
+	return nil, false
+}
+
 func (p *FuncGraphParser) isExcludedKfunc(funcName string) (bool, error) {
 	var excluded bool
 
@@ -223,12 +232,12 @@ func (p *FuncGraphParser) isExcludedKfunc(funcName string) (bool, error) {
 			return true // skip if already matched
 		}
 
-		typ, err := spec.AnyTypeByName(funcName)
+		types, err := spec.AnyTypesByName(funcName)
 		if err != nil {
 			return false
 		}
 
-		fn, ok := typ.(*btf.Func)
+		fn, ok := findFuncInTypes(types)
 		if !ok {
 			return false // skip if not a function type
 		}
@@ -260,7 +269,7 @@ func (p *FuncGraphParser) checkIncludedKfunc(funcName string) (*KFunc, error) {
 			return true // stop if already found or error occurred
 		}
 
-		typ, err := spec.AnyTypeByName(funcName)
+		types, err := spec.AnyTypesByName(funcName)
 		if err != nil {
 			if errors.Is(err, btf.ErrNotFound) {
 				return false // continue iterating if not found
@@ -269,7 +278,7 @@ func (p *FuncGraphParser) checkIncludedKfunc(funcName string) (*KFunc, error) {
 			return false
 		}
 
-		fn, ok := typ.(*btf.Func)
+		fn, ok := findFuncInTypes(types)
 		if !ok {
 			VerboseLog("Type %s is not a function in BTF spec\n", funcName)
 			return false // skip if not a function type

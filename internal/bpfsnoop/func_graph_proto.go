@@ -64,7 +64,7 @@ func detectKfuncTraceable(fnName string, ksyms *Kallsyms, fexit, silent bool) (b
 
 	fn, err := findBtfOfKfunc(fnName)
 	if err != nil {
-		return false, fmt.Errorf("failed to find BTF function %q: %w", fn.Name, err)
+		return false, fmt.Errorf("failed to find BTF function %q: %w", fnName, err)
 	}
 	if fn == nil {
 		verboseLogIf(!silent, "BTF function %q not found", fnName)
@@ -120,7 +120,7 @@ func findBtfOfKfunc(name string) (bfn *btf.Func, e error) {
 			return true
 		}
 
-		typ, err := s.AnyTypeByName(name)
+		types, err := s.AnyTypesByName(name)
 		if errors.Is(err, btf.ErrNotFound) {
 			return false
 		}
@@ -129,7 +129,7 @@ func findBtfOfKfunc(name string) (bfn *btf.Func, e error) {
 			return true // continue iterating
 		}
 
-		fn, ok := typ.(*btf.Func)
+		fn, ok := findFuncInTypes(types)
 		if !ok {
 			e = fmt.Errorf("type %q is not a function type", name)
 			return true // continue iterating
