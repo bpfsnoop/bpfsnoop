@@ -11,26 +11,23 @@ import (
 
 var (
 	kernelBtfLock sync.Mutex
-	kernelBtf     *btf.Spec
+	btfCache      *btf.Cache
 )
 
 func PrepareKernelBTF() error {
 	kernelBtfLock.Lock()
 	defer kernelBtfLock.Unlock()
 
-	if kernelBtf != nil {
+	if btfCache != nil {
 		return nil // already prepared
 	}
 
-	spec, err := btf.LoadKernelSpec()
-	if err != nil {
-		return err
-	}
-
-	kernelBtf = spec
-	return nil
+	btfCache = btf.NewCache()
+	_, err := btfCache.Kernel()
+	return err
 }
 
 func getKernelBTF() *btf.Spec {
-	return kernelBtf
+	spec, _ := btfCache.Kernel()
+	return spec
 }

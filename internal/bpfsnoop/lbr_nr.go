@@ -26,7 +26,7 @@ func ReadLbrNr(ksyms *Kallsyms) error {
 		return fmt.Errorf("x86_pmu symbol not found in kallsyms")
 	}
 
-	pmuType, err := kernelBtf.AnyTypeByName("x86_pmu")
+	pmuType, err := getKernelBTF().AnyTypeByName("x86_pmu")
 	if err != nil {
 		return fmt.Errorf("failed to get x86_pmu type from BTF: %w", err)
 	}

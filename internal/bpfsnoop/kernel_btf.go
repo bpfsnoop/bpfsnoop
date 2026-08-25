@@ -32,12 +32,15 @@ func iterateKernelBtfs(allKmods bool, kmods []string, iter func(*btf.Spec) bool)
 		}
 
 		slices.Sort(fileNames)
-		fileNames = append([]string{"vmlinux"}, fileNames...) // search vmlinux first
+
+		if iter(getKernelBTF()) {
+			return nil
+		}
 
 		for _, file := range fileNames {
-			kmodBtf, err := btf.LoadKernelModuleSpec(file)
+			kmodBtf, err := btfCache.Module(file)
 			if err != nil {
-				return fmt.Errorf("failed to load kernel module BTF: %w", err)
+				return fmt.Errorf("failed to load kernel module BTF %s: %w", file, err)
 			}
 
 			if iter(kmodBtf) {
@@ -47,11 +50,11 @@ func iterateKernelBtfs(allKmods bool, kmods []string, iter func(*btf.Spec) bool)
 	} else if len(kmods) != 0 {
 		kmods = sortCompact(kmods)
 		if idx := slices.Index(kmods, "vmlinux"); idx != -1 {
-			// ensure vmlinux is searched first
-			kmods = append([]string{"vmlinux"}, slices.Delete(kmods, idx, 1)...)
-		} else {
-			// ensure vmlinux is always searched
-			kmods = append([]string{"vmlinux"}, kmods...)
+			kmods = slices.Delete(kmods, idx, 1)
+		}
+
+		if iter(getKernelBTF()) {
+			return nil
 		}
 
 		for _, kmod := range kmods {
@@ -59,9 +62,9 @@ func iterateKernelBtfs(allKmods bool, kmods []string, iter func(*btf.Spec) bool)
 				continue
 			}
 
-			kmodBtf, err := btf.LoadKernelModuleSpec(kmod)
+			kmodBtf, err := btfCache.Module(kmod)
 			if err != nil {
-				return fmt.Errorf("failed to load kernel module BTF: %w", err)
+				return fmt.Errorf("failed to load kernel module BTF %s: %w", kmod, err)
 			}
 
 			if iter(kmodBtf) {
