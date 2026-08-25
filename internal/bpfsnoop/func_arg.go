@@ -30,7 +30,8 @@ func genOutputFuncArgs(prog *ebpf.ProgramSpec, prms []FuncParamFlags, ret FuncPa
 	)
 
 	// backup regs
-	insns = append(insns,
+	insns = append(
+		insns,
 		asm.Mov.Reg(regArgs, asm.R1),
 		asm.Mov.Reg(regBuff, asm.R2),
 		asm.Mov.Reg(regRet, asm.R3),
@@ -39,18 +40,21 @@ func genOutputFuncArgs(prog *ebpf.ProgramSpec, prms []FuncParamFlags, ret FuncPa
 	for i := range prms {
 		prm := prms[i]
 
-		insns = append(insns,
+		insns = append(
+			insns,
 			asm.LoadMem(regArg, regArgs, int16(i*8), asm.DWord),
 		)
 
 		if !prm.IsStr {
-			insns = append(insns,
+			insns = append(
+				insns,
 				asm.StoreMem(regBuff, int16(offset), regArg, asm.DWord),
 			)
 			offset += 8
 
 			if prm.IsNumberPtr {
-				insns = append(insns,
+				insns = append(
+					insns,
 					asm.Mov.Imm(asm.R2, 8),
 					asm.Mov.Reg(asm.R1, asm.RFP),
 					asm.Add.Imm(asm.R1, -8),
@@ -62,14 +66,16 @@ func genOutputFuncArgs(prog *ebpf.ProgramSpec, prms []FuncParamFlags, ret FuncPa
 			}
 		} else /* IsStr */ {
 			if offset != 0 {
-				insns = append(insns,
+				insns = append(
+					insns,
 					asm.Mov.Imm(asm.R2, maxOutputStrLen),
 					asm.Mov.Reg(asm.R1, regBuff),
 					asm.Add.Imm(asm.R1, int32(offset)),
 					asm.FnProbeReadKernelStr.Call(),
 				)
 			} else {
-				insns = append(insns,
+				insns = append(
+					insns,
 					asm.Mov.Imm(asm.R2, maxOutputStrLen),
 					asm.Mov.Reg(asm.R1, regBuff),
 					asm.FnProbeReadKernelStr.Call(),
@@ -80,20 +86,23 @@ func genOutputFuncArgs(prog *ebpf.ProgramSpec, prms []FuncParamFlags, ret FuncPa
 	}
 
 	if !withRetval {
-		insns = append(insns,
+		insns = append(
+			insns,
 			asm.Return(),
 		)
 		return insns, offset, nil
 	}
 
 	if !ret.IsStr {
-		insns = append(insns,
+		insns = append(
+			insns,
 			asm.StoreMem(regBuff, int16(offset), regRet, asm.DWord),
 		)
 		offset += 8
 
 		if ret.IsNumberPtr {
-			insns = append(insns,
+			insns = append(
+				insns,
 				asm.Mov.Reg(asm.R3, regRet),
 				asm.Mov.Imm(asm.R2, 8),
 				asm.Mov.Reg(asm.R1, asm.RFP),
@@ -106,7 +115,8 @@ func genOutputFuncArgs(prog *ebpf.ProgramSpec, prms []FuncParamFlags, ret FuncPa
 		}
 	} else /* IsStr */ {
 		if offset != 0 {
-			insns = append(insns,
+			insns = append(
+				insns,
 				asm.Mov.Reg(asm.R3, regRet),
 				asm.Mov.Imm(asm.R2, maxOutputStrLen),
 				asm.Mov.Reg(asm.R1, regBuff),
@@ -114,7 +124,8 @@ func genOutputFuncArgs(prog *ebpf.ProgramSpec, prms []FuncParamFlags, ret FuncPa
 				asm.FnProbeReadKernelStr.Call(),
 			)
 		} else {
-			insns = append(insns,
+			insns = append(
+				insns,
 				asm.Mov.Reg(asm.R3, regRet),
 				asm.Mov.Imm(asm.R2, maxOutputStrLen),
 				asm.Mov.Reg(asm.R1, regBuff),
@@ -124,7 +135,8 @@ func genOutputFuncArgs(prog *ebpf.ProgramSpec, prms []FuncParamFlags, ret FuncPa
 		offset += maxOutputStrLen
 	}
 
-	insns = append(insns,
+	insns = append(
+		insns,
 		asm.Return(),
 	)
 
@@ -155,8 +167,9 @@ func genOutputKmultiFnArgs(argsNr int, withRetval bool) (asm.Instructions, int) 
 	var insns asm.Instructions
 	var off int16 = 0
 
-	for i := 0; i < argsNr; i++ {
-		insns = append(insns,
+	for range argsNr {
+		insns = append(
+			insns,
 			asm.LoadMem(regTmp, asm.R1, off, asm.DWord),
 			asm.StoreMem(asm.R2, off, regTmp, asm.DWord),
 		)
@@ -164,7 +177,8 @@ func genOutputKmultiFnArgs(argsNr int, withRetval bool) (asm.Instructions, int) 
 	}
 
 	if withRetval {
-		insns = append(insns,
+		insns = append(
+			insns,
 			asm.StoreMem(asm.R2, off, asm.R3, asm.DWord),
 		)
 		off += 8

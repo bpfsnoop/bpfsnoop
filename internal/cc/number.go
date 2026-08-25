@@ -26,7 +26,7 @@ func parseUnsigned(text string) (uint64, error) {
 			return 0, strconv.ErrSyntax
 		}
 
-		r := []rune((text[1 : len(text)-1]))
+		r := []rune(text[1 : len(text)-1])
 		return uint64(r[0]), nil
 	}
 	return strconv.ParseUint(text, 10, 64)

@@ -19,8 +19,7 @@ func NoErr(err error, msg string, args ...any) {
 
 func NoVerifierErr(err error, msg string, args ...any) {
 	if err != nil {
-		var verr *ebpf.VerifierError
-		if errors.As(err, &verr) {
+		if verr, ok := errors.AsType[*ebpf.VerifierError](err); ok {
 			log.Printf("Verifier log:\n%+v", verr)
 		}
 		args = append(args, err)

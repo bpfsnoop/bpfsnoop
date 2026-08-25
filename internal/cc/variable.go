@@ -5,8 +5,8 @@ package cc
 
 import (
 	"fmt"
+	"slices"
 
-	"golang.org/x/exp/slices"
 	"rsc.io/c2go/cc"
 )
 

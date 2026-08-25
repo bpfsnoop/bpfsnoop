@@ -7,13 +7,12 @@ import (
 	"bufio"
 	"fmt"
 	"log"
+	"maps"
 	"os"
 	"runtime"
 	"slices"
 	"strconv"
 	"strings"
-
-	"golang.org/x/exp/maps"
 )
 
 const kallsymsFilepath = "/proc/kallsyms"
@@ -218,8 +217,7 @@ func NewKallsyms() (*Kallsyms, error) {
 		return nil, fmt.Errorf("failed to scan %s: %w", kallsymsFilepath, err)
 	}
 
-	ks.addrs = maps.Keys(ks.a2s)
-	slices.Sort(ks.addrs)
+	ks.addrs = slices.Sorted(maps.Keys(ks.a2s))
 
 	// Sort modules by name
 	slices.Sort(ks.mods)

@@ -8,7 +8,6 @@ import (
 	"fmt"
 
 	"github.com/cilium/ebpf"
-	"golang.org/x/exp/maps"
 )
 
 func DetectSupportedMaxArg(spec *ebpf.CollectionSpec, ksyms *Kallsyms) (int, error) {
@@ -36,7 +35,10 @@ func DetectSupportedMaxArg(spec *ebpf.CollectionSpec, ksyms *Kallsyms) (int, err
 	clearFilterArgSubprog(prog)
 
 	attachType := ebpf.AttachTraceFExit
-	kfunc := maps.Values(kfuncs)[0]
+	var kfunc *KFunc
+	for _, kfunc = range kfuncs {
+		break
+	}
 	prog.AttachTo = kfunc.Ksym.name
 	prog.AttachType = attachType
 	DebugLog("Using %s to detect max arg", kfunc.Name())
@@ -45,8 +47,7 @@ func DetectSupportedMaxArg(spec *ebpf.CollectionSpec, ksyms *Kallsyms) (int, err
 		MapReplacements: reusedMaps,
 	})
 	if err != nil {
-		var verr *ebpf.VerifierError
-		if errors.As(err, &verr) {
+		if verr, ok := errors.AsType[*ebpf.VerifierError](err); ok {
 			DebugLog("Verifier log:\n%+v", verr)
 		}
 		DebugLog("Failed to create max-arg detection bpf collection: %v", err)

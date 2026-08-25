@@ -69,7 +69,8 @@ func (pf *packetFilter) filterSkb(prog *ebpf.ProgramSpec, index int, t btf.Type)
 	clearFilterSubprog(prog, filterXdpBuffFunc)
 	clearFilterSubprog(prog, filterXdpFrameFunc)
 
-	insns := append(genAccessArg(index, asm.R1),
+	insns := append(
+		genAccessArg(index, asm.R1),
 		asm.Call.Label(filterSkbFunc),
 		asm.Return(),
 	)
@@ -100,7 +101,8 @@ func (pf *packetFilter) injectFilterXdp(prog *ebpf.ProgramSpec, index int, t btf
 	clearFilterSubprog(prog, otherStub)
 	clearFilterSubprog(prog, pcapFilterL3Stub)
 
-	insns := append(genAccessArg(index, asm.R1),
+	insns := append(
+		genAccessArg(index, asm.R1),
 		asm.Call.Label(stub),
 		asm.Return(),
 	)

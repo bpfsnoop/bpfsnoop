@@ -6,11 +6,11 @@ package bpfsnoop
 import (
 	"errors"
 	"fmt"
+	"maps"
 	"slices"
 
 	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/link"
-	"golang.org/x/exp/maps"
 
 	"github.com/bpfsnoop/bpfsnoop/internal/bpf"
 )
@@ -95,8 +95,7 @@ func detectTraceables(kfuncs KFuncs, silent bool) (KFuncs, error) {
 		return nil, fmt.Errorf("failed to load traceable bpf spec: %w", err)
 	}
 
-	addrs := maps.Keys(kfuncs)
-	slices.Sort(addrs)
+	addrs := slices.Sorted(maps.Keys(kfuncs))
 
 	for len(addrs) != 0 {
 		var detect []uintptr

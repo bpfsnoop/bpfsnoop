@@ -8,17 +8,16 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"maps"
 	"os"
 	"os/signal"
 	"slices"
-	"sort"
 	"strings"
 	"syscall"
 
 	"github.com/bpfsnoop/gapstone"
 	"github.com/cilium/ebpf/btf"
 	"github.com/fatih/color"
-	"golang.org/x/exp/maps"
 
 	"github.com/bpfsnoop/bpfsnoop/internal/assert"
 	"github.com/bpfsnoop/bpfsnoop/internal/bpf"
@@ -283,9 +282,8 @@ func ShowFuncGraphProto(flags *Flags) {
 
 	printNewline := false
 	if len(kfs) > 0 {
-		kfuncs := maps.Values(kfs)
-		sort.Slice(kfuncs, func(i, j int) bool {
-			return kfuncs[i].Ksym.name < kfuncs[j].Ksym.name
+		kfuncs := slices.SortedFunc(maps.Values(kfs), func(a, b *KFunc) int {
+			return strings.Compare(a.Ksym.name, b.Ksym.name)
 		})
 
 		for _, kf := range kfuncs {
@@ -310,9 +308,8 @@ func ShowFuncGraphProto(flags *Flags) {
 			fmt.Println()
 		}
 
-		progs := maps.Values(bps)
-		sort.Slice(progs, func(i, j int) bool {
-			return progs[i].funcName < progs[j].funcName
+		progs := slices.SortedFunc(maps.Values(bps), func(a, b *bpfTracingInfo) int {
+			return strings.Compare(a.funcName, b.funcName)
 		})
 
 		for _, bp := range progs {

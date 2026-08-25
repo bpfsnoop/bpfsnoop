@@ -17,7 +17,6 @@ require (
 	github.com/lorenzosaino/go-sysctl v0.3.1
 	github.com/spf13/pflag v1.0.10
 	github.com/ulikunitz/xz v0.5.12
-	golang.org/x/exp v0.0.0-20241009180824-f66d83c29e7c
 	golang.org/x/sync v0.20.0
 	rsc.io/c2go v0.0.0-20170620140410-520c22818a08
 )

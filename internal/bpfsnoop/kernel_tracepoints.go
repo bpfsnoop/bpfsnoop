@@ -54,7 +54,7 @@ func matchKernelTracepoints(tps []string, tpInfos map[string]tracepointInfo, sil
 
 		params, ret, err := getFuncParams(&fn)
 		if err != nil {
-			verboseLogIf(!silent, "Failed to prepare params info for tracepoint %s: %w", tpName, err)
+			verboseLogIf(!silent, "Failed to prepare params info for tracepoint %s: %v", tpName, err)
 			continue
 		}
 

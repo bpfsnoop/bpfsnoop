@@ -30,7 +30,7 @@ func bytes2i(b []byte, size int) uint64 {
 
 	var v uint64
 	// Note: This assumes that the byte slice is in little-endian order.
-	for i := 0; i < size; i++ {
+	for i := range size {
 		v |= uint64(b[i]) << (8 * i)
 	}
 	return v

@@ -7,16 +7,15 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"maps"
 	"runtime"
 	"slices"
-	"sort"
 	"strconv"
 	"strings"
 
 	"github.com/Asphaltt/addr2line"
 	"github.com/bpfsnoop/gapstone"
 	"github.com/fatih/color"
-	"golang.org/x/exp/maps"
 
 	"github.com/bpfsnoop/bpfsnoop/internal/assert"
 )
@@ -139,9 +138,8 @@ func parseDisasmKfunc(kfunc string, kmods []string, ksyms *Kallsyms, a2l *Addr2L
 	kfuncs, _ := findKernelFuncs([]string{kfunc}, kmods, ksyms, 0xFF, false, true)
 	if len(kfuncs) != 0 {
 		// grab the very first one sorted by name
-		values := maps.Values(kfuncs)
-		sort.Slice(values, func(i, j int) bool {
-			return values[i].Ksym.name < values[j].Ksym.name
+		values := slices.SortedFunc(maps.Values(kfuncs), func(a, b *KFunc) int {
+			return strings.Compare(a.Ksym.name, b.Ksym.name)
 		})
 		return values[0].Ksym.addr, values[0].Ksym.name
 	}

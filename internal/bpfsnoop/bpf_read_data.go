@@ -42,11 +42,13 @@ func readKernelData(expr string, helpers *Helpers) error {
 	}
 
 	var insns asm.Instructions
-	insns = append(insns,
+	insns = append(
+		insns,
 		asm.Mov.Reg(outputArgRegBuff, asm.R1), // buff = R1
 	)
 	insns = append(insns, arg.insn...)
-	insns = append(insns,
+	insns = append(
+		insns,
 		asm.Return(),
 	)
 

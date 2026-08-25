@@ -373,7 +373,8 @@ func (arg *argDataOutput) genInsns(args []funcArgumentOutput) asm.Instructions {
 	// output_arg(__u64 *args, void *buff)
 
 	var insns asm.Instructions
-	insns = append(insns,
+	insns = append(
+		insns,
 		asm.Mov.Reg(asm.R9, asm.R1), // R9 = args
 		asm.Mov.Reg(asm.R8, asm.R2), // R8 = buff
 	)
@@ -385,7 +386,8 @@ func (arg *argDataOutput) genInsns(args []funcArgumentOutput) asm.Instructions {
 	}
 	insns = slices.Concat(argsInsns...)
 
-	insns = append(insns,
+	insns = append(
+		insns,
 		asm.Return(),
 	)
 

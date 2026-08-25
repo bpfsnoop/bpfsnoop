@@ -1467,7 +1467,8 @@ func TestEvaluateMod(t *testing.T) {
 		val, err := c.evaluate(expr)
 		test.AssertNoErr(t, err)
 		test.AssertTrue(t, val.isMaterialized())
-		test.AssertEqualSlice(t, c.insns, genInsnsWithN(r7,
+		test.AssertEqualSlice(t, c.insns, genInsnsWithN(
+			r7,
 			asm.Instructions{
 				asm.LoadMem(r8, argsReg, 0, dword),
 				asm.LoadMem(r8, r8, 112, dword),
@@ -1585,7 +1586,8 @@ func TestEvaluateAnd(t *testing.T) {
 		val, err := c.evaluate(expr)
 		test.AssertNoErr(t, err)
 		test.AssertTrue(t, val.isMaterialized())
-		test.AssertEqualSlice(t, c.insns, genInsnsWithN(r7,
+		test.AssertEqualSlice(t, c.insns, genInsnsWithN(
+			r7,
 			asm.Instructions{
 				asm.LoadMem(r8, argsReg, 0, dword),
 				asm.LoadMem(r8, r8, 112, dword),
@@ -1700,7 +1702,8 @@ func TestEvaluateOr(t *testing.T) {
 		val, err := c.evaluate(expr)
 		test.AssertNoErr(t, err)
 		test.AssertTrue(t, val.isMaterialized())
-		test.AssertEqualSlice(t, c.insns, genInsnsWithN(r7,
+		test.AssertEqualSlice(t, c.insns, genInsnsWithN(
+			r7,
 			asm.Instructions{
 				asm.LoadMem(r8, argsReg, 0, dword),
 				asm.LoadMem(r8, r8, 112, dword),
@@ -1815,7 +1818,8 @@ func TestEvaluateXor(t *testing.T) {
 		val, err := c.evaluate(expr)
 		test.AssertNoErr(t, err)
 		test.AssertTrue(t, val.isMaterialized())
-		test.AssertEqualSlice(t, c.insns, genInsnsWithN(r7,
+		test.AssertEqualSlice(t, c.insns, genInsnsWithN(
+			r7,
 			asm.Instructions{
 				asm.LoadMem(r8, argsReg, 0, dword),
 				asm.LoadMem(r8, r8, 112, dword),
@@ -1950,7 +1954,8 @@ func TestEvaluateLsh(t *testing.T) {
 		val, err := c.evaluate(expr)
 		test.AssertNoErr(t, err)
 		test.AssertTrue(t, val.isMaterialized())
-		test.AssertEqualSlice(t, c.insns, genInsnsWithN(r7,
+		test.AssertEqualSlice(t, c.insns, genInsnsWithN(
+			r7,
 			asm.Instructions{
 				asm.LoadMem(r8, argsReg, 0, dword),
 				asm.LoadMem(r8, r8, 112, dword),
@@ -2086,7 +2091,8 @@ func TestEvaluateRsh(t *testing.T) {
 		val, err := c.evaluate(expr)
 		test.AssertNoErr(t, err)
 		test.AssertTrue(t, val.isMaterialized())
-		test.AssertEqualSlice(t, c.insns, genInsnsWithN(r7,
+		test.AssertEqualSlice(t, c.insns, genInsnsWithN(
+			r7,
 			asm.Instructions{
 				asm.LoadMem(r8, argsReg, 0, dword),
 				asm.LoadMem(r8, r8, 112, dword),
@@ -2261,7 +2267,8 @@ func TestEvaluateEqEq(t *testing.T) {
 		val, err := c.evaluate(expr)
 		test.AssertNoErr(t, err)
 		test.AssertTrue(t, val.isMaterialized())
-		test.AssertEqualSlice(t, c.insns, genInsnsWithN(r7,
+		test.AssertEqualSlice(t, c.insns, genInsnsWithN(
+			r7,
 			asm.Instructions{
 				asm.LoadMem(r8, argsReg, 0, dword),
 				asm.LoadMem(r8, r8, 112, dword),
@@ -2382,7 +2389,8 @@ func TestEvaluateNotEq(t *testing.T) {
 		val, err := c.evaluate(expr)
 		test.AssertNoErr(t, err)
 		test.AssertTrue(t, val.isMaterialized())
-		test.AssertEqualSlice(t, c.insns, genInsnsWithN(r7,
+		test.AssertEqualSlice(t, c.insns, genInsnsWithN(
+			r7,
 			asm.Instructions{
 				asm.LoadMem(r8, argsReg, 0, dword),
 				asm.LoadMem(r8, r8, 112, dword),
@@ -2503,7 +2511,8 @@ func TestEvaluateLt(t *testing.T) {
 		val, err := c.evaluate(expr)
 		test.AssertNoErr(t, err)
 		test.AssertTrue(t, val.isMaterialized())
-		test.AssertEqualSlice(t, c.insns, genInsnsWithN(r7,
+		test.AssertEqualSlice(t, c.insns, genInsnsWithN(
+			r7,
 			asm.Instructions{
 				asm.LoadMem(r8, argsReg, 0, dword),
 				asm.LoadMem(r8, r8, 112, dword),
@@ -2624,7 +2633,8 @@ func TestEvaluateLtEq(t *testing.T) {
 		val, err := c.evaluate(expr)
 		test.AssertNoErr(t, err)
 		test.AssertTrue(t, val.isMaterialized())
-		test.AssertEqualSlice(t, c.insns, genInsnsWithN(r7,
+		test.AssertEqualSlice(t, c.insns, genInsnsWithN(
+			r7,
 			asm.Instructions{
 				asm.LoadMem(r8, argsReg, 0, dword),
 				asm.LoadMem(r8, r8, 112, dword),
@@ -2745,7 +2755,8 @@ func TestEvaluateGt(t *testing.T) {
 		val, err := c.evaluate(expr)
 		test.AssertNoErr(t, err)
 		test.AssertTrue(t, val.isMaterialized())
-		test.AssertEqualSlice(t, c.insns, genInsnsWithN(r7,
+		test.AssertEqualSlice(t, c.insns, genInsnsWithN(
+			r7,
 			asm.Instructions{
 				asm.LoadMem(r8, argsReg, 0, dword),
 				asm.LoadMem(r8, r8, 112, dword),
@@ -2866,7 +2877,8 @@ func TestEvaluateGtEq(t *testing.T) {
 		val, err := c.evaluate(expr)
 		test.AssertNoErr(t, err)
 		test.AssertTrue(t, val.isMaterialized())
-		test.AssertEqualSlice(t, c.insns, genInsnsWithN(r7,
+		test.AssertEqualSlice(t, c.insns, genInsnsWithN(
+			r7,
 			asm.Instructions{
 				asm.LoadMem(r8, argsReg, 0, dword),
 				asm.LoadMem(r8, r8, 112, dword),
@@ -3050,7 +3062,8 @@ func TestEvaluateAndAnd(t *testing.T) {
 		val, err := c.evaluate(expr)
 		test.AssertNoErr(t, err)
 		test.AssertTrue(t, val.isMaterialized())
-		test.AssertEqualSlice(t, c.insns, genInsnsWithN(r7,
+		test.AssertEqualSlice(t, c.insns, genInsnsWithN(
+			r7,
 			asm.Instructions{
 				asm.LoadMem(r8, argsReg, 0, dword),
 				asm.LoadMem(r8, r8, 112, dword),
@@ -3235,7 +3248,8 @@ func TestEvaluateOrOr(t *testing.T) {
 		val, err := c.evaluate(expr)
 		test.AssertNoErr(t, err)
 		test.AssertTrue(t, val.isMaterialized())
-		test.AssertEqualSlice(t, c.insns, genInsnsWithN(r7,
+		test.AssertEqualSlice(t, c.insns, genInsnsWithN(
+			r7,
 			asm.Instructions{
 				asm.LoadMem(r8, argsReg, 0, dword),
 				asm.LoadMem(r8, r8, 112, dword),

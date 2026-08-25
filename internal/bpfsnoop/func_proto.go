@@ -7,13 +7,12 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"slices"
-	"sort"
 	"strings"
 
 	"github.com/cilium/ebpf/btf"
 	"github.com/fatih/color"
-	"golang.org/x/exp/maps"
 
 	"github.com/bpfsnoop/bpfsnoop/internal/assert"
 	"github.com/bpfsnoop/bpfsnoop/internal/btfx"
@@ -103,8 +102,7 @@ func ShowFuncProto(f *Flags) {
 			fmt.Fprint(&sb, "BPF functions:")
 			color.New(color.FgGreen).Fprintf(&sb, " (total %d)\n", len(progs.tracings))
 
-			keys := maps.Keys(progs.tracings)
-			sort.Strings(keys)
+			keys := slices.Sorted(maps.Keys(progs.tracings))
 
 			for _, k := range keys {
 				printFuncProto(&sb, progs.tracings[k].fn, yellow, f.listFuncParams)
@@ -193,8 +191,7 @@ func ShowFuncProto(f *Flags) {
 		fmt.Fprint(&sb, "Kernel tracepoints:")
 		color.New(color.FgGreen).Fprintf(&sb, " (total %d)\n", len(ktps))
 
-		keys := maps.Keys(ktps)
-		slices.Sort(keys)
+		keys := slices.Sorted(maps.Keys(ktps))
 
 		for _, k := range keys {
 			printFuncProto(&sb, ktps[k].Func, yellow, f.listFuncParams)

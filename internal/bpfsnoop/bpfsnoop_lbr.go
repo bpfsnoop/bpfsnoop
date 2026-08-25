@@ -6,6 +6,7 @@ package bpfsnoop
 import (
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"unsafe"
 
@@ -45,8 +46,8 @@ func (s *lbrStack) get(funcIP uintptr, lbrData *LbrData, helpers *Helpers) bool 
 				}
 			}
 
-			for i := len(entries) - 1; i >= 0; i-- {
-				if progInfo.contains(entries[i].From) || progInfo.contains(entries[i].To) {
+			for i, entry := range slices.Backward(entries) {
+				if progInfo.contains(entry.From) || progInfo.contains(entry.To) {
 					entries = entries[:i+1]
 					break
 				}

@@ -11,7 +11,7 @@ import (
 )
 
 func (ra *RegisterAllocator) reset() {
-	for i := 0; i < len(ra.registers); i++ {
+	for i := range len(ra.registers) {
 		ra.registers[i] = false
 	}
 }

@@ -30,7 +30,7 @@ func OpenLbrPerfEvent(branchTypes []string) (*LbrPerfEvent, error) {
 	}
 
 	p.fds = make([]int, 0, numCPU)
-	for i := 0; i < numCPU; i++ {
+	for i := range numCPU {
 		fd, err := openLbrPerfEvent(i, branchTypes)
 		if err != nil {
 			return nil, fmt.Errorf("failed to open LBR perf event: %w", err)

@@ -5,10 +5,11 @@ package bpfsnoop
 
 import (
 	"fmt"
+	"maps"
+	"slices"
 	"sync"
 
 	"github.com/cilium/ebpf"
-	"golang.org/x/exp/maps"
 	"golang.org/x/sync/errgroup"
 
 	"github.com/bpfsnoop/bpfsnoop/internal/assert"
@@ -70,7 +71,6 @@ func NewBPFProgs(pflags []ProgFlag, noParseProgs, disasm bool) (*bpfProgs, error
 func (b *bpfProgs) parseProgs() {
 	var wg errgroup.Group
 	for id, prog := range b.progs {
-		id, prog := id, prog // capture range variables
 		wg.Go(func() error {
 			return b.addProg(prog, id, nil, false)
 		})
@@ -129,7 +129,7 @@ func (b *bpfProgs) Close() {
 }
 
 func (b *bpfProgs) Tracings() []*bpfTracingInfo {
-	return maps.Values(b.tracings)
+	return slices.Collect(maps.Values(b.tracings))
 }
 
 func (b *bpfProgs) wait() error {

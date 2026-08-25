@@ -118,7 +118,6 @@ func (t *bpfTracing) traceFuncsMulti(errg *errgroup.Group, reusedMaps map[string
 	}
 
 	for i, g := range groups {
-		g := g
 
 		symbols, skipped := filterKprobeMultiSymbols(g.fns, availableFilterFuncs)
 		if len(skipped) != 0 {

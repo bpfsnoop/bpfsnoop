@@ -85,7 +85,6 @@ func (t *bpfTracing) traceInsns(errg *errgroup.Group, reusedMaps map[string]*ebp
 	}
 
 	for _, insn := range insns {
-		insn := insn
 		errg.Go(func() error {
 			return t.traceInsn(insnSpec, reusedMaps, insn)
 		})

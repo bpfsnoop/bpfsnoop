@@ -114,7 +114,7 @@ func outputFnRetval(sb *strings.Builder, info *funcInfo, s string, data []byte, 
 			info.retParam.IsNumberPtr, num1, num2, s, f)
 	} else {
 		num := *(*uint64)(unsafe.Pointer(&data[0]))
-		retval = fmt.Sprintf("%#x/%s", num, num)
+		retval = fmt.Sprintf("%#x/%d", num, num)
 	}
 
 L_output:

@@ -6,13 +6,13 @@ package bpfsnoop
 import (
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"slices"
 
 	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/btf"
 	"github.com/cilium/ebpf/link"
-	"golang.org/x/exp/maps"
 	"golang.org/x/sync/errgroup"
 	"golang.org/x/sys/unix"
 
@@ -226,7 +226,6 @@ func (t *bpfTracing) traceGraphs(reusedMaps map[string]*ebpf.Map, graphs FuncGra
 	var errg errgroup.Group
 
 	for _, graph := range graphs {
-		graph := graph
 		if graph.Root {
 			// roots are traced by regular fentry/fexit programs.
 			continue
@@ -324,8 +323,7 @@ func probeTrampAddrs(graphs FuncGraphs, silent bool) ([]uint64, []uint64, error)
 		return nil, nil, fmt.Errorf("failed to load traceable bpf spec: %w", err)
 	}
 
-	addrs := maps.Keys(graphs)
-	slices.Sort(addrs)
+	addrs := slices.Sorted(maps.Keys(graphs))
 
 	trampAddrs := make([]uint64, 0, len(addrs))
 	kfuncAddrs := make([]uint64, 0, len(addrs))

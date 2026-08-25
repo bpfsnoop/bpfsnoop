@@ -9,13 +9,13 @@ import (
 	"github.com/fatih/color"
 )
 
-func VerboseLog(format string, args ...interface{}) {
+func VerboseLog(format string, args ...any) {
 	if verbose {
 		log.Printf(format, args...)
 	}
 }
 
-func verboseLogIf(cond bool, format string, args ...interface{}) {
+func verboseLogIf(cond bool, format string, args ...any) {
 	if cond && verbose {
 		log.Printf(format, args...)
 	}
@@ -27,7 +27,7 @@ func DebugLog(format string, args ...any) {
 	}
 }
 
-func debugLogIf(cond bool, format string, args ...interface{}) {
+func debugLogIf(cond bool, format string, args ...any) {
 	if cond && debugLog {
 		log.Printf(format, args...)
 	}
@@ -43,7 +43,7 @@ func WarnLogIf(cond bool, format string, args ...any) {
 	}
 }
 
-func LogIf(cond bool, format string, args ...interface{}) {
+func LogIf(cond bool, format string, args ...any) {
 	if cond {
 		log.Printf(format, args...)
 	}

@@ -130,7 +130,6 @@ func (t *bpfTracing) Close() {
 	var errg errgroup.Group
 
 	for _, b := range t.bprgs {
-		b := b
 		errg.Go(func() error {
 			b.Close()
 			return nil
@@ -138,7 +137,6 @@ func (t *bpfTracing) Close() {
 	}
 
 	for _, k := range t.kfns {
-		k := k
 		errg.Go(func() error {
 			k.Close()
 			return nil
@@ -146,7 +144,6 @@ func (t *bpfTracing) Close() {
 	}
 
 	for _, i := range t.insns {
-		i := i
 		errg.Go(func() error {
 			i.Close()
 			return nil
@@ -154,7 +151,6 @@ func (t *bpfTracing) Close() {
 	}
 
 	for _, g := range t.grphs {
-		g := g
 		errg.Go(func() error {
 			g.Close()
 			return nil
