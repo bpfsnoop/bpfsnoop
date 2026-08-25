@@ -227,6 +227,10 @@ func findFuncInTypes(types []btf.Type) (*btf.Func, bool) {
 func (p *FuncGraphParser) isExcludedKfunc(funcName string) (bool, error) {
 	var excluded bool
 
+	if len(p.excludes) == 0 {
+		return false, nil
+	}
+
 	err := iterateKernelBtfs(true, nil, func(spec *btf.Spec) bool {
 		if excluded {
 			return true // skip if already matched
