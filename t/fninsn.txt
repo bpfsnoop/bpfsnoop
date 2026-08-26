@@ -7,7 +7,7 @@
 name: fninsn::icmp_rcv
 tag: fninsn,pkt
 test: -k '(i)icmp_rcv' --filter-pkt 'host 127.0.0.1' --trace-insn-debug-cnt 10
-match_amd64: andq	$0xfffffffffffffffe
+match_amd64: movq	0x58(%rdi),
 match_arm64: and	x20, x20, #0xfffffffffffffffe
 trigger: ping -c 1 -s 64 127.0.0.1
 
@@ -17,6 +17,6 @@ trigger: ping -c 1 -s 64 127.0.0.1
 name: fninsn::icmp_rcv:output-insns
 tag: fninsn,pkt
 test: -k 'icmp_rcv' --filter-pkt 'host 127.0.0.1' --output-insns --trace-insn-debug-cnt 10
-match_amd64: andq	$0xfffffffffffffffe
+match_amd64: movq	0x58(%rdi),
 match_arm64: and	x20, x20, #0xfffffffffffffffe
 trigger: ping -c 1 -s 64 127.0.0.1
