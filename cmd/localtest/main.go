@@ -5,6 +5,7 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"slices"
@@ -13,6 +14,13 @@ import (
 
 	"github.com/bpfsnoop/bpfsnoop/internal/assert"
 )
+
+type failedTest struct {
+	file string
+	testCase
+}
+
+var failedTests []failedTest
 
 func main() {
 	var passed bool
@@ -35,6 +43,7 @@ func main() {
 				prInfo(w, green, "=== ALL TESTS PASSED ===\n")
 			} else {
 				prErr(w, red, "=== SOME TESTS FAILED ===\n")
+				printFailedTests(w)
 			}
 		}()
 
@@ -53,6 +62,7 @@ func main() {
 				prInfo(w, green, "=== ALL TESTS PASSED ===\n")
 			} else {
 				prErr(w, red, "=== SOME TESTS FAILED ===\n")
+				printFailedTests(w)
 			}
 		}()
 
@@ -80,4 +90,28 @@ func main() {
 	}
 
 	passed = test(os.Stdout, f.testCase)
+	if !passed {
+		failedTests = append(failedTests, failedTest{testCase: f.testCase})
+		printFailedTests(os.Stdout)
+	}
+}
+
+func printFailedTests(w io.Writer) {
+	if len(failedTests) == 0 {
+		return
+	}
+
+	fmt.Fprintln(w)
+	prErr(w, red, "Failed tests:\n")
+	for _, failed := range failedTests {
+		name := failed.name
+		if name == "" {
+			name = "<unnamed>"
+		}
+		if failed.file != "" {
+			prErr(w, red, "- %s: %s (%s)\n", failed.file, name, failed.test)
+		} else {
+			prErr(w, red, "- %s (%s)\n", name, failed.test)
+		}
+	}
 }

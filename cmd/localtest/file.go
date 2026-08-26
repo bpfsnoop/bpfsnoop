@@ -107,7 +107,13 @@ func testFile(w io.Writer, file string) bool {
 		i++
 
 		if testName == "" || testName == t.name {
-			passed = test(w, t) && passed
+			if !test(w, t) {
+				failedTests = append(failedTests, failedTest{
+					file:     file,
+					testCase: t,
+				})
+				passed = false
+			}
 		}
 	}
 
