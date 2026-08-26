@@ -5,7 +5,6 @@ package bpfsnoop
 
 import (
 	"fmt"
-	"slices"
 	"strings"
 
 	"github.com/Asphaltt/mybtf"
@@ -59,9 +58,15 @@ func (b *bpfProgFuncInfo) get(addr uintptr) (*bpfProgLineInfo, bool) {
 		return nil, false
 	}
 
-	idx, ok := slices.BinarySearch(b.jitedLineInfo, addr)
-	if !ok {
-		idx--
+	idx, found := -1, false
+	for i, li := range b.jitedLineInfo {
+		if li == addr {
+			idx, found = i, true
+			break
+		}
+	}
+	if !found {
+		return nil, false
 	}
 
 	fileName := b.lineInfos[idx].Line.FileName()
