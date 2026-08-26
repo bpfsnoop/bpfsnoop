@@ -124,14 +124,16 @@ emit_bpfsnoop_kmulti_event(struct pt_regs *ctx)
         session_id = gen_session_id(func_ip);
         if (!bpfsnoop_session_enter(ctx, pid_tgid, func_ip, session_id,
                                     filter_kmulti(args, session_id),
-                                    &session_id, cfg->flags.is_session))
+                                    &session_id, cfg->flags.is_session,
+                                    cfg->flags.graph_mode))
             return BPF_OK;
 
         event_type = BPFSNOOP_EVENT_TYPE_FUNC_ENTRY;
         break;
 
     case BPFSNOOP_MODE_SESSION_EXIT:
-        if (!bpfsnoop_session_exit(ctx, pid_tgid, func_ip, &session_id, cfg->flags.is_session))
+        if (!bpfsnoop_session_exit(ctx, pid_tgid, func_ip, &session_id, cfg->flags.is_session,
+                                   cfg->flags.graph_mode))
             return BPF_OK;
 
         event_type = BPFSNOOP_EVENT_TYPE_FUNC_EXIT;

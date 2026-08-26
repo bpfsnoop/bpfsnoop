@@ -107,14 +107,16 @@ emit_bpfsnoop_event(void *ctx)
     case BPFSNOOP_MODE_SESSION_ENTRY:
         session_id = gen_session_id(fp);
         if (!bpfsnoop_session_enter(ctx, pid_tgid, func_ip, session_id, filter(args, session_id),
-                                    &session_id, cfg->flags.is_session))
+                                    &session_id, cfg->flags.is_session,
+                                    cfg->flags.graph_mode))
             return BPF_OK;
 
         event_type = BPFSNOOP_EVENT_TYPE_FUNC_ENTRY;
         break;
 
     case BPFSNOOP_MODE_SESSION_EXIT:
-        if (!bpfsnoop_session_exit(ctx, pid_tgid, func_ip, &session_id, cfg->flags.is_session))
+        if (!bpfsnoop_session_exit(ctx, pid_tgid, func_ip, &session_id, cfg->flags.is_session,
+                                   cfg->flags.graph_mode))
             return BPF_OK;
 
         event_type = BPFSNOOP_EVENT_TYPE_FUNC_EXIT;

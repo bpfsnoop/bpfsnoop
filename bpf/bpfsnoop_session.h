@@ -14,7 +14,7 @@
 
 static __always_inline bool
 bpfsnoop_session_enter(void *ctx, __u64 pid_tgid, __u64 func_ip, __u64 sid, bool pass,
-                       __u64 *session_id, bool is_session)
+                       __u64 *session_id, bool is_session, bool update_session_map)
 {
     if (!pass)
         return false;
@@ -22,6 +22,8 @@ bpfsnoop_session_enter(void *ctx, __u64 pid_tgid, __u64 func_ip, __u64 sid, bool
     if (is_session) {
         __u64 *cookie = bpfsnoop_session_cookie(ctx);
         *cookie = sid;
+        if (update_session_map)
+            add_session(pid_tgid, func_ip, sid);
     } else {
         add_session(pid_tgid, func_ip, sid);
     }
@@ -31,7 +33,8 @@ bpfsnoop_session_enter(void *ctx, __u64 pid_tgid, __u64 func_ip, __u64 sid, bool
 }
 
 static __always_inline bool
-bpfsnoop_session_exit(void *ctx, __u64 pid_tgid, __u64 func_ip, __u64 *session_id, bool is_session)
+bpfsnoop_session_exit(void *ctx, __u64 pid_tgid, __u64 func_ip, __u64 *session_id, bool is_session,
+                      bool update_session_map)
 {
     if (is_session) {
         __u64 *cookie = bpfsnoop_session_cookie(ctx);
@@ -41,6 +44,8 @@ bpfsnoop_session_exit(void *ctx, __u64 pid_tgid, __u64 func_ip, __u64 *session_i
             return false;
 
         *session_id = sid - 1;
+        if (update_session_map)
+            get_and_del_session(pid_tgid, func_ip);
     } else {
         __u64 sid = get_and_del_session(pid_tgid, func_ip);
 
