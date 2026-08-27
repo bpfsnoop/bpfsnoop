@@ -15,6 +15,8 @@ Please check [bpfsnoop.com](https://bpfsnoop.com) for more details.
 
 See [Typed return values](docs/retval.md) for using `$retval` in argument expressions and packet tracing.
 
+For AI-agent integration, see [bpfsnoop MCP server](docs/mcp.md).
+
 ## Acknowledgments
 
 - [cilium/ebpf](https://github.com/cilium/ebpf) for interacting with bpf subsystem.

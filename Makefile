@@ -60,6 +60,7 @@ $(BPFSNOOP_OBJ): $(wildcard ./internal/bpf/*bpf*.o) $(BPF_GO_SRC) $(BPFSNOOP_SRC
 .PHONY: local_release
 local_release: $(BPFSNOOP_OBJ)
 	@$(CMD_CP) $(BPFSNOOP_OBJ) $(DIR_BIN)/$(BPFSNOOP_OBJ)
+	@$(CMD_CP) $(BPFSNOOP_MCP_LAUNCHERS) $(DIR_BIN)/
 	$(CMD_CHECKSUM) $(BPFSNOOP_OBJ) > $(DIR_BIN)/$(BPFSNOOP_CSM)
 
 .PHONY: clean
@@ -78,7 +79,7 @@ distclean: clean
 .PHONY: publish
 publish: local_release
 	@if [ -z "$(VERSION)" ]; then echo "VERSION is not set"; exit 1; fi
-	$(CMD_CD) $(DIR_BIN) && $(CMD_TAR) -czf $(BPFSNOOP_OBJ)-$(VERSION)-linux-amd64.tar.gz $(BPFSNOOP_OBJ) $(BPFSNOOP_CSM) && $(CMD_CD) -
+	$(CMD_CD) $(DIR_BIN) && $(CMD_TAR) -czf $(BPFSNOOP_OBJ)-$(VERSION)-linux-amd64.tar.gz $(BPFSNOOP_OBJ) $(BPFSNOOP_CSM) $(BPFSNOOP_MCP_LAUNCHERS) && $(CMD_CD) -
 	@$(CMD_MV) $(RELEASE_NOTES) $(DIR_BIN)/$(RELEASE_NOTES)
 	$(CMD_GH) release create $(VERSION) $(DIR_BIN)/$(BPFSNOOP_OBJ)-$(VERSION)-linux-amd64.tar.gz --title "bpfsnoop $(VERSION)" --notes-file $(DIR_BIN)/$(RELEASE_NOTES)
 
