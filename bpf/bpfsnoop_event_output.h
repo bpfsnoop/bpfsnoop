@@ -17,9 +17,16 @@
 #include "bpfsnoop_pkt_output.h"
 #include "bpfsnoop_stack_map.h"
 
+static __always_inline void
+copy_comm(__u8 dst[16], __u8 src[16])
+{
+    *(__u64 *)dst = *(__u64 *)src;
+    *(__u64 *)(dst + 8) = *(__u64 *)(src + 8);
+}
+
 static __always_inline int
 output_event(void *ctx, __u16 event_type, __u64 session_id, __u64 func_ip,
-             __u32 cpu, __u32 pid, struct bpfsnoop_lbr_data *lbr,
+             __u32 cpu, __u32 pid, __u8 comm[16], struct bpfsnoop_lbr_data *lbr,
              bool can_output_lbr, __u64 *args, __u64 retval, bool can_output_pkt,
              bool can_output_arg)
 {
@@ -41,7 +48,7 @@ output_event(void *ctx, __u16 event_type, __u64 session_id, __u64 func_ip,
     evt->func_ip = func_ip;
     evt->cpu = cpu;
     evt->pid = pid;
-    bpf_get_current_comm(evt->comm, sizeof(evt->comm));
+    copy_comm(evt->comm, comm);
     evt->func_stack_id = -1;
     evt->tracee_flags = cfg->tracee_flags;
     evt->flags.output_lbr &= can_output_lbr;

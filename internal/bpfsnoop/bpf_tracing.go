@@ -63,6 +63,8 @@ func setBpfsnoopConfig(spec *ebpf.CollectionSpec, c traceeConfig) error {
 	cfg.SetIsProg(c.isProg)
 	cfg.SetKmultiMode(c.kmultiMode)
 	cfg.FilterPid = filterPid
+	copy(cfg.FilterComm[:], []uint8(filterComm))
+	cfg.FilterCommLen = uint32(len(filterComm))
 	cfg.FnArgsNr = uint32(c.fnArgsNr)
 	cfg.WithRet = c.withRet
 	cfg.FnArgsBuf = uint32(c.fnArgsBufSz)

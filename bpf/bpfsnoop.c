@@ -9,6 +9,7 @@
 #include "bpfsnoop_arg_filter.h"
 #include "bpfsnoop_arg_output.h"
 #include "bpfsnoop_cfg.h"
+#include "bpfsnoop_comm_filter.h"
 #include "bpfsnoop_event.h"
 #include "bpfsnoop_event_output.h"
 #include "bpfsnoop_fn_args_output.h"
@@ -67,6 +68,7 @@ emit_bpfsnoop_event(void *ctx)
     __u64 retval = 0;
     __u16 event_type;
     __u32 cpu, pid;
+    __u8 comm[16];
 
     if (!ready)
         return BPF_OK;
@@ -97,6 +99,10 @@ emit_bpfsnoop_event(void *ctx)
     if (pid == PID)
         return BPF_OK;
     if (cfg->pid && pid != cfg->pid)
+        return BPF_OK;
+
+    bpf_get_current_comm(comm, sizeof(comm));
+    if (!filter_comm(comm))
         return BPF_OK;
 
     /* fp of tracee caller */
@@ -133,7 +139,7 @@ emit_bpfsnoop_event(void *ctx)
         break;
     }
 
-    return output_event(ctx, event_type, session_id, func_ip, cpu, pid,
+    return output_event(ctx, event_type, session_id, func_ip, cpu, pid, comm,
                         lbr, can_output_lbr, args, retval, cfg->flags.output_pkt,
                         cfg->flags.output_arg);
 }

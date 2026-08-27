@@ -36,3 +36,12 @@ tag: kfuncs,pkt,multi
 test: -k '(b)(m)icmp_rcv:(struct sk_buff *)skb' --filter-pkt 'host 127.0.0.1' --output-pkt
 match: Pkt tuple: 127.0.0.1 -> 127.0.0.1 (ICMP)
 trigger: ping -c 1 -s 64 127.0.0.1
+
+---
+
+# icmp_echo by filter-comm
+name: kfuncs::icmp_echo:filter-comm
+tag: kfuncs
+test: -k '(b)icmp_echo:(struct sk_buff *)skb' --filter-pkt 'host 127.0.0.1' --filter-comm ping --output-pkt
+match: Pkt tuple: 127.0.0.1 -> 127.0.0.1 (ICMP)
+trigger: ping -c 1 -s 64 127.0.0.1

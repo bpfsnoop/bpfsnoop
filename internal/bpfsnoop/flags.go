@@ -19,6 +19,8 @@ import (
 const (
 	TracingModeEntry = "entry"
 	TracingModeExit  = "exit"
+
+	filterCommLenMax = 16
 )
 
 var (
@@ -40,6 +42,7 @@ var (
 	outputFuncGraph bool
 	outputPkt       bool
 	filterPid       uint32
+	filterComm      string
 	kfuncAllKmods   bool
 	kfuncKmods      []string
 	noColorOutput   bool
@@ -117,6 +120,7 @@ func ParseFlags() (*Flags, error) {
 	f.BoolVar(&flags.fgraphDebug, "fgraph-debug", false, "debug deadlock caused by fgraph")
 	f.BoolVar(&outputPkt, "output-pkt", false, "output packet's tuple info if tracee has skb/xdp argument")
 	f.Uint32Var(&filterPid, "filter-pid", 0, "filter pid for tracing")
+	f.StringVar(&filterComm, "filter-comm", "", "filter command for tracing")
 	f.StringSliceVar(&filterArg, "filter-arg", nil, "filter function's argument with C expression, e.g. 'prog->type == BPF_PROG_TYPE_TRACING'")
 	f.StringArrayVar /* use StringArray to accept comma in value */ (&outputArg, "output-arg", nil, "output function's argument with C expression, e.g. 'prog->type'")
 	f.StringVar(&filterPkt, "filter-pkt", "", "filter packet with pcap-filter(7) expr if function argument is skb or xdp, e.g. 'icmp and host 1.1.1.1'")
@@ -170,6 +174,10 @@ func ParseFlags() (*Flags, error) {
 		assert.NoErr(err, "Failed to find vmlinux file: %v")
 		fmt.Println(vmlinuxPath)
 		os.Exit(0)
+	}
+
+	if len(filterComm) >= filterCommLenMax {
+		return nil, fmt.Errorf("--filter-comm is too long, only allow max %d chars", filterCommLenMax-1)
 	}
 
 	modes = flags.setDefaultModes()

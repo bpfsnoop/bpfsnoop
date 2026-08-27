@@ -34,6 +34,8 @@ const (
 type BpfsnoopConfig struct {
 	Flags            uint32
 	FilterPid        uint32
+	FilterComm       [16]uint8
+	FilterCommLen    uint32
 	FnArgsNr         uint32
 	WithRet          bool
 	Pad              [3]uint8

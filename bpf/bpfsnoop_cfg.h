@@ -20,6 +20,8 @@ struct bpfsnoop_fn_args {
 struct bpfsnoop_config {
     TRACEE_FLAGS;
     __u32 pid;
+    __u8 comm[16];
+    __u32 comm_len;
 
     struct bpfsnoop_fn_args fn_args;
     __u32 tracee_arg_entry_size;
