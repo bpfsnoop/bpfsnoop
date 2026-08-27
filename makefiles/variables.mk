@@ -86,6 +86,7 @@ BPF_GO_DEP := $(BPF_GO_SRC:%=%.d)
 BPFSNOOP_OBJ := bpfsnoop
 BPFSNOOP_SRC := $(shell find internal -type f -name '*.go') main.go
 BPFSNOOP_CSM := $(BPFSNOOP_OBJ).sha256sum
+BPFSNOOP_MCP_LAUNCHERS := bpfsnoop-mcp bpfsnoop-mcp-daemon
 RELEASE_NOTES ?= release_notes.txt
 
 # Do our best to detect changes in submodules and rebuild them...

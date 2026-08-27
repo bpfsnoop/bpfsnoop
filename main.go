@@ -22,6 +22,7 @@ import (
 	"github.com/bpfsnoop/bpfsnoop/internal/bpf"
 	"github.com/bpfsnoop/bpfsnoop/internal/bpfsnoop"
 	"github.com/bpfsnoop/bpfsnoop/internal/mathx"
+	_ "github.com/bpfsnoop/bpfsnoop/internal/mcpserver"
 )
 
 func main() {

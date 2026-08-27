@@ -90,11 +90,13 @@ type Flags struct {
 
 func ParseFlags() (*Flags, error) {
 	var findVmlinux bool
+	var mcp bool
 	var showTypes []string
 	var readDatum []string
 	var flags Flags
 
 	f := flag.NewFlagSet("bpfsnoop", flag.ExitOnError)
+	f.BoolVar(&mcp, "mcp", false, "serve bpfsnoop as an MCP server over stdin/stdout")
 	f.StringSliceVarP(&flags.progs, "prog", "p", nil, "bpf prog info for bpfsnoop in format PROG[,PROG,..], PROG: PROGID[:<prog function name>], PROGID: <prog ID> or 'i/id:<prog ID>' or 'p/pinned:<pinned file>' or 't/tag:<prog tag>' or 'n/name:<prog full name>' or 'pid:<pid>'; all bpf progs will be traced if '*' is specified")
 	f.StringSliceVarP(&flags.kfuncs, "kfunc", "k", nil, "filter kernel functions, '(i)' prefix means insn tracing, '(m)' prefix means kprobe.multi tracing (requires typed arg), '<kfunc>[:<arg>][:<type>]' format")
 	f.StringSliceVarP(&flags.ktps, "tracepoint", "t", nil, "filter kernel tracepoints")
@@ -150,8 +152,20 @@ func ParseFlags() (*Flags, error) {
 	f.MarkHidden("fgraph-debug")
 	f.MarkHidden("force-probe-read-kernel")
 	f.MarkHidden("find-vmlinux")
+	f.MarkHidden("mcp")
 
 	err := f.Parse(os.Args)
+	if mcp {
+		if runMCP == nil {
+			fmt.Fprintln(os.Stderr, "bpfsnoop: MCP support is unavailable")
+			os.Exit(1)
+		}
+		if err := runMCP(); err != nil {
+			fmt.Fprintf(os.Stderr, "bpfsnoop: %v\n", err)
+			os.Exit(1)
+		}
+		os.Exit(0)
+	}
 
 	outputFuncStack = outputFuncStack || outputFlameGraph != ""
 	noColorOutput = flags.outputFile != "" || !isatty(os.Stdout.Fd())
