@@ -17,6 +17,7 @@ const (
 	configFlagIsProgIdx
 	configFlagKmultiModeIdx
 	configFlagExitFilterIdx
+	configFlagPktRetvalIdx
 )
 
 const (
@@ -120,4 +121,8 @@ func (cfg *BpfsnoopConfig) SetKmultiMode(v bool) {
 
 func (cfg *BpfsnoopConfig) SetExitFilter(v bool) {
 	cfg.setFlags(v, configFlagExitFilterIdx)
+}
+
+func (cfg *BpfsnoopConfig) SetPktRetval(v bool) {
+	cfg.setFlags(v, configFlagPktRetvalIdx)
 }

@@ -5,6 +5,7 @@ package bpfsnoop
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/asm"
@@ -28,12 +29,16 @@ const (
 var pktFilter packetFilter
 
 type packetFilter struct {
-	expr string
+	expr   string
+	retval bool
 }
 
 func preparePacketFilter(expr string) packetFilter {
-	var pf packetFilter
-	pf.expr = expr
+	pf := packetFilter{expr: strings.TrimSpace(expr)}
+	if after, ok := strings.CutPrefix(pf.expr, "(r)"); ok {
+		pf.retval = true
+		pf.expr = strings.TrimSpace(after)
+	}
 	return pf
 }
 

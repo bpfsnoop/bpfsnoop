@@ -15,7 +15,6 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/bpfsnoop/bpfsnoop/internal/btfx"
-	"github.com/bpfsnoop/bpfsnoop/internal/cc"
 )
 
 type tracingProg struct {
@@ -91,30 +90,17 @@ func (t *bpfTracing) traceProg(spec *ebpf.CollectionSpec, reusedMaps map[string]
 	progSpec := spec.Programs[tracingFuncName]
 	bprog := bprogs.funcs[info.funcIP]
 	canExit := fexit || bothEntryExit
-	filterMatch, err := argFilter.selectMatch(params, retType, krnl)
+	outputs, ok, err := t.injectTraceeOutputs(progSpec, params, retType, krnl, traceeName,
+		info.flag.pkt, bothEntryExit, fexit, canExit)
 	if err != nil {
-		return fmt.Errorf("failed to match func arg filter expr: %w", err)
+		return err
 	}
-	filterRetval := filterMatch != nil && slices.Contains(filterMatch.vars, cc.RetvalName)
-	if filterRetval && !canExit {
-		DebugLog("Skip BPF func %s because selected --filter-arg requires %s in entry-only mode", traceeName, cc.RetvalName)
+	if !ok {
 		return nil
 	}
-	exitFilter := filterRetval && bothEntryExit
-	bprog.pktOutput = t.injectPktOutput(info.flag.pkt, progSpec, params, traceeName)
-	if err := t.injectPktFilter(progSpec, params, traceeName); err != nil {
-		return err
-	}
-	compileFilter := !filterRetval || fexit
-	if err := t.injectArgFilter(progSpec, params, retType, krnl, traceeName, filterMatch, compileFilter); err != nil {
-		return err
-	}
-	args, argDataSize, err := t.injectArgOutput(progSpec, params, retType, krnl, traceeName, canExit)
-	if err != nil {
-		return err
-	}
-	bprog.funcArgs = args
-	bprog.argDataSz = argDataSize
+	bprog.funcArgs = outputs.args
+	bprog.argDataSz = outputs.argDataSize
+	bprog.pktOutput = outputs.pkt
 	fnArgsBufSize, err := injectOutputFuncArgs(progSpec, info.params, info.ret, fexit)
 	if err != nil {
 		return fmt.Errorf("failed to inject output func args: %w", err)
@@ -140,7 +126,7 @@ func (t *bpfTracing) traceProg(spec *ebpf.CollectionSpec, reusedMaps map[string]
 		fnArgsBufSz:   fnArgsBufSize,
 		argEntrySz:    argEntrySize,
 		argExitSz:     argExitSize,
-		argDataSz:     argDataSize,
+		argDataSz:     outputs.argDataSize,
 		outputLbr:     info.flag.lbr,
 		outputStack:   stack,
 		outputPkt:     bprog.pktOutput,
@@ -152,7 +138,8 @@ func (t *bpfTracing) traceProg(spec *ebpf.CollectionSpec, reusedMaps map[string]
 		kmultiMode:    false,
 		withRet:       fexit,
 		session:       fsession,
-		exitFilter:    exitFilter,
+		exitFilter:    outputs.exitFilter,
+		pktRetval:     outputs.pktRetval,
 	}); err != nil {
 		return fmt.Errorf("failed to set bpfsnoop config: %w", err)
 	}

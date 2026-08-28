@@ -68,6 +68,7 @@ emit_bpfsnoop_event(void *ctx)
     bool can_output_lbr;
     __u64 retval = 0;
     __u16 event_type;
+    bool output_pkt;
     __u32 cpu, pid;
     __u8 comm[16];
 
@@ -145,8 +146,10 @@ emit_bpfsnoop_event(void *ctx)
         break;
     }
 
+    output_pkt = cfg->flags.output_pkt;
+    output_pkt = output_pkt && (event_type == BPFSNOOP_EVENT_TYPE_FUNC_EXIT || !cfg->flags.pkt_retval);
     return output_event(ctx, event_type, session_id, func_ip, cpu, pid, comm,
-                        lbr, can_output_lbr, args, retval, cfg->flags.output_pkt,
+                        lbr, can_output_lbr, args, retval, output_pkt,
                         cfg->flags.output_arg, filter_pass);
 }
 

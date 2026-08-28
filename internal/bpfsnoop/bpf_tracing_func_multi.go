@@ -200,8 +200,8 @@ func (t *bpfTracing) traceKfuncMultiMode(reusedMaps map[string]*ebpf.Map, g *kfu
 		if err != nil {
 			return fmt.Errorf("failed to match kmulti arg filter: %w", err)
 		}
-		fn.Pkt = t.injectPktOutput(fn.Flag.pkt, progSpec, params, fn.Func.Name)
-		if err := t.injectPktFilter(progSpec, params, fn.Func.Name); err != nil {
+		fn.Pkt, _ = t.injectPktOutput(fn.Flag.pkt, progSpec, params, fn.Func.Name, false)
+		if _, err := t.injectPktFilter(progSpec, params, fn.Func.Name, false, false); err != nil {
 			return err
 		}
 		if err := t.injectArgFilter(progSpec, params, nil, fn.Btf, fn.Func.Name, filterMatch, true); err != nil {
