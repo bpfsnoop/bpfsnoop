@@ -90,9 +90,9 @@ Usage of bpfsnoop:
       --fgraph-include strings      limited functions in function call graph, empty means all functions, rules are same as -k
       --fgraph-max-depth uint       maximum depth of function call graph, larger means slower to start bpfsnoop, 5 by default (default 5)
       --fgraph-proto                output function prototype in function call graph, like --show-func-proto
-      --filter-arg strings          filter function's argument with C expression, e.g. 'prog->type == BPF_PROG_TYPE_TRACING'
+      --filter-arg strings          filter function arguments with a C expression; typed $retval is available in exit modes
       --filter-pid uint32           filter pid for tracing
-      --filter-pkt string           filter packet with pcap-filter(7) expr if function argument is skb or xdp, e.g. 'icmp and host 1.1.1.1'
+      --filter-pkt string           filter skb/xdp argument with a pcap-filter(7) expression; prefix with '(r)' for a packet-typed return value
       --kernel-vmlinux string       specific kernel vmlinux directory to search vmlinux and modules dbgsym files
   -k, --kfunc strings               filter kernel functions, '(i)' prefix means insn tracing, '<kfunc>[:<arg>][:<type>]' format, e.g. 'tcp_v4_connect:sk:struct sock *', '*:(struct sk_buff *)skb'
       --kfunc-all-kmods             filter functions in all kernel modules
@@ -100,11 +100,11 @@ Usage of bpfsnoop:
       --limit-events uint           limited number events to output, 0 to output all events
   -m, --mode strings                mode of bpfsnoop, exit and/or entry (default [exit])
   -o, --output string               output file for the result, default is stdout
-      --output-arg stringArray      output function's argument with C expression, e.g. 'prog->type'
+      --output-arg stringArray      output a C expression over function arguments; e.g. 'prog->type' or '(int)$retval'
   -g, --output-fgraph               output function call graph, works with -k,-p
       --output-insns                output function's insns exec path, same as '(i)' in -k, only works with -k
       --output-lbr                  output LBR perf event
-      --output-pkt                  output packet's tuple info if tracee has skb/xdp argument
+      --output-pkt                  output packet tuple; append '(r)' to select a packet-typed return value
       --output-stack                output function call stack
   -p, --prog strings                bpf prog info for bpfsnoop in format PROG[,PROG,..], PROG: PROGID[:<prog function name>], PROGID: <prog ID> or 'i/id:<prog ID>' or 'p/pinned:<pinned file>' or 't/tag:<prog tag>' or 'n/name:<prog full name>' or 'pid:<pid>'; all bpf progs will be traced if '*' is specified
       --read stringArray            read kernel memory using C expressions
