@@ -13,6 +13,8 @@
 
 Please check [bpfsnoop.com](https://bpfsnoop.com) for more details.
 
+See [Typed return values](docs/retval.md) for using `$retval` in argument expressions and packet tracing.
+
 ## Acknowledgments
 
 - [cilium/ebpf](https://github.com/cilium/ebpf) for interacting with bpf subsystem.
