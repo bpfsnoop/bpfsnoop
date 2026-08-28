@@ -45,12 +45,14 @@ type traceeConfig struct {
 	withRet       bool
 	session       bool
 	exitFilter    bool
+	pktRetval     bool
 }
 
 type traceeOutputs struct {
 	args        []funcArgumentOutput
 	argDataSize int
 	pkt         bool
+	pktRetval   bool
 	exitFilter  bool
 }
 
@@ -73,6 +75,7 @@ func setBpfsnoopConfig(spec *ebpf.CollectionSpec, c traceeConfig) error {
 	cfg.SetIsProg(c.isProg)
 	cfg.SetKmultiMode(c.kmultiMode)
 	cfg.SetExitFilter(c.exitFilter)
+	cfg.SetPktRetval(c.pktRetval)
 	cfg.FilterPid = filterPid
 	copy(cfg.FilterComm[:], []uint8(filterComm))
 	cfg.FilterCommLen = uint32(len(filterComm))
@@ -223,11 +226,20 @@ func (t *bpfTracing) injectTraceeOutputs(prog *ebpf.ProgramSpec, params []btf.Fu
 		return outputs, false, nil
 	}
 
-	outputs.pkt = t.injectPktOutput(outputPkt, prog, params, fnName)
-	if err := t.injectPktFilter(prog, params, fnName); err != nil {
+	outputParams := paramsAddRetval(params, ret, outputPktRetval)
+	outputs.pkt, outputs.pktRetval = t.injectPktOutput(prog, outputParams, fnName, outputPkt, outputPktRetval)
+
+	filterParams := paramsAddRetval(params, ret, pktFilter.retval)
+	pktFilterRetval, err := t.injectPktFilter(prog, filterParams, fnName, isExit, pktFilter.retval)
+	if err != nil {
 		return outputs, false, err
 	}
-	outputs.exitFilter = filterRetval && bothEntryExit
+	if pktFilterRetval && !canExit {
+		DebugLog("Skip %s because --filter-pkt requires %s in entry-only mode", fnName, cc.RetvalName)
+		return outputs, false, nil
+	}
+
+	outputs.exitFilter = (filterRetval || pktFilterRetval) && bothEntryExit
 	if err := t.injectArgFilter(prog, params, ret, spec, fnName, filterMatch, !filterRetval || isExit); err != nil {
 		return outputs, false, err
 	}
@@ -263,12 +275,16 @@ func (t *bpfTracing) injectXdpFrameFilter(prog *ebpf.ProgramSpec, index int, typ
 	return nil
 }
 
-func (t *bpfTracing) injectPktFilter(prog *ebpf.ProgramSpec, params []btf.FuncParam, fnName string) error {
+func (t *bpfTracing) injectPktFilter(prog *ebpf.ProgramSpec, params []btf.FuncParam, fnName string, compileRetval, retvalOnly bool) (bool, error) {
 	if pktFilter.expr == "" {
-		return nil
+		return false, nil
 	}
 
 	for i, p := range params {
+		retval := p.Name == cc.RetvalName
+		if retvalOnly && !retval {
+			continue
+		}
 		typ := mybtf.UnderlyingType(p.Type)
 		ptr, ok := typ.(*btf.Pointer)
 		if !ok {
@@ -279,6 +295,10 @@ func (t *bpfTracing) injectPktFilter(prog *ebpf.ProgramSpec, params []btf.FuncPa
 		if !ok {
 			continue
 		}
+		if retval && !compileRetval {
+			pktFilter.clear(prog)
+			return true, nil
+		}
 
 		var err error
 		switch stt.Name {
@@ -288,7 +308,7 @@ func (t *bpfTracing) injectPktFilter(prog *ebpf.ProgramSpec, params []btf.FuncPa
 		case "__sk_buff":
 			typ, err := btfx.GetStructBtfPointer("sk_buff", getKernelBTF())
 			if err != nil {
-				return err
+				return false, err
 			}
 
 			err = t.injectSkbFilter(prog, i, typ)
@@ -299,7 +319,7 @@ func (t *bpfTracing) injectPktFilter(prog *ebpf.ProgramSpec, params []btf.FuncPa
 		case "xdp_md":
 			typ, err := btfx.GetStructBtfPointer("xdp_buff", getKernelBTF())
 			if err != nil {
-				return err
+				return false, err
 			}
 
 			err = t.injectXdpFilter(prog, i, typ)
@@ -312,25 +332,28 @@ func (t *bpfTracing) injectPktFilter(prog *ebpf.ProgramSpec, params []btf.FuncPa
 		}
 
 		if err != nil {
-			return err
+			return false, err
 		}
 
 		DebugLog("Injected --filter-pkt expr to %dth param (%s)%s of %s", i, btfx.Repr(typ), p.Name, fnName)
-		return nil
+		return retval, nil
 	}
 
 	pktFilter.clear(prog)
 
-	return nil
+	return false, nil
 }
 
-func (t *bpfTracing) injectPktOutput(pkt bool, prog *ebpf.ProgramSpec, params []btf.FuncParam, fnName string) bool {
+func (t *bpfTracing) injectPktOutput(prog *ebpf.ProgramSpec, params []btf.FuncParam, fnName string, pkt bool, retvalOnly bool) (bool, bool) {
 	if !pkt {
 		pktOutput.clear(prog)
-		return false
+		return false, false
 	}
 
 	for i, p := range params {
+		if retvalOnly && p.Name != cc.RetvalName {
+			continue
+		}
 		typ := mybtf.UnderlyingType(p.Type)
 		ptr, ok := typ.(*btf.Pointer)
 		if !ok {
@@ -346,21 +369,29 @@ func (t *bpfTracing) injectPktOutput(pkt bool, prog *ebpf.ProgramSpec, params []
 		case "sk_buff", "__sk_buff":
 			pktOutput.outputSkb(prog, i)
 			DebugLog("Injected --output-pkt to %dth param (%s)%s of %s", i, btfx.Repr(p.Type), p.Name, fnName)
-			return true
+			return true, p.Name == cc.RetvalName
 
 		case "xdp_buff", "xdp_md":
 			pktOutput.outputXdpBuff(prog, i)
 			DebugLog("Injected --output-pkt to %dth param (%s)%s of %s", i, btfx.Repr(p.Type), p.Name, fnName)
-			return true
+			return true, p.Name == cc.RetvalName
 
 		case "xdp_frame":
 			pktOutput.outputXdpFrame(prog, i)
 			DebugLog("Injected --output-pkt to %dth param (%s)%s of %s", i, btfx.Repr(p.Type), p.Name, fnName)
-			return true
+			return true, p.Name == cc.RetvalName
 		}
 	}
 
 	pktOutput.clear(prog)
 
-	return false
+	return false, false
+}
+
+func paramsAddRetval(params []btf.FuncParam, ret btf.Type, retval bool) []btf.FuncParam {
+	if !retval {
+		return params
+	}
+	params = slices.Clone(params)
+	return append(params, btf.FuncParam{Name: cc.RetvalName, Type: ret})
 }

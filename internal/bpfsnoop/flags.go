@@ -31,6 +31,7 @@ var (
 	filterArg         []string
 	filterBr          []string
 	filterPkt         string
+	outputPktRetval   bool
 	outputArg         []string
 	skipTunnel        bool
 
@@ -118,12 +119,12 @@ func ParseFlags() (*Flags, error) {
 	f.StringSliceVar(&flags.fgraphExtra, "fgraph-extra", nil, "extra functions in function call graph as depth 1, rules are same as -k, '(m)' is not supported here yet")
 	f.BoolVar(&flags.fgraphProto, "fgraph-proto", false, "output function prototype in function call graph, like --show-func-proto")
 	f.BoolVar(&flags.fgraphDebug, "fgraph-debug", false, "debug deadlock caused by fgraph")
-	f.BoolVar(&outputPkt, "output-pkt", false, "output packet's tuple info if tracee has skb/xdp argument")
+	f.BoolVar(&outputPkt, "output-pkt", false, "output packet tuple; append '(r)' to select a packet-typed return value")
 	f.Uint32Var(&filterPid, "filter-pid", 0, "filter pid for tracing")
 	f.StringVar(&filterComm, "filter-comm", "", "filter command for tracing")
-	f.StringSliceVar(&filterArg, "filter-arg", nil, "filter function's argument with C expression, e.g. 'prog->type == BPF_PROG_TYPE_TRACING'")
-	f.StringArrayVar /* use StringArray to accept comma in value */ (&outputArg, "output-arg", nil, "output function's argument with C expression, e.g. 'prog->type'")
-	f.StringVar(&filterPkt, "filter-pkt", "", "filter packet with pcap-filter(7) expr if function argument is skb or xdp, e.g. 'icmp and host 1.1.1.1'")
+	f.StringSliceVar(&filterArg, "filter-arg", nil, "filter function arguments with a C expression; typed $retval is available in exit modes")
+	f.StringArrayVar /* use StringArray to accept comma in value */ (&outputArg, "output-arg", nil, "output a C expression over function arguments; e.g. 'prog->type' or '(int)$retval'")
+	f.StringVar(&filterPkt, "filter-pkt", "", "filter skb/xdp argument with a pcap-filter(7) expression; prefix with '(r)' for a packet-typed return value")
 	f.StringSliceVar(&filterBr, "filter-br", []string{"any"}, "filter branch types: any, any_call, any_return, ind_call, abort_tx, in_tx, no_tx, cond, call_stack, ind_jump, call")
 	f.UintVar(&limitEvents, "limit-events", 0, "limited number events to output, 0 to output all events")
 	f.BoolVar(&flags.showFuncProto, "show-func-proto", false, "show function prototype of -p,-k,-t")
@@ -151,7 +152,9 @@ func ParseFlags() (*Flags, error) {
 	f.MarkHidden("force-probe-read-kernel")
 	f.MarkHidden("find-vmlinux")
 
-	err := f.Parse(os.Args)
+	args, retvalOutput := normalizePacketOutputArgs(os.Args)
+	outputPktRetval = retvalOutput
+	err := f.Parse(args)
 
 	outputFuncStack = outputFuncStack || outputFlameGraph != ""
 	noColorOutput = flags.outputFile != "" || !isatty(os.Stdout.Fd())
@@ -254,6 +257,28 @@ func ParseFlags() (*Flags, error) {
 	return &flags, err
 }
 
+// normalizePacketOutputArgs preserves the boolean --output-pkt flag while
+// allowing its packet-return selector to use the same prefix form as
+// --filter-pkt: --output-pkt '(r)'.
+func normalizePacketOutputArgs(args []string) ([]string, bool) {
+	normalized := make([]string, 0, len(args))
+	retval := false
+	for i := 0; i < len(args); i++ {
+		switch {
+		case args[i] == "--output-pkt=(r)":
+			retval = true
+			normalized = append(normalized, "--output-pkt")
+		case args[i] == "--output-pkt" && i+1 < len(args) && args[i+1] == "(r)":
+			retval = true
+			normalized = append(normalized, args[i])
+			i++
+		default:
+			normalized = append(normalized, args[i])
+		}
+	}
+	return normalized, retval
+}
+
 func (f *Flags) ParseProgs() ([]ProgFlag, error) {
 	return parseProgsFlag(f.progs)
 }
@@ -348,16 +373,10 @@ func (f *Flags) checkMultiExitFilterConflict() error {
 	}) {
 		used = append(used, "--filter-arg")
 	}
-	if filterPkt != "" {
-		used = append(used, "--filter-pkt")
-	}
 	if slices.ContainsFunc(argOutput.args, func(arg funcArgumentOutput) bool {
 		return !slices.Contains(arg.vars, cc.RetvalName)
 	}) {
 		used = append(used, "--output-arg")
-	}
-	if outputPkt {
-		used = append(used, "--output-pkt")
 	}
 	if len(used) == 0 {
 		return nil

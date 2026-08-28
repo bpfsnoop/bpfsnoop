@@ -139,6 +139,7 @@ func (t *bpfTracing) traceProg(spec *ebpf.CollectionSpec, reusedMaps map[string]
 		withRet:       fexit,
 		session:       fsession,
 		exitFilter:    outputs.exitFilter,
+		pktRetval:     outputs.pktRetval,
 	}); err != nil {
 		return fmt.Errorf("failed to set bpfsnoop config: %w", err)
 	}
