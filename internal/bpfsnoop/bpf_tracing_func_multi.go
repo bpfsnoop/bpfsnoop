@@ -190,21 +190,24 @@ func (t *bpfTracing) traceKfuncMultiMode(reusedMaps map[string]*ebpf.Map, g *kfu
 	progSpec := spec.Programs[tracingFuncName]
 	funcProto := fn.Func.Type.(*btf.FuncProto)
 	params := funcProto.Params
-
 	if isExit {
 		clearFilterArgSubprog(progSpec)
 		pktFilter.clear(progSpec)
 		clearOutputArgSubprog(progSpec)
 		clearOutputPktSubprogs(progSpec)
 	} else {
+		filterMatch, err := argFilter.selectMatch(params, nil, fn.Btf)
+		if err != nil {
+			return fmt.Errorf("failed to match kmulti arg filter: %w", err)
+		}
 		fn.Pkt = t.injectPktOutput(fn.Flag.pkt, progSpec, params, fn.Func.Name)
 		if err := t.injectPktFilter(progSpec, params, fn.Func.Name); err != nil {
 			return err
 		}
-		if err := t.injectArgFilter(progSpec, params, fn.Btf, fn.Func.Name); err != nil {
+		if err := t.injectArgFilter(progSpec, params, nil, fn.Btf, fn.Func.Name, filterMatch, true); err != nil {
 			return err
 		}
-		args, argDataSize, err := t.injectArgOutput(progSpec, params, fn.Btf, fn.Func.Name)
+		args, argDataSize, err := t.injectArgOutput(progSpec, params, nil, fn.Btf, fn.Func.Name, false)
 		if err != nil {
 			return err
 		}
@@ -254,6 +257,7 @@ func (t *bpfTracing) traceKfuncMultiMode(reusedMaps map[string]*ebpf.Map, g *kfu
 		kmultiMode:    true,
 		withRet:       withRet,
 		session:       sessionMode,
+		exitFilter:    false,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to set bpfsnoop config: %w", err)

@@ -160,7 +160,7 @@ emit_bpfsnoop_kmulti_event(struct pt_regs *ctx)
 
     return output_event(ctx, event_type, session_id, func_ip,
                         cpu, pid, comm, lbr, can_output_lbr, args, retval, output_pkt,
-                        output_arg);
+                        output_arg, true);
 }
 
 SEC("kprobe.multi")

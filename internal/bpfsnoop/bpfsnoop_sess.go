@@ -4,14 +4,37 @@
 package bpfsnoop
 
 type Session struct {
-	started uint32
-	outputs []string
-	tstamps []uint32
-	lastidx int
+	started  uint32
+	outputs  []string
+	tstamps  []uint32
+	lastidx  int
+	deferred bool
+	hist     *histogram
+	tdigest  *TDigest
+	flame    *FlameGraph
 }
 
 type Sessions struct {
 	sessions map[uint64]*Session
+}
+
+func (s *Session) deferDerived(histExpr, tdigestExpr string) {
+	s.deferred = true
+	s.hist = newHistogram(histExpr)
+	s.tdigest = newTDigest(tdigestExpr)
+	s.flame = NewFlameGraph()
+}
+
+func (s *Session) commitDerived(hist *histogram, tdigest *TDigest, flame *FlameGraph) {
+	if !s.deferred {
+		return
+	}
+	for i, count := range s.hist.log2 {
+		hist.log2[i] += count
+	}
+	hist.total += s.hist.total
+	_ = tdigest.Merge(s.tdigest.TDigest)
+	flame.merge(s.flame)
 }
 
 func NewSessions() *Sessions {

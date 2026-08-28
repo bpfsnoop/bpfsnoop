@@ -141,12 +141,21 @@ func Run(reader *ringbuf.Reader, maps map[string]*ebpf.Map, w io.Writer, helpers
 		if requiredSession {
 			if event.Type == eventTypeFuncEntry {
 				sess = sessions.Add(event.SessID, event.KernNs, fgraphMaxDepth, isGraph)
+				if haveFlag(event.TraceeFlags, traceeFlagExitFilter) {
+					sess.deferDerived(helpers.Flags.histExpr, helpers.Flags.tdigestExpr)
+				}
 			} else {
 				s, ok := sessions.GetAndDel(event.SessID + 1)
 				if ok {
 					sess = s
 					duration = time.Duration(event.KernNs - s.started)
 					if duration < runDelta {
+						return nil
+					}
+					if s.deferred && !haveFlag(event.TraceeFlags, traceeFlagExitFilter) {
+						sb.Reset()
+						lbrStack.reset()
+						fnStack.reset()
 						return nil
 					}
 				} else {
@@ -182,7 +191,11 @@ func Run(reader *ringbuf.Reader, maps map[string]*ebpf.Map, w io.Writer, helpers
 
 		if argDataSz := int(event.TraceeArgDataSz); argDataSz != 0 {
 			f := findSymbolHelper(uint64(event.FuncIP), helpers)
-			err := outputFuncArgAttrs(&sb, fnInfo.args, data[:argDataSz], hist, tdigest, f)
+			outputHist, outputTDigest := hist, tdigest
+			if sess != nil && sess.deferred {
+				outputHist, outputTDigest = sess.hist, sess.tdigest
+			}
+			err := outputFuncArgAttrs(&sb, fnInfo.args, data[:argDataSz], isExit, outputHist, outputTDigest, f)
 			if err != nil {
 				return fmt.Errorf("failed to output function arg attrs: %w", err)
 			}
@@ -198,7 +211,11 @@ func Run(reader *ringbuf.Reader, maps map[string]*ebpf.Map, w io.Writer, helpers
 		}
 
 		if haveFlag(event.TraceeFlags, traceeFlagOutputStack) && event.StackID >= 0 {
-			err := fnStack.output(&sb, helpers, stacks, fg, event)
+			outputFlame := fg
+			if sess != nil && sess.deferred {
+				outputFlame = sess.flame
+			}
+			err := fnStack.output(&sb, helpers, stacks, outputFlame, event)
 			if err != nil {
 				return fmt.Errorf("failed to output function stack: %w", err)
 			}
@@ -207,6 +224,7 @@ func Run(reader *ringbuf.Reader, maps map[string]*ebpf.Map, w io.Writer, helpers
 		if sess != nil {
 			sess.outputs = append(sess.outputs, sb.String())
 			if haveRetval {
+				sess.commitDerived(hist, tdigest, fg)
 				for _, output := range sess.outputs {
 					fmt.Fprint(w, output)
 				}

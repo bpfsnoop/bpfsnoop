@@ -5,6 +5,7 @@ package bpfsnoop
 
 import (
 	"fmt"
+	"slices"
 	"sync"
 
 	"github.com/Asphaltt/mybtf"
@@ -13,6 +14,7 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/bpfsnoop/bpfsnoop/internal/btfx"
+	"github.com/bpfsnoop/bpfsnoop/internal/cc"
 )
 
 type bpfTracing struct {
@@ -42,12 +44,14 @@ type traceeConfig struct {
 	kmultiMode    bool
 	withRet       bool
 	session       bool
+	exitFilter    bool
 }
 
 type traceeOutputs struct {
 	args        []funcArgumentOutput
 	argDataSize int
 	pkt         bool
+	exitFilter  bool
 }
 
 func (t *bpfTracing) Progs() []*ebpf.Program {
@@ -68,6 +72,7 @@ func setBpfsnoopConfig(spec *ebpf.CollectionSpec, c traceeConfig) error {
 	cfg.SetIsTp(c.isTp)
 	cfg.SetIsProg(c.isProg)
 	cfg.SetKmultiMode(c.kmultiMode)
+	cfg.SetExitFilter(c.exitFilter)
 	cfg.FilterPid = filterPid
 	copy(cfg.FilterComm[:], []uint8(filterComm))
 	cfg.FilterCommLen = uint32(len(filterComm))
@@ -172,27 +177,28 @@ func TracingProgName() string {
 	return "bpfsnoop_fn"
 }
 
-func (t *bpfTracing) injectArgFilter(prog *ebpf.ProgramSpec, params []btf.FuncParam, spec *btf.Spec, fnName string) error {
-	i, err := argFilter.inject(prog, params, spec)
-	if err != nil {
-		if err == errSkipped {
-			clearFilterArgSubprog(prog)
-			return nil
-		}
+func (t *bpfTracing) injectArgFilter(prog *ebpf.ProgramSpec, params []btf.FuncParam, ret btf.Type, spec *btf.Spec, fnName string, match *funcArgument, compile bool) error {
+	if match == nil || !compile {
+		clearFilterArgSubprog(prog)
+		return nil
+	}
+
+	if err := match.inject(prog, getKernelBTF(), spec, params, ret); err != nil {
 		return fmt.Errorf("failed to inject func arg filter expr: %w", err)
 	}
 
-	DebugLog("Injected --filter-arg '%s' to func %s", argFilter.args[i].expr, fnName)
+	DebugLog("Injected --filter-arg '%s' to func %s", match.expr, fnName)
 
 	return nil
 }
 
-func (t *bpfTracing) injectArgOutput(prog *ebpf.ProgramSpec, params []btf.FuncParam, spec *btf.Spec, fnName string) ([]funcArgumentOutput, int, error) {
+func (t *bpfTracing) injectArgOutput(prog *ebpf.ProgramSpec, params []btf.FuncParam, ret btf.Type, spec *btf.Spec, fnName string, canExit bool) ([]funcArgumentOutput, int, error) {
 	if len(argOutput.args) == 0 {
+		clearOutputArgSubprog(prog)
 		return nil, 0, nil
 	}
 
-	args, size, err := argOutput.matchParams(params, spec)
+	args, size, err := argOutput.matchParams(params, ret, spec, canExit)
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to match params: %w", err)
 	}
@@ -204,23 +210,33 @@ func (t *bpfTracing) injectArgOutput(prog *ebpf.ProgramSpec, params []btf.FuncPa
 	return args, size, nil
 }
 
-func (t *bpfTracing) injectTraceeOutputs(prog *ebpf.ProgramSpec, params []btf.FuncParam, spec *btf.Spec, fnName string, outputPkt bool) (traceeOutputs, error) {
+func (t *bpfTracing) injectTraceeOutputs(prog *ebpf.ProgramSpec, params []btf.FuncParam, ret btf.Type, spec *btf.Spec, fnName string, outputPkt, bothEntryExit, isExit, canExit bool) (traceeOutputs, bool, error) {
 	var outputs traceeOutputs
+
+	filterMatch, err := argFilter.selectMatch(params, ret, spec)
+	if err != nil {
+		return outputs, false, fmt.Errorf("failed to match func arg filter expr: %w", err)
+	}
+	filterRetval := filterMatch != nil && slices.Contains(filterMatch.vars, cc.RetvalName)
+	if filterRetval && !canExit {
+		DebugLog("Skip %s because selected --filter-arg requires %s in entry-only mode", fnName, cc.RetvalName)
+		return outputs, false, nil
+	}
 
 	outputs.pkt = t.injectPktOutput(outputPkt, prog, params, fnName)
 	if err := t.injectPktFilter(prog, params, fnName); err != nil {
-		return outputs, err
+		return outputs, false, err
 	}
-	if err := t.injectArgFilter(prog, params, spec, fnName); err != nil {
-		return outputs, err
+	outputs.exitFilter = filterRetval && bothEntryExit
+	if err := t.injectArgFilter(prog, params, ret, spec, fnName, filterMatch, !filterRetval || isExit); err != nil {
+		return outputs, false, err
 	}
-	var err error
-	outputs.args, outputs.argDataSize, err = t.injectArgOutput(prog, params, spec, fnName)
+	outputs.args, outputs.argDataSize, err = t.injectArgOutput(prog, params, ret, spec, fnName, canExit)
 	if err != nil {
-		return outputs, err
+		return outputs, false, err
 	}
 
-	return outputs, nil
+	return outputs, true, nil
 }
 
 func (t *bpfTracing) injectSkbFilter(prog *ebpf.ProgramSpec, index int, typ btf.Type) error {

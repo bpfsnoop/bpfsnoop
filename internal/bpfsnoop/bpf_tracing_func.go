@@ -74,9 +74,15 @@ func (t *bpfTracing) traceFunc(spec *ebpf.CollectionSpec, reusedMaps map[string]
 	progSpec := spec.Programs[tracingFuncName]
 	funcProto := fn.Func.Type.(*btf.FuncProto)
 	params := funcProto.Params
-	outputs, err := t.injectTraceeOutputs(progSpec, params, fn.Btf, traceeName, fn.Flag.pkt)
+	retType := funcProto.Return
+	canExit := !isTracepoint && (isExit || bothEntryExit)
+	outputs, ok, err := t.injectTraceeOutputs(progSpec, params, retType, fn.Btf, traceeName,
+		fn.Flag.pkt, bothEntryExit, isExit, canExit)
 	if err != nil {
 		return err
+	}
+	if !ok {
+		return nil
 	}
 	fn.Args = outputs.args
 	fn.Data = outputs.argDataSize
@@ -120,6 +126,7 @@ func (t *bpfTracing) traceFunc(spec *ebpf.CollectionSpec, reusedMaps map[string]
 		kmultiMode:    false,
 		withRet:       withRet,
 		session:       fsession,
+		exitFilter:    outputs.exitFilter,
 	}); err != nil {
 		return fmt.Errorf("failed to set bpfsnoop config: %w", err)
 	}

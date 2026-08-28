@@ -78,6 +78,10 @@ func (t *bpfTracing) traceProg(spec *ebpf.CollectionSpec, reusedMaps map[string]
 	if err != nil {
 		return fmt.Errorf("failed to correct arg types in params of %s: %w", info.fn.Name, err)
 	}
+	retType, err := correctArgType(info.fn.Type.(*btf.FuncProto).Return)
+	if err != nil {
+		return fmt.Errorf("failed to correct return type of %s: %w", info.fn.Name, err)
+	}
 
 	spec = spec.Copy()
 
@@ -85,9 +89,14 @@ func (t *bpfTracing) traceProg(spec *ebpf.CollectionSpec, reusedMaps map[string]
 	tracingFuncName := TracingProgName()
 	progSpec := spec.Programs[tracingFuncName]
 	bprog := bprogs.funcs[info.funcIP]
-	outputs, err := t.injectTraceeOutputs(progSpec, params, krnl, traceeName, info.flag.pkt)
+	canExit := fexit || bothEntryExit
+	outputs, ok, err := t.injectTraceeOutputs(progSpec, params, retType, krnl, traceeName,
+		info.flag.pkt, bothEntryExit, fexit, canExit)
 	if err != nil {
 		return err
+	}
+	if !ok {
+		return nil
 	}
 	bprog.funcArgs = outputs.args
 	bprog.argDataSz = outputs.argDataSize
@@ -129,6 +138,7 @@ func (t *bpfTracing) traceProg(spec *ebpf.CollectionSpec, reusedMaps map[string]
 		kmultiMode:    false,
 		withRet:       fexit,
 		session:       fsession,
+		exitFilter:    outputs.exitFilter,
 	}); err != nil {
 		return fmt.Errorf("failed to set bpfsnoop config: %w", err)
 	}

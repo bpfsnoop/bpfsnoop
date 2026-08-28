@@ -16,6 +16,7 @@ const (
 	configFlagIsTpIdx
 	configFlagIsProgIdx
 	configFlagKmultiModeIdx
+	configFlagExitFilterIdx
 )
 
 const (
@@ -29,6 +30,7 @@ const (
 	traceeFlagIsTp        = uint32(1 << configFlagIsTpIdx)
 	traceeFlagIsProg      = uint32(1 << configFlagIsProgIdx)
 	traceeFlagKmultiMode  = uint32(1 << configFlagKmultiModeIdx)
+	traceeFlagExitFilter  = uint32(1 << configFlagExitFilterIdx)
 )
 
 type BpfsnoopConfig struct {
@@ -114,4 +116,8 @@ func (cfg *BpfsnoopConfig) SetIsProg(v bool) {
 
 func (cfg *BpfsnoopConfig) SetKmultiMode(v bool) {
 	cfg.setFlags(v, configFlagKmultiModeIdx)
+}
+
+func (cfg *BpfsnoopConfig) SetExitFilter(v bool) {
+	cfg.setFlags(v, configFlagExitFilterIdx)
 }

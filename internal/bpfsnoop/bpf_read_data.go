@@ -36,7 +36,7 @@ func readKernelData(expr string, helpers *Helpers) error {
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
 
-	readSize, err := arg.compile(nil, krnl, krnl, 0, int(cc.MemoryReadFlagForce), "__read_data_fail")
+	readSize, err := arg.compile(nil, nil, krnl, krnl, 0, int(cc.MemoryReadFlagForce), "__read_data_fail")
 	if err != nil {
 		return fmt.Errorf("Failed to compile expression %q: %w", expr, err)
 	}
@@ -106,7 +106,7 @@ func readKernelData(expr string, helpers *Helpers) error {
 
 	var sb strings.Builder
 	f := findSymbolHelper(0, helpers)
-	err = __outputFuncArgAttrs(&sb, []funcArgumentOutput{arg}, buff, hist, tdigest, f)
+	err = __outputFuncArgAttrs(&sb, []funcArgumentOutput{arg}, buff, true, hist, tdigest, f)
 	if err != nil {
 		return fmt.Errorf("failed to output function arg attrs: %w", err)
 	}

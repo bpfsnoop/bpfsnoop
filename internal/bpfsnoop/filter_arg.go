@@ -26,8 +26,9 @@ type argumentFilter struct {
 }
 
 type funcArgument struct {
-	expr string
-	vars []string
+	expr   string
+	vars   []string
+	retval bool
 }
 
 func getTypeDescFrom(s string) (string, error) {
@@ -60,6 +61,7 @@ func prepareFuncArgument(expr string) (funcArgument, error) {
 	if len(arg.vars) == 0 {
 		return arg, fmt.Errorf("'%s' has no var names", expr)
 	}
+	arg.retval = slices.Contains(arg.vars, cc.RetvalName)
 
 	return arg, nil
 }
@@ -87,16 +89,22 @@ func (arg *funcArgument) clear(prog *ebpf.ProgramSpec) {
 }
 
 func (arg *funcArgument) matchParams(params []btf.FuncParam) bool {
-	for _, param := range params {
-		if slices.Contains(arg.vars, param.Name) {
-			return true
+	for _, name := range arg.vars {
+		if name == cc.RetvalName {
+			continue
+		}
+
+		if !slices.ContainsFunc(params, func(p btf.FuncParam) bool {
+			return p.Name == name
+		}) {
+			return false
 		}
 	}
 
-	return false
+	return true
 }
 
-func (arg *funcArgument) inject(prog *ebpf.ProgramSpec, krnl, spec *btf.Spec, params []btf.FuncParam) error {
+func (arg *funcArgument) inject(prog *ebpf.ProgramSpec, krnl, spec *btf.Spec, params []btf.FuncParam, ret btf.Type) error {
 	mode := cc.MemoryReadModeProbeRead
 	if _, err := krnl.AnyTypeByName("bpf_rdonly_cast"); err == nil {
 		mode = cc.MemoryReadModeCoreRead
@@ -106,11 +114,12 @@ func (arg *funcArgument) inject(prog *ebpf.ProgramSpec, krnl, spec *btf.Spec, pa
 	}
 
 	insns, err := cc.CompileFilterExpr(cc.CompileExprOptions{
-		Expr:      arg.expr,
-		Params:    params,
-		Spec:      spec,
-		Kernel:    krnl,
-		LabelExit: "__label_cc_exit",
+		Expr:       arg.expr,
+		Params:     params,
+		RetvalType: ret,
+		Spec:       spec,
+		Kernel:     krnl,
+		LabelExit:  "__label_cc_exit",
 
 		MemoryReadMode: mode,
 	})
@@ -123,24 +132,26 @@ func (arg *funcArgument) inject(prog *ebpf.ProgramSpec, krnl, spec *btf.Spec, pa
 	return nil
 }
 
-func (f *argumentFilter) inject(prog *ebpf.ProgramSpec, params []btf.FuncParam, spec *btf.Spec) (int, error) {
-	if len(f.args) == 0 {
-		return 0, errSkipped
-	}
-
+func (f *argumentFilter) selectMatch(params []btf.FuncParam, ret btf.Type, spec *btf.Spec) (*funcArgument, error) {
 	krnl := getKernelBTF()
-
-	for i, arg := range f.args {
-		if !arg.matchParams(params) {
-			continue
+	for i := range f.args {
+		arg := &f.args[i]
+		if arg.retval {
+			matched, err := cc.MatchRetvalType(arg.expr, ret, spec, krnl)
+			if err != nil {
+				return nil, err
+			}
+			if !matched {
+				continue
+			}
 		}
 
-		err := arg.inject(prog, krnl, spec, params)
-		if err != nil {
-			return 0, err
+		// A return expression may also refer to regular parameters. It is a
+		// match only when the return type and every non-return variable match.
+		if arg.matchParams(params) {
+			return arg, nil
 		}
-		return i, nil
 	}
 
-	return 0, errSkipped
+	return nil, nil
 }

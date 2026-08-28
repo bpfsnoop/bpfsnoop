@@ -8,5 +8,4 @@ import "errors"
 var (
 	ErrNotFound = errors.New("not found")
 	ErrFinished = errors.New("finished")
-	errSkipped  = errors.New("skipped")
 )

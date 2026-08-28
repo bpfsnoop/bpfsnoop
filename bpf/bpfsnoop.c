@@ -60,9 +60,10 @@ static __always_inline int
 emit_bpfsnoop_event(void *ctx)
 {
     struct bpfsnoop_lbr_data *lbr;
+    __u64 args[MAX_FN_ARGS + 1];
     __u64 fp, session_id = 0;
     enum bpfsnoop_mode mode;
-    __u64 args[MAX_FN_ARGS];
+    bool filter_pass = true;
     __u64 pid_tgid, func_ip;
     bool can_output_lbr;
     __u64 retval = 0;
@@ -92,6 +93,7 @@ emit_bpfsnoop_event(void *ctx)
     if (cfg->fn_args.with_retval && (mode == BPFSNOOP_MODE_EXIT ||
                                      mode == BPFSNOOP_MODE_SESSION_EXIT))
         (void) bpf_probe_read_kernel(&retval, sizeof(retval), ctx + 8*cfg->fn_args.args_nr);
+    args[cfg->fn_args.args_nr] = retval;
 
     func_ip = FUNC_IP;
     pid_tgid = bpf_get_current_pid_tgid();
@@ -112,7 +114,8 @@ emit_bpfsnoop_event(void *ctx)
     switch (mode) {
     case BPFSNOOP_MODE_SESSION_ENTRY:
         session_id = gen_session_id(fp);
-        if (!bpfsnoop_session_enter(ctx, pid_tgid, func_ip, session_id, filter(args, session_id),
+        filter_pass = cfg->flags.deferred_filter ? true : filter(args, session_id);
+        if (!bpfsnoop_session_enter(ctx, pid_tgid, func_ip, session_id, filter_pass,
                                     &session_id, cfg->flags.is_session,
                                     cfg->flags.graph_mode || cfg->flags.insn_mode))
             return BPF_OK;
@@ -124,6 +127,8 @@ emit_bpfsnoop_event(void *ctx)
         if (!bpfsnoop_session_exit(ctx, pid_tgid, func_ip, &session_id, cfg->flags.is_session,
                                    cfg->flags.graph_mode || cfg->flags.insn_mode))
             return BPF_OK;
+        if (cfg->flags.deferred_filter)
+            filter_pass = filter(args, session_id);
 
         event_type = BPFSNOOP_EVENT_TYPE_FUNC_EXIT;
         break;
@@ -131,7 +136,8 @@ emit_bpfsnoop_event(void *ctx)
     case BPFSNOOP_MODE_ENTRY:
     case BPFSNOOP_MODE_EXIT:
         session_id = gen_session_id(fp);
-        if (!filter(args, session_id))
+        filter_pass = filter(args, session_id);
+        if (!filter_pass)
             return BPF_OK;
 
         event_type = (mode == BPFSNOOP_MODE_ENTRY) ? BPFSNOOP_EVENT_TYPE_FUNC_ENTRY
@@ -141,7 +147,7 @@ emit_bpfsnoop_event(void *ctx)
 
     return output_event(ctx, event_type, session_id, func_ip, cpu, pid, comm,
                         lbr, can_output_lbr, args, retval, cfg->flags.output_pkt,
-                        cfg->flags.output_arg);
+                        cfg->flags.output_arg, filter_pass);
 }
 
 SEC("fexit")

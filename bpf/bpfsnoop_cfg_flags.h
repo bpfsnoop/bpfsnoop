@@ -21,7 +21,8 @@
             __u32 is_tp:1;              \
             __u32 is_prog:1;            \
             __u32 kmulti_mode:1;        \
-            __u32 pad:20;               \
+            __u32 deferred_filter:1;    \
+            __u32 pad:19;               \
         } flags;                        \
         __u32 tracee_flags;             \
     }
