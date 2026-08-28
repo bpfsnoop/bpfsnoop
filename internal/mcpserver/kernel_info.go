@@ -26,8 +26,7 @@ func init() {
 		Name:  "kernel_info",
 		Title: "Inspect kernel tracing capabilities",
 		Description: "Return the running kernel identity and the tracing capabilities available to bpfsnoop. " +
-			"Call this first when an investigation depends on a particular BPF attachment or capture feature. " +
-			"The bpfsnoop MCP server must be running as root.",
+			"Call this first when an investigation depends on a particular BPF attachment or capture feature.",
 		Annotations: &mcp.ToolAnnotations{
 			ReadOnlyHint: true,
 		},

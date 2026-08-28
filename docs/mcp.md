@@ -5,11 +5,11 @@
 
 # bpfsnoop MCP server
 
-`bpfsnoop --mcp` exposes bpfsnoop to AI agents through MCP over stdin/stdout.
-The `bpfsnoop-mcp` launcher selects this hidden execution mode. An MCP client
-launches one server process and normally keeps it running while the client
-connection is open. Standard output is reserved for MCP messages; server
-diagnostics are written to standard error.
+`bpfsnoop --mcp` serves bpfsnoop to MCP clients over stdin/stdout. The
+`bpfsnoop-mcp` launcher selects that mode for AI agents. When it runs as root,
+bpfsnoop serves MCP directly. When it runs as a normal user, it transparently
+proxies MCP messages to a persistent privileged daemon. The launcher contains
+all local transport details, so MCP clients only need to run `bpfsnoop-mcp`.
 
 The initial tool surface is:
 
@@ -27,30 +27,40 @@ not-implemented error until their backends are added.
 make bpfsnoop
 ```
 
-## Root privilege
+## Start the daemon
 
-Kernel and BPF inspection requires root privilege, so `bpfsnoop --mcp` refuses
-to start when its effective user ID is not zero. Elevation must happen when the
-MCP client launches the server; a tool call cannot elevate an existing process.
+Kernel and BPF inspection requires root privilege. Start the daemon in a user
+terminal and leave it running:
 
-Do not use interactive `sudo` for an MCP stdio command because its prompt would
-block the connection. One possible client configuration is:
+```sh
+sudo ./bpfsnoop-mcp-daemon
+```
+
+This launcher executes `bpfsnoop --mcp-daemon`. It is also possible to invoke
+that mode directly.
+
+When launched through `sudo`, the daemon permits only the invoking user to
+connect. It cleans up its private local endpoint when stopped with `SIGINT` or
+`SIGTERM`. The daemon serves one active MCP session at a time; another frontend
+is rejected immediately and can retry after the active session ends.
+
+If the daemon is not available, the frontend exits with an instruction asking
+the user to start `bpfsnoop-mcp-daemon`; it never attempts to prompt for a
+password through MCP stdin.
+
+## Configure an MCP client
+
+Configure the client to launch the frontend directly, without `sudo`:
 
 ```json
 {
   "mcpServers": {
     "bpfsnoop": {
-      "command": "sudo",
-      "args": ["-n", "/absolute/path/to/bpfsnoop-mcp"]
+      "command": "/absolute/path/to/bpfsnoop-mcp"
     }
   }
 }
 ```
 
-This requires either an existing root execution environment or a narrowly
-scoped passwordless sudo rule for the exact trusted `bpfsnoop-mcp` binary.
-
-Run `bpfsnoop-mcp -h` for command-line usage. When started normally, the server
-reads newline-delimited MCP JSON messages from stdin and writes responses to
-stdout until the client disconnects or the process receives `SIGINT` or
-`SIGTERM`.
+Run `bpfsnoop -h` for command-line usage. The launchers forward their arguments
+to the corresponding bpfsnoop mode.

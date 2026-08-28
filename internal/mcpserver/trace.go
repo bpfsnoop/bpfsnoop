@@ -43,7 +43,7 @@ func init() {
 		Title: "Run a bounded bpfsnoop trace",
 		Description: "Run one bounded kernel or BPF tracing experiment and return structured events. " +
 			"Provide explicit targets; the server always enforces execution limits. Use find first if a target is uncertain. " +
-			"Issue another trace to refine the investigation. The bpfsnoop MCP server must be running as root.",
+			"Issue another trace to refine the investigation.",
 		Annotations: &mcp.ToolAnnotations{
 			DestructiveHint: &notDestructive,
 			ReadOnlyHint:    false,

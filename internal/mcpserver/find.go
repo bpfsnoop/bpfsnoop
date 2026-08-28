@@ -16,8 +16,7 @@ func init() {
 		Name:  "find",
 		Title: "Find traceable kernel objects",
 		Description: "Discover kernel functions, tracepoints, loaded BPF programs, or BTF types by name or glob. " +
-			"Use this before trace when the exact target name or BPF program ID is unknown. " +
-			"The bpfsnoop MCP server must be running as root.",
+			"Use this before trace when the exact target name or BPF program ID is unknown.",
 		Annotations: &mcp.ToolAnnotations{
 			ReadOnlyHint: true,
 		},

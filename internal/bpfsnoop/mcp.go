@@ -3,9 +3,9 @@
 
 package bpfsnoop
 
-var runMCP func() error
+var runMCP func(daemon bool) error
 
-// RegisterMCPRunner installs the handler for the hidden MCP execution mode.
-func RegisterMCPRunner(run func() error) {
+// RegisterMCPRunner installs the handler for the hidden MCP execution modes.
+func RegisterMCPRunner(run func(daemon bool) error) {
 	runMCP = run
 }
