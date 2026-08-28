@@ -6,6 +6,7 @@ package bpfsnoop
 import (
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/cilium/ebpf"
@@ -13,6 +14,8 @@ import (
 	"github.com/cilium/ebpf/link"
 	"golang.org/x/sync/errgroup"
 	"golang.org/x/sys/unix"
+
+	"github.com/bpfsnoop/bpfsnoop/internal/cc"
 )
 
 type tracingFunc struct {
@@ -74,14 +77,27 @@ func (t *bpfTracing) traceFunc(spec *ebpf.CollectionSpec, reusedMaps map[string]
 	progSpec := spec.Programs[tracingFuncName]
 	funcProto := fn.Func.Type.(*btf.FuncProto)
 	params := funcProto.Params
+	retType := funcProto.Return
+	canExit := !isTracepoint && (isExit || bothEntryExit)
+	filterMatch, err := argFilter.selectMatch(params, retType, fn.Btf)
+	if err != nil {
+		return fmt.Errorf("failed to match func arg filter expr: %w", err)
+	}
+	filterRetval := filterMatch != nil && slices.Contains(filterMatch.vars, cc.RetvalName)
+	if filterRetval && !canExit {
+		DebugLog("Skip func %s because selected --filter-arg requires %s in entry-only mode", traceeName, cc.RetvalName)
+		return nil
+	}
+	exitFilter := filterRetval && bothEntryExit
 	fn.Pkt = t.injectPktOutput(fn.Flag.pkt, progSpec, params, traceeName)
 	if err := t.injectPktFilter(progSpec, params, traceeName); err != nil {
 		return err
 	}
-	if err := t.injectArgFilter(progSpec, params, fn.Btf, traceeName); err != nil {
+	compileFilter := !filterRetval || isExit
+	if err := t.injectArgFilter(progSpec, params, retType, fn.Btf, traceeName, filterMatch, compileFilter); err != nil {
 		return err
 	}
-	args, argDataSize, err := t.injectArgOutput(progSpec, params, fn.Btf, traceeName)
+	args, argDataSize, err := t.injectArgOutput(progSpec, params, retType, fn.Btf, traceeName, canExit)
 	if err != nil {
 		return err
 	}
@@ -126,6 +142,7 @@ func (t *bpfTracing) traceFunc(spec *ebpf.CollectionSpec, reusedMaps map[string]
 		kmultiMode:    false,
 		withRet:       withRet,
 		session:       fsession,
+		exitFilter:    exitFilter,
 	}); err != nil {
 		return fmt.Errorf("failed to set bpfsnoop config: %w", err)
 	}

@@ -28,7 +28,7 @@ static __always_inline int
 output_event(void *ctx, __u16 event_type, __u64 session_id, __u64 func_ip,
              __u32 cpu, __u32 pid, __u8 comm[16], struct bpfsnoop_lbr_data *lbr,
              bool can_output_lbr, __u64 *args, __u64 retval, bool can_output_pkt,
-             bool can_output_arg)
+             bool can_output_arg, bool filter_pass)
 {
     void *buffer, *ptr;
     struct event *evt;
@@ -54,6 +54,7 @@ output_event(void *ctx, __u16 event_type, __u64 session_id, __u64 func_ip,
     evt->flags.output_lbr &= can_output_lbr;
     evt->flags.output_pkt &= can_output_pkt;
     evt->flags.output_arg &= can_output_arg;
+    evt->flags.deferred_filter = filter_pass;
     evt->tracee_arg_entry_size = cfg->tracee_arg_entry_size;
     evt->tracee_arg_exit_size = cfg->tracee_arg_exit_size;
     evt->tracee_arg_data_size = cfg->tracee_arg_data_size;

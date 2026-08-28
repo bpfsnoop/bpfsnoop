@@ -241,7 +241,7 @@ func (arg *funcArgumentOutput) genDefaultInsns(res *cc.EvalResult, offset, size 
 	return offset, nil
 }
 
-func (arg *funcArgumentOutput) compile(params []btf.FuncParam, krnl, spec *btf.Spec, offset, flags int, labelExit string) (int, error) {
+func (arg *funcArgumentOutput) compile(params []btf.FuncParam, ret btf.Type, krnl, spec *btf.Spec, offset, flags int, labelExit string) (int, error) {
 	mode := cc.MemoryReadModeProbeRead
 	if _, err := spec.AnyTypeByName("bpf_rdonly_cast"); err == nil {
 		mode = cc.MemoryReadModeCoreRead
@@ -253,6 +253,7 @@ func (arg *funcArgumentOutput) compile(params []btf.FuncParam, krnl, spec *btf.S
 	res, err := cc.CompileEvalExpr(cc.CompileExprOptions{
 		Expr:          arg.expr,
 		Params:        params,
+		RetvalType:    ret,
 		Spec:          spec,
 		Kernel:        krnl,
 		LabelExit:     labelExit,
@@ -346,19 +347,30 @@ func (arg *argDataOutput) genExitLabel() string {
 	return label
 }
 
-func (arg *argDataOutput) matchParams(params []btf.FuncParam, spec *btf.Spec) ([]funcArgumentOutput, int, error) {
+func (arg *argDataOutput) matchParams(params []btf.FuncParam, ret btf.Type, spec *btf.Spec, allowRetval bool) ([]funcArgumentOutput, int, error) {
 	args := make([]funcArgumentOutput, 0, 12)
 
 	krnl := getKernelBTF()
 	offset := 0
 	for _, a := range arg.args {
-		if !a.match(params) {
+		if slices.Contains(a.vars, cc.RetvalName) {
+			if !allowRetval {
+				continue
+			}
+			matched, err := cc.MatchRetvalType(a.expr, ret, spec, krnl)
+			if err != nil {
+				return nil, 0, fmt.Errorf("failed to match %s type for expr '%s': %w", cc.RetvalName, a.expr, err)
+			}
+			if !matched {
+				continue
+			}
+		} else if !a.match(params) {
 			continue
 		}
 
 		a := a
 		var err error
-		offset, err = a.compile(params, krnl, spec, offset, 0, arg.genExitLabel())
+		offset, err = a.compile(params, ret, krnl, spec, offset, 0, arg.genExitLabel())
 		if err != nil {
 			return nil, 0, fmt.Errorf("failed to compile expr '%s': %w", a.expr, err)
 		}

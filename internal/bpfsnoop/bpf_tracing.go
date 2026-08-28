@@ -42,6 +42,7 @@ type traceeConfig struct {
 	kmultiMode    bool
 	withRet       bool
 	session       bool
+	exitFilter    bool
 }
 
 func (t *bpfTracing) Progs() []*ebpf.Program {
@@ -62,6 +63,7 @@ func setBpfsnoopConfig(spec *ebpf.CollectionSpec, c traceeConfig) error {
 	cfg.SetIsTp(c.isTp)
 	cfg.SetIsProg(c.isProg)
 	cfg.SetKmultiMode(c.kmultiMode)
+	cfg.SetExitFilter(c.exitFilter)
 	cfg.FilterPid = filterPid
 	copy(cfg.FilterComm[:], []uint8(filterComm))
 	cfg.FilterCommLen = uint32(len(filterComm))
@@ -166,27 +168,28 @@ func TracingProgName() string {
 	return "bpfsnoop_fn"
 }
 
-func (t *bpfTracing) injectArgFilter(prog *ebpf.ProgramSpec, params []btf.FuncParam, spec *btf.Spec, fnName string) error {
-	i, err := argFilter.inject(prog, params, spec)
-	if err != nil {
-		if err == errSkipped {
-			clearFilterArgSubprog(prog)
-			return nil
-		}
+func (t *bpfTracing) injectArgFilter(prog *ebpf.ProgramSpec, params []btf.FuncParam, ret btf.Type, spec *btf.Spec, fnName string, match *funcArgument, compile bool) error {
+	if match == nil || !compile {
+		clearFilterArgSubprog(prog)
+		return nil
+	}
+
+	if err := match.inject(prog, getKernelBTF(), spec, params, ret); err != nil {
 		return fmt.Errorf("failed to inject func arg filter expr: %w", err)
 	}
 
-	DebugLog("Injected --filter-arg '%s' to func %s", argFilter.args[i].expr, fnName)
+	DebugLog("Injected --filter-arg '%s' to func %s", match.expr, fnName)
 
 	return nil
 }
 
-func (t *bpfTracing) injectArgOutput(prog *ebpf.ProgramSpec, params []btf.FuncParam, spec *btf.Spec, fnName string) ([]funcArgumentOutput, int, error) {
+func (t *bpfTracing) injectArgOutput(prog *ebpf.ProgramSpec, params []btf.FuncParam, ret btf.Type, spec *btf.Spec, fnName string, canExit bool) ([]funcArgumentOutput, int, error) {
 	if len(argOutput.args) == 0 {
+		clearOutputArgSubprog(prog)
 		return nil, 0, nil
 	}
 
-	args, size, err := argOutput.matchParams(params, spec)
+	args, size, err := argOutput.matchParams(params, ret, spec, canExit)
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to match params: %w", err)
 	}

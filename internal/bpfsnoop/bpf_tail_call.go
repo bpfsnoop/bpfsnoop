@@ -158,7 +158,7 @@ func ProbeTailcallIssue(spec *ebpf.CollectionSpec) error {
 	prog := spec.Programs[TracingProgName()]
 	pktFilter.clear(prog)
 	pktOutput.clear(prog)
-	argOutput.clear(prog)
+	clearOutputArgSubprog(prog)
 	clearFilterArgSubprog(prog)
 
 	attachType := ebpf.AttachTraceFExit

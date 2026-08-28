@@ -15,6 +15,7 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/bpfsnoop/bpfsnoop/internal/btfx"
+	"github.com/bpfsnoop/bpfsnoop/internal/cc"
 )
 
 type tracingProg struct {
@@ -78,6 +79,10 @@ func (t *bpfTracing) traceProg(spec *ebpf.CollectionSpec, reusedMaps map[string]
 	if err != nil {
 		return fmt.Errorf("failed to correct arg types in params of %s: %w", info.fn.Name, err)
 	}
+	retType, err := correctArgType(info.fn.Type.(*btf.FuncProto).Return)
+	if err != nil {
+		return fmt.Errorf("failed to correct return type of %s: %w", info.fn.Name, err)
+	}
 
 	spec = spec.Copy()
 
@@ -85,14 +90,26 @@ func (t *bpfTracing) traceProg(spec *ebpf.CollectionSpec, reusedMaps map[string]
 	tracingFuncName := TracingProgName()
 	progSpec := spec.Programs[tracingFuncName]
 	bprog := bprogs.funcs[info.funcIP]
+	canExit := fexit || bothEntryExit
+	filterMatch, err := argFilter.selectMatch(params, retType, krnl)
+	if err != nil {
+		return fmt.Errorf("failed to match func arg filter expr: %w", err)
+	}
+	filterRetval := filterMatch != nil && slices.Contains(filterMatch.vars, cc.RetvalName)
+	if filterRetval && !canExit {
+		DebugLog("Skip BPF func %s because selected --filter-arg requires %s in entry-only mode", traceeName, cc.RetvalName)
+		return nil
+	}
+	exitFilter := filterRetval && bothEntryExit
 	bprog.pktOutput = t.injectPktOutput(info.flag.pkt, progSpec, params, traceeName)
 	if err := t.injectPktFilter(progSpec, params, traceeName); err != nil {
 		return err
 	}
-	if err := t.injectArgFilter(progSpec, params, krnl, traceeName); err != nil {
+	compileFilter := !filterRetval || fexit
+	if err := t.injectArgFilter(progSpec, params, retType, krnl, traceeName, filterMatch, compileFilter); err != nil {
 		return err
 	}
-	args, argDataSize, err := t.injectArgOutput(progSpec, params, krnl, traceeName)
+	args, argDataSize, err := t.injectArgOutput(progSpec, params, retType, krnl, traceeName, canExit)
 	if err != nil {
 		return err
 	}
@@ -135,6 +152,7 @@ func (t *bpfTracing) traceProg(spec *ebpf.CollectionSpec, reusedMaps map[string]
 		kmultiMode:    false,
 		withRet:       fexit,
 		session:       fsession,
+		exitFilter:    exitFilter,
 	}); err != nil {
 		return fmt.Errorf("failed to set bpfsnoop config: %w", err)
 	}

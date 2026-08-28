@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"net"
+	"slices"
 	"strings"
 	"unsafe"
 
@@ -38,10 +39,14 @@ func dumpOutputArgBuf(data []byte) string {
 	return sb.String()
 }
 
-func __outputFuncArgAttrs(sb *strings.Builder, args []funcArgumentOutput, data []byte, hist *histogram, tdigest *TDigest, f btfx.FindSymbol) error {
+func __outputFuncArgAttrs(sb *strings.Builder, args []funcArgumentOutput, data []byte, outputRetval bool, hist *histogram, tdigest *TDigest, f btfx.FindSymbol) error {
 	gray := color.RGB(0x88, 0x88, 0x88 /* gray */)
 	shouldPrintComma := false
 	for _, arg := range args {
+		if slices.Contains(arg.vars, cc.RetvalName) && !outputRetval {
+			data = data[arg.size:]
+			continue
+		}
 		if shouldPrintComma {
 			fmt.Fprint(sb, ", ")
 		}
@@ -273,14 +278,17 @@ func __outputFuncArgAttrs(sb *strings.Builder, args []funcArgumentOutput, data [
 	return nil
 }
 
-func outputFuncArgAttrs(sb *strings.Builder, args []funcArgumentOutput, data []byte, hist *histogram, tdigest *TDigest, f btfx.FindSymbol) error {
+func outputFuncArgAttrs(sb *strings.Builder, args []funcArgumentOutput, data []byte, outputRetval bool, hist *histogram, tdigest *TDigest, f btfx.FindSymbol) error {
 	histTdigestOnly := true
 	for _, arg := range args {
+		if slices.Contains(arg.vars, cc.RetvalName) && !outputRetval {
+			continue
+		}
 		histTdigestOnly = histTdigestOnly && (arg.isHist || arg.isTDig)
 	}
 	if !histTdigestOnly {
 		fmt.Fprint(sb, "Arg attrs: ")
 	}
 
-	return __outputFuncArgAttrs(sb, args, data, hist, tdigest, f)
+	return __outputFuncArgAttrs(sb, args, data, outputRetval, hist, tdigest, f)
 }

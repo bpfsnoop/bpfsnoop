@@ -65,6 +65,29 @@ func (fg *FlameGraph) AddStack(stack []string, value int) {
 	}
 }
 
+func (fg *FlameGraph) merge(other *FlameGraph) {
+	if other == nil {
+		return
+	}
+	var walk func(*StackFrame, []string)
+	walk = func(frame *StackFrame, path []string) {
+		if frame.Name != "root" {
+			path = append(path, frame.Name)
+			self := frame.Value
+			for _, child := range frame.Children {
+				self -= child.Value
+			}
+			if self > 0 {
+				fg.AddStack(path, self)
+			}
+		}
+		for _, child := range frame.Children {
+			walk(child, path)
+		}
+	}
+	walk(other.RootFrame, nil)
+}
+
 // generateFoldedStacks converts the tree structure to folded stack format
 // compatible with Brendan Gregg's flamegraph.pl
 func (fg *FlameGraph) generateFoldedStacks() []string {

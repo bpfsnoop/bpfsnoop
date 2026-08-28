@@ -343,13 +343,17 @@ func (f *Flags) checkMultiExitFilterConflict() error {
 	}
 
 	var used []string
-	if len(filterArg) != 0 {
+	if slices.ContainsFunc(argFilter.args, func(arg funcArgument) bool {
+		return !slices.Contains(arg.vars, cc.RetvalName)
+	}) {
 		used = append(used, "--filter-arg")
 	}
 	if filterPkt != "" {
 		used = append(used, "--filter-pkt")
 	}
-	if len(outputArg) != 0 {
+	if slices.ContainsFunc(argOutput.args, func(arg funcArgumentOutput) bool {
+		return !slices.Contains(arg.vars, cc.RetvalName)
+	}) {
 		used = append(used, "--output-arg")
 	}
 	if outputPkt {

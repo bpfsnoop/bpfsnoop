@@ -96,7 +96,7 @@ func (arg *funcArgument) matchParams(params []btf.FuncParam) bool {
 	return false
 }
 
-func (arg *funcArgument) inject(prog *ebpf.ProgramSpec, krnl, spec *btf.Spec, params []btf.FuncParam) error {
+func (arg *funcArgument) inject(prog *ebpf.ProgramSpec, krnl, spec *btf.Spec, params []btf.FuncParam, ret btf.Type) error {
 	mode := cc.MemoryReadModeProbeRead
 	if _, err := krnl.AnyTypeByName("bpf_rdonly_cast"); err == nil {
 		mode = cc.MemoryReadModeCoreRead
@@ -106,11 +106,12 @@ func (arg *funcArgument) inject(prog *ebpf.ProgramSpec, krnl, spec *btf.Spec, pa
 	}
 
 	insns, err := cc.CompileFilterExpr(cc.CompileExprOptions{
-		Expr:      arg.expr,
-		Params:    params,
-		Spec:      spec,
-		Kernel:    krnl,
-		LabelExit: "__label_cc_exit",
+		Expr:       arg.expr,
+		Params:     params,
+		RetvalType: ret,
+		Spec:       spec,
+		Kernel:     krnl,
+		LabelExit:  "__label_cc_exit",
 
 		MemoryReadMode: mode,
 	})
@@ -123,24 +124,24 @@ func (arg *funcArgument) inject(prog *ebpf.ProgramSpec, krnl, spec *btf.Spec, pa
 	return nil
 }
 
-func (f *argumentFilter) inject(prog *ebpf.ProgramSpec, params []btf.FuncParam, spec *btf.Spec) (int, error) {
-	if len(f.args) == 0 {
-		return 0, errSkipped
-	}
-
+func (f *argumentFilter) selectMatch(params []btf.FuncParam, ret btf.Type, spec *btf.Spec) (*funcArgument, error) {
 	krnl := getKernelBTF()
-
-	for i, arg := range f.args {
-		if !arg.matchParams(params) {
+	for i := range f.args {
+		arg := &f.args[i]
+		if slices.Contains(arg.vars, cc.RetvalName) {
+			matched, err := cc.MatchRetvalType(arg.expr, ret, spec, krnl)
+			if err != nil {
+				return nil, err
+			}
+			if matched {
+				return arg, nil
+			}
 			continue
 		}
-
-		err := arg.inject(prog, krnl, spec, params)
-		if err != nil {
-			return 0, err
+		if arg.matchParams(params) {
+			return arg, nil
 		}
-		return i, nil
 	}
 
-	return 0, errSkipped
+	return nil, nil
 }
