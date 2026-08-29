@@ -182,9 +182,6 @@ func (t *bpfTracing) traceKfuncMultiMode(reusedMaps map[string]*ebpf.Map, g *kfu
 
 	fn := g.fn
 	bothEntryExit := fn.Flag.both
-	if err := validateKmultiArgOutput(fn); err != nil {
-		return err
-	}
 
 	tracingFuncName := "bpfsnoop_kmulti"
 	progSpec := spec.Programs[tracingFuncName]
@@ -258,6 +255,7 @@ func (t *bpfTracing) traceKfuncMultiMode(reusedMaps map[string]*ebpf.Map, g *kfu
 		withRet:       withRet,
 		session:       sessionMode,
 		exitFilter:    false,
+		pktRetval:     false,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to set bpfsnoop config: %w", err)
@@ -311,22 +309,6 @@ func (t *bpfTracing) traceKfuncMultiMode(reusedMaps map[string]*ebpf.Map, g *kfu
 		p: prog,
 	})
 	t.llock.Unlock()
-
-	return nil
-}
-
-func validateKmultiArgOutput(fn *KFunc) error {
-	if len(argOutput.args) == 0 {
-		return nil
-	}
-
-	for _, a := range argOutput.args {
-		for _, v := range a.vars {
-			if v != fn.Flag.argName {
-				return fmt.Errorf("kmulti --output-arg '%s' must match trace arg '%s'", a.expr, fn.Flag.argName)
-			}
-		}
-	}
 
 	return nil
 }
