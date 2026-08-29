@@ -14,6 +14,7 @@ import (
 	flag "github.com/spf13/pflag"
 
 	"github.com/bpfsnoop/bpfsnoop/internal/assert"
+	"github.com/bpfsnoop/bpfsnoop/internal/cc"
 )
 
 const (
@@ -188,6 +189,9 @@ func ParseFlags() (*Flags, error) {
 	if e := flags.checkMode(); e != nil {
 		return nil, e
 	}
+	if err := flags.checkKmultiArgAccess(); err != nil {
+		return nil, err
+	}
 	if err := flags.checkMultiExitFilterConflict(); err != nil {
 		return nil, err
 	}
@@ -359,6 +363,52 @@ func hasModeExit() bool {
 	return slices.Contains(modes, TracingModeExit)
 }
 
+func (f *Flags) checkKmultiArgAccess() error {
+	kfuncs := f.KfuncsMulti()
+	if len(kfuncs) == 0 {
+		return nil
+	}
+
+	kflags, err := parseKfuncFlags(kfuncs)
+	if err != nil {
+		return err
+	}
+	argName := kflags[0].argName
+	argType := kflags[0].argType
+	for _, kf := range kflags[1:] {
+		if kf.argName != argName || kf.argType != argType {
+			return fmt.Errorf("kprobe.multi targets must use one common typed argument, got %q (%s) and %q (%s)",
+				argName, argType, kf.argName, kf.argType)
+		}
+	}
+
+	for _, arg := range argFilter.args {
+		if slices.Contains(arg.vars, cc.RetvalName) {
+			return fmt.Errorf("kprobe.multi does not support %s in --filter-arg", cc.RetvalName)
+		}
+		if len(arg.vars) != 1 || arg.vars[0] != argName {
+			return fmt.Errorf("kmulti --filter-arg '%s' must use only trace arg '%s'", arg.expr, argName)
+		}
+	}
+	for _, arg := range argOutput.args {
+		if slices.Contains(arg.vars, cc.RetvalName) {
+			return fmt.Errorf("kprobe.multi does not support %s in --output-arg", cc.RetvalName)
+		}
+		if len(arg.vars) != 1 || arg.vars[0] != argName {
+			return fmt.Errorf("kmulti --output-arg '%s' must use only trace arg '%s'", arg.expr, argName)
+		}
+	}
+
+	if pktFilter.retval {
+		return fmt.Errorf("kprobe.multi does not support '(r)' in --filter-pkt")
+	}
+	if outputPktRetval {
+		return fmt.Errorf("kprobe.multi does not support '(r)' in --output-pkt")
+	}
+
+	return nil
+}
+
 func (f *Flags) checkMultiExitFilterConflict() error {
 	if len(f.KfuncsMulti()) == 0 {
 		return nil
@@ -368,15 +418,17 @@ func (f *Flags) checkMultiExitFilterConflict() error {
 	}
 
 	var used []string
-	if slices.ContainsFunc(argFilter.args, func(arg funcArgument) bool {
-		return !slices.Contains(arg.vars, cc.RetvalName)
-	}) {
+	if len(argFilter.args) != 0 {
 		used = append(used, "--filter-arg")
 	}
-	if slices.ContainsFunc(argOutput.args, func(arg funcArgumentOutput) bool {
-		return !slices.Contains(arg.vars, cc.RetvalName)
-	}) {
+	if len(argOutput.args) != 0 {
 		used = append(used, "--output-arg")
+	}
+	if pktFilter.expr != "" {
+		used = append(used, "--filter-pkt")
+	}
+	if outputPkt {
+		used = append(used, "--output-pkt")
 	}
 	if len(used) == 0 {
 		return nil
