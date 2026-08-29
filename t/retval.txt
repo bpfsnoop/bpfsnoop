@@ -1,0 +1,52 @@
+# Copyright 2026 Leon Hwang.
+# SPDX-License-Identifier: Apache-2.0
+
+# These tests are for typed $retval expressions and packet return values.
+
+# signed scalar filter and output in exit mode
+name: retval::arg:exit
+tag: retval,cc,fnarg,kfuncs
+test: -k __sys_connect -m exit --filter-arg '(int)$retval < 0' --output-arg '(int)$retval' --limit-events 1
+match: (int)'(int)$retval'=-
+trigger: curl --max-time 1 -sS http://127.0.0.1:1/ &>/dev/null || true
+timeout: 10s
+
+---
+
+# deferred filtering releases the buffered function graph after exit
+name: retval::arg:fgraph
+tag: retval,cc,fnarg,kfuncs,fngraph
+test: -k __sys_connect -m entry,exit --filter-arg '(int)$retval < 0' --output-fgraph --fgraph-max-depth 1 --limit-events 1
+match: → __sys_connect
+trigger: curl --max-time 1 -sS http://127.0.0.1:1/ &>/dev/null || true
+timeout: 10s
+
+---
+
+# deferred filtering releases buffered instruction events after exit
+name: retval::arg:insns
+tag: retval,cc,fnarg,kfuncs,fninsn
+test: -k __sys_connect -m entry,exit --filter-arg '(int)$retval < 0' --output-insns --trace-insn-debug-cnt 10 --limit-events 1
+match: insn=
+trigger: curl --max-time 1 -sS http://127.0.0.1:1/ &>/dev/null || true
+timeout: 10s
+
+---
+
+# pointer return output
+name: retval::arg:pointer
+tag: retval,cc,fnarg,kfuncs,pkt
+test: -k skb_recv_datagram -m exit --output-arg '(struct sk_buff *)$retval' --limit-events 1
+match: (struct sk_buff *)'(struct sk_buff *)$retval'=0xffff
+trigger: ping -c 1 -s 64 127.0.0.1
+timeout: 10s
+
+---
+
+# packet filtering and output explicitly select a packet-typed return value
+name: retval::pkt
+tag: retval,kfuncs,pkt
+test: -k skb_recv_datagram -m entry,exit --filter-pkt '(r) icmp' --output-pkt '(r)' --limit-events 1
+match: Pkt tuple: 127.0.0.1 -> 127.0.0.1 (ICMP)
+trigger: ping -c 1 -s 64 127.0.0.1
+timeout: 10s
