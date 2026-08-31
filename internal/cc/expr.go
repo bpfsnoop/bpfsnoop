@@ -34,6 +34,7 @@ const (
 type CompileExprOptions struct {
 	Expr          string
 	Params        []btf.FuncParam
+	RetvalType    btf.Type
 	Spec, Kernel  btfSpecer
 	LabelExit     string
 	ReservedStack int
@@ -44,6 +45,11 @@ type CompileExprOptions struct {
 }
 
 func CompileFilterExpr(opts CompileExprOptions) (asm.Instructions, error) {
+	var err error
+	opts, err = prepareCompileOptions(opts)
+	if err != nil {
+		return nil, fmt.Errorf("failed to prepare expression: %w", err)
+	}
 	c, err := newCompiler(opts)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create compiler: %w", err)
@@ -139,6 +145,11 @@ type EvalResult struct {
 
 func CompileEvalExpr(opts CompileExprOptions) (EvalResult, error) {
 	var res EvalResult
+	var err error
+	opts, err = prepareCompileOptions(opts)
+	if err != nil {
+		return res, fmt.Errorf("failed to prepare expression: %w", err)
+	}
 
 	c, err := newCompiler(opts)
 	if err != nil {
