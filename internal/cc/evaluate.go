@@ -1263,6 +1263,10 @@ func (c *compiler) evaluateLt(expr *cc.Expr) (exprValue, error) {
 	}
 
 	left, right = c.adjustNums(left, right)
+	jumpOp := asm.JGE
+	if comparisonIsSigned(left, right) {
+		jumpOp = asm.JSGE
+	}
 
 	if left.isConstant() && right.isConstant() {
 		return newConstant(int64(bool2int(left.num < right.num))), nil
@@ -1282,7 +1286,7 @@ func (c *compiler) evaluateLt(expr *cc.Expr) (exprValue, error) {
 	}
 
 	if right.isConstant() {
-		c.emit(JmpOff(asm.JGE, left.reg, right.num, 2))
+		c.emit(JmpOff(jumpOp, left.reg, right.num, 2))
 		c.emitReg2bool(left.reg)
 		return newMaterialized(left.reg, left.btf), nil
 	}
@@ -1292,7 +1296,7 @@ func (c *compiler) evaluateLt(expr *cc.Expr) (exprValue, error) {
 		return exprValue{}, err
 	}
 
-	c.emit(JmpReg(asm.JGE, left.reg, right.reg, 2))
+	c.emit(JmpReg(jumpOp, left.reg, right.reg, 2))
 	c.emitReg2bool(left.reg)
 	c.regalloc.Free(right.reg)
 
@@ -1317,6 +1321,10 @@ func (c *compiler) evaluateLtEq(expr *cc.Expr) (exprValue, error) {
 	}
 
 	left, right = c.adjustNums(left, right)
+	jumpOp := asm.JGT
+	if comparisonIsSigned(left, right) {
+		jumpOp = asm.JSGT
+	}
 
 	if left.isConstant() && right.isConstant() {
 		return newConstant(int64(bool2int(left.num <= right.num))), nil
@@ -1336,7 +1344,7 @@ func (c *compiler) evaluateLtEq(expr *cc.Expr) (exprValue, error) {
 	}
 
 	if right.isConstant() {
-		c.emit(JmpOff(asm.JGT, left.reg, right.num, 2))
+		c.emit(JmpOff(jumpOp, left.reg, right.num, 2))
 		c.emitReg2bool(left.reg)
 		return newMaterialized(left.reg, left.btf), nil
 	}
@@ -1346,7 +1354,7 @@ func (c *compiler) evaluateLtEq(expr *cc.Expr) (exprValue, error) {
 		return exprValue{}, err
 	}
 
-	c.emit(JmpReg(asm.JGT, left.reg, right.reg, 2))
+	c.emit(JmpReg(jumpOp, left.reg, right.reg, 2))
 	c.emitReg2bool(left.reg)
 	c.regalloc.Free(right.reg)
 
@@ -1371,6 +1379,10 @@ func (c *compiler) evaluateGt(expr *cc.Expr) (exprValue, error) {
 	}
 
 	left, right = c.adjustNums(left, right)
+	jumpOp := asm.JLE
+	if comparisonIsSigned(left, right) {
+		jumpOp = asm.JSLE
+	}
 
 	if left.isConstant() && right.isConstant() {
 		return newConstant(int64(bool2int(left.num > right.num))), nil
@@ -1390,7 +1402,7 @@ func (c *compiler) evaluateGt(expr *cc.Expr) (exprValue, error) {
 	}
 
 	if right.isConstant() {
-		c.emit(JmpOff(asm.JLE, left.reg, right.num, 2))
+		c.emit(JmpOff(jumpOp, left.reg, right.num, 2))
 		c.emitReg2bool(left.reg)
 		return newMaterialized(left.reg, left.btf), nil
 	}
@@ -1400,7 +1412,7 @@ func (c *compiler) evaluateGt(expr *cc.Expr) (exprValue, error) {
 		return exprValue{}, err
 	}
 
-	c.emit(JmpReg(asm.JLE, left.reg, right.reg, 2))
+	c.emit(JmpReg(jumpOp, left.reg, right.reg, 2))
 	c.emitReg2bool(left.reg)
 	c.regalloc.Free(right.reg)
 
@@ -1425,6 +1437,10 @@ func (c *compiler) evaluateGtEq(expr *cc.Expr) (exprValue, error) {
 	}
 
 	left, right = c.adjustNums(left, right)
+	jumpOp := asm.JLT
+	if comparisonIsSigned(left, right) {
+		jumpOp = asm.JSLT
+	}
 
 	if left.isConstant() && right.isConstant() {
 		return newConstant(int64(bool2int(left.num >= right.num))), nil
@@ -1444,7 +1460,7 @@ func (c *compiler) evaluateGtEq(expr *cc.Expr) (exprValue, error) {
 	}
 
 	if right.isConstant() {
-		c.emit(JmpOff(asm.JLT, left.reg, right.num, 2))
+		c.emit(JmpOff(jumpOp, left.reg, right.num, 2))
 		c.emitReg2bool(left.reg)
 		return newMaterialized(left.reg, left.btf), nil
 	}
@@ -1454,7 +1470,7 @@ func (c *compiler) evaluateGtEq(expr *cc.Expr) (exprValue, error) {
 		return exprValue{}, err
 	}
 
-	c.emit(JmpReg(asm.JLT, left.reg, right.reg, 2))
+	c.emit(JmpReg(jumpOp, left.reg, right.reg, 2))
 	c.emitReg2bool(left.reg)
 	c.regalloc.Free(right.reg)
 
@@ -1834,6 +1850,27 @@ func (c *compiler) adjustNums(left, right exprValue) (exprValue, exprValue) {
 	return left, right
 }
 
+func isSignedBTFType(typ btf.Type) bool {
+	switch typ := mybtf.UnderlyingType(typ).(type) {
+	case *btf.Int:
+		return typ.Encoding == btf.Signed
+	case *btf.Enum:
+		return typ.Signed
+	default:
+		return false
+	}
+}
+
+func comparisonIsSigned(left, right exprValue) bool {
+	if left.isConstant() {
+		return !right.isConstant() && isSignedBTFType(right.btf)
+	}
+	if right.isConstant() {
+		return isSignedBTFType(left.btf)
+	}
+	return isSignedBTFType(left.btf) && isSignedBTFType(right.btf)
+}
+
 // adjustNumForType adjusts a number based on the target type's size.
 func (c *compiler) adjustNumForType(num int64, typ btf.Type, mem *btf.Member) int64 {
 	if isMemberBitfield(mem) {
@@ -1842,6 +1879,18 @@ func (c *compiler) adjustNumForType(num int64, typ btf.Type, mem *btf.Member) in
 	}
 
 	size, _ := btf.Sizeof(typ)
+	if isSignedBTFType(typ) {
+		switch size {
+		case 1:
+			return int64(int8(num))
+		case 2:
+			return int64(int16(num))
+		case 4:
+			return int64(int32(num))
+		default:
+			return num
+		}
+	}
 	switch size {
 	case 1:
 		return num & 0xFF

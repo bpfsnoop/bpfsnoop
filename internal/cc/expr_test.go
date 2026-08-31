@@ -308,7 +308,7 @@ func TestCompile(t *testing.T) {
 			asm.FnProbeReadKernel.Call(),
 			asm.LoadMem(asm.R8, asm.RFP, -8, asm.DWord),
 			asm.LSh.Imm(asm.R8, 32),
-			asm.RSh.Imm(asm.R8, 32),
+			asm.ArSh.Imm(asm.R8, 32),
 			JmpOff(asm.JNE, asm.R8, 11, 2),
 			asm.Mov.Imm(asm.R8, 1),
 			Ja(1),

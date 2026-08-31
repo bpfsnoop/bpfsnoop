@@ -2895,6 +2895,49 @@ func TestEvaluateGtEq(t *testing.T) {
 	})
 }
 
+func TestEvaluateSignedComparisons(t *testing.T) {
+	i32 := &btf.Int{Name: "int", Size: 4, Encoding: btf.Signed}
+	u32 := &btf.Int{Name: "unsigned int", Size: 4, Encoding: btf.Unsigned}
+	tests := []struct {
+		name   string
+		expr   string
+		op     asm.JumpOp
+		source asm.Source
+	}{
+		{name: "less than immediate", expr: "n < 0", op: asm.JSGE, source: asm.ImmSource},
+		{name: "less than or equal immediate", expr: "n <= 0", op: asm.JSGT, source: asm.ImmSource},
+		{name: "greater than immediate", expr: "n > 0", op: asm.JSLE, source: asm.ImmSource},
+		{name: "greater than or equal immediate", expr: "n >= 0", op: asm.JSLT, source: asm.ImmSource},
+		{name: "constant left", expr: "0 < n", op: asm.JSGE, source: asm.RegSource},
+		{name: "signed registers", expr: "n < m", op: asm.JSGE, source: asm.RegSource},
+		{name: "mixed register types", expr: "n < u", op: asm.JGE, source: asm.RegSource},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			insns, err := CompileFilterExpr(CompileExprOptions{
+				Expr:      tt.expr,
+				LabelExit: "exit",
+				Spec:      testBtf,
+				Kernel:    testBtf,
+				Params: []btf.FuncParam{
+					{Name: "n", Type: i32},
+					{Name: "m", Type: i32},
+					{Name: "u", Type: u32},
+				},
+			})
+			test.AssertNoErr(t, err)
+
+			for _, insn := range insns {
+				if insn.OpCode.JumpOp() == tt.op && insn.OpCode.Source() == tt.source {
+					return
+				}
+			}
+			t.Fatalf("%q did not emit %v with %v source: %v", tt.expr, tt.op, tt.source, insns)
+		})
+	}
+}
+
 func TestEvaluateAndAnd(t *testing.T) {
 	c := prepareCompilerDirectRead(t)
 
@@ -3786,6 +3829,28 @@ func TestAdjustNums(t *testing.T) {
 	})
 }
 
+func TestIsSignedBTFType(t *testing.T) {
+	signedInt := &btf.Int{Name: "int", Size: 4, Encoding: btf.Signed}
+	tests := []struct {
+		name string
+		typ  btf.Type
+		want bool
+	}{
+		{name: "signed int", typ: signedInt, want: true},
+		{name: "signed typedef", typ: &btf.Typedef{Name: "status_t", Type: signedInt}, want: true},
+		{name: "unsigned int", typ: &btf.Int{Name: "unsigned int", Size: 4, Encoding: btf.Unsigned}},
+		{name: "signed enum", typ: &btf.Enum{Name: "state", Size: 4, Signed: true}, want: true},
+		{name: "unsigned enum", typ: &btf.Enum{Name: "state", Size: 4}},
+		{name: "pointer", typ: &btf.Pointer{Target: signedInt}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			test.AssertEqual(t, isSignedBTFType(tt.typ), tt.want)
+		})
+	}
+}
+
 func TestAdjustNumForType(t *testing.T) {
 	c := prepareCompiler(t)
 
@@ -3826,6 +3891,28 @@ func TestAdjustNumForType(t *testing.T) {
 
 		n := c.adjustNumForType(7, getU64Btf(t), nil)
 		test.AssertEqual(t, n, 7)
+	})
+
+	t.Run("signed sizes", func(t *testing.T) {
+		tests := []struct {
+			name string
+			size uint32
+			num  int64
+			want int64
+		}{
+			{name: "byte", size: 1, num: 255, want: -1},
+			{name: "word", size: 2, num: 65535, want: -1},
+			{name: "dword", size: 4, num: 1<<32 - 1, want: -1},
+			{name: "qword", size: 8, num: -7, want: -7},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				typ := &btf.Int{Name: tt.name, Size: tt.size, Encoding: btf.Signed}
+				n := c.adjustNumForType(tt.num, typ, nil)
+				test.AssertEqual(t, n, tt.want)
+			})
+		}
 	})
 }
 
