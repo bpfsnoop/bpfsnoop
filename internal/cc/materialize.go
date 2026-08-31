@@ -152,11 +152,25 @@ func (c *compiler) adjustRegisterSize(val exprValue) {
 
 	switch size {
 	case 1:
-		c.emit(asm.And.Imm(val.reg, 0xFF))
+		if isSignedBTFType(val.btf) {
+			c.emit(asm.LSh.Imm(val.reg, 56))
+			c.emit(asm.ArSh.Imm(val.reg, 56))
+		} else {
+			c.emit(asm.And.Imm(val.reg, 0xFF))
+		}
 	case 2:
-		c.emit(asm.And.Imm(val.reg, 0xFFFF))
+		if isSignedBTFType(val.btf) {
+			c.emit(asm.LSh.Imm(val.reg, 48))
+			c.emit(asm.ArSh.Imm(val.reg, 48))
+		} else {
+			c.emit(asm.And.Imm(val.reg, 0xFFFF))
+		}
 	case 4:
 		c.emit(asm.LSh.Imm(val.reg, 32))
-		c.emit(asm.RSh.Imm(val.reg, 32))
+		if isSignedBTFType(val.btf) {
+			c.emit(asm.ArSh.Imm(val.reg, 32))
+		} else {
+			c.emit(asm.RSh.Imm(val.reg, 32))
+		}
 	}
 }

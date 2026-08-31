@@ -235,7 +235,7 @@ func TestMaterializePending(t *testing.T) {
 			asm.JEq.Imm(r8, 0, c.labelExit),    // null check
 			asm.LoadMem(r8, r8, 224, dword),    // dev->ifindex
 			asm.LSh.Imm(r8, 32),
-			asm.RSh.Imm(r8, 32),
+			asm.ArSh.Imm(r8, 32),
 		})
 	})
 }
@@ -372,6 +372,19 @@ func TestAdjustRegisterSize(t *testing.T) {
 		})
 	})
 
+	t.Run("sign extend byte", func(t *testing.T) {
+		defer c.reset()
+
+		i8 := &btf.Int{Name: "signed char", Size: 1, Encoding: btf.Signed}
+		val := newMaterialized(r8, i8)
+
+		c.adjustRegisterSize(val)
+		test.AssertEqualSlice(t, c.insns, asm.Instructions{
+			asm.LSh.Imm(r8, 56),
+			asm.ArSh.Imm(r8, 56),
+		})
+	})
+
 	t.Run("adjust to word", func(t *testing.T) {
 		defer c.reset()
 
@@ -381,6 +394,19 @@ func TestAdjustRegisterSize(t *testing.T) {
 		c.adjustRegisterSize(val)
 		test.AssertEqualSlice(t, c.insns, asm.Instructions{
 			asm.And.Imm(r8, 0xFFFF),
+		})
+	})
+
+	t.Run("sign extend word", func(t *testing.T) {
+		defer c.reset()
+
+		i16 := &btf.Int{Name: "short", Size: 2, Encoding: btf.Signed}
+		val := newMaterialized(r8, i16)
+
+		c.adjustRegisterSize(val)
+		test.AssertEqualSlice(t, c.insns, asm.Instructions{
+			asm.LSh.Imm(r8, 48),
+			asm.ArSh.Imm(r8, 48),
 		})
 	})
 
@@ -394,6 +420,19 @@ func TestAdjustRegisterSize(t *testing.T) {
 		test.AssertEqualSlice(t, c.insns, asm.Instructions{
 			asm.LSh.Imm(r8, 32),
 			asm.RSh.Imm(r8, 32),
+		})
+	})
+
+	t.Run("sign extend dword", func(t *testing.T) {
+		defer c.reset()
+
+		i32 := &btf.Int{Name: "int", Size: 4, Encoding: btf.Signed}
+		val := newMaterialized(r8, i32)
+
+		c.adjustRegisterSize(val)
+		test.AssertEqualSlice(t, c.insns, asm.Instructions{
+			asm.LSh.Imm(r8, 32),
+			asm.ArSh.Imm(r8, 32),
 		})
 	})
 }
