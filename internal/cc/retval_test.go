@@ -7,8 +7,20 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/Asphaltt/mybtf"
+	"github.com/cilium/ebpf/asm"
+	"github.com/cilium/ebpf/btf"
 	c2go "rsc.io/c2go/cc"
 )
+
+func requireType(t *testing.T, name string) btf.Type {
+	t.Helper()
+	typ, err := testBtf.AnyTypeByName(name)
+	if err != nil {
+		t.Fatalf("find BTF type %q: %v", name, err)
+	}
+	return typ
+}
 
 func TestAnalyzeRetvalExpr(t *testing.T) {
 	tests := []struct {
@@ -93,4 +105,200 @@ func TestRetvalCTypeHelpers(t *testing.T) {
 	if !enclosesThroughParens(wrapped, target) {
 		t.Fatal("nested parentheses should enclose target")
 	}
+}
+
+func TestSameUnderlyingRetvalType(t *testing.T) {
+	intType := &btf.Int{Name: "int", Size: 4, Encoding: btf.Signed}
+	uintType := &btf.Int{Name: "unsigned int", Size: 4, Encoding: btf.Unsigned}
+	tests := []struct {
+		name        string
+		left, right btf.Type
+	}{
+		{name: "void", left: &btf.Void{}, right: &btf.Void{}},
+		{name: "int", left: intType, right: &btf.Int{Name: "another name", Size: 4, Encoding: btf.Signed}},
+		{name: "enum", left: &btf.Enum{Name: "state", Size: 4, Signed: true}, right: &btf.Enum{Name: "state", Size: 4, Signed: true}},
+		{name: "float", left: &btf.Float{Name: "double", Size: 8}, right: &btf.Float{Name: "other", Size: 8}},
+		{name: "pointer", left: &btf.Pointer{Target: intType}, right: &btf.Pointer{Target: &btf.Const{Type: intType}}},
+		{name: "struct", left: &btf.Struct{Name: "record"}, right: &btf.Struct{Name: "record"}},
+		{name: "union", left: &btf.Union{Name: "value"}, right: &btf.Union{Name: "value"}},
+		{name: "fallback", left: &btf.Array{Index: uintType, Type: intType, Nelems: 2}, right: &btf.Array{Index: uintType, Type: intType, Nelems: 2}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if !sameUnderlyingType(tt.left, tt.right) {
+				t.Fatalf("types should match: %v and %v", tt.left, tt.right)
+			}
+		})
+	}
+}
+
+func TestRetvalTypeMatches(t *testing.T) {
+	intType := requireType(t, "int")
+	uintType := requireType(t, "unsigned int")
+	skbType := requireType(t, "sk_buff")
+
+	tests := []struct {
+		name string
+		expr string
+		ret  btf.Type
+		want bool
+	}{
+		{name: "signed", expr: "(int)$retval == 0", ret: intType, want: true},
+		{name: "nested parentheses", expr: "(int)(($retval))", ret: intType, want: true},
+		{name: "signed typedef qualifier", expr: "(int)$retval == 0", ret: &btf.Const{Type: &btf.Typedef{Name: "status_t", Type: intType}}, want: true},
+		{name: "signed unsigned mismatch", expr: "(int)$retval == 0", ret: uintType},
+		{name: "pointer", expr: "(struct sk_buff *)$retval != NULL", ret: &btf.Pointer{Target: skbType}, want: true},
+		{name: "qualified pointer target", expr: "(struct sk_buff *)$retval != NULL", ret: &btf.Pointer{Target: &btf.Const{Type: skbType}}, want: true},
+		{name: "unrelated struct", expr: "(struct sk_buff *)$retval != NULL", ret: &btf.Pointer{Target: &btf.Struct{Name: "x"}}},
+		{name: "pointer scalar mismatch", expr: "(struct sk_buff *)$retval != NULL", ret: intType},
+		{name: "void return", expr: "(void *)$retval != NULL", ret: &btf.Void{}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := MatchRetvalType(tt.expr, tt.ret, testBtf, testBtf)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got != tt.want {
+				t.Fatalf("match = %v, want %v", got, tt.want)
+			}
+		})
+	}
+
+	if got, err := MatchRetvalType("count > 0", intType, testBtf, testBtf); err != nil || got {
+		t.Fatalf("expression without retval match = (%v, %v), want (false, nil)", got, err)
+	}
+	if _, err := MatchRetvalType("(int)$unknown", intType, testBtf, testBtf); err == nil {
+		t.Fatal("invalid retval expression should fail")
+	}
+}
+
+func TestPrepareRetvalCompileOptions(t *testing.T) {
+	intType := requireType(t, "int")
+
+	tests := []struct {
+		name, expr string
+		ret        btf.Type
+		want       string
+	}{
+		{name: "parse error", expr: "(int)$unknown", ret: intType, want: "failed to parse expression"},
+		{name: "analysis error", expr: "$retval", ret: intType, want: "requires an explicit concrete cast"},
+		{name: "missing return type", expr: "(int)$retval", want: "without a declared return type"},
+		{name: "resolution error", expr: "(struct type_that_does_not_exist *)$retval", ret: &btf.Pointer{Target: &btf.Struct{Name: "type_that_does_not_exist"}}, want: "failed to resolve"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := CompileFilterExpr(CompileExprOptions{
+				Expr:       tt.expr,
+				RetvalType: tt.ret,
+				Spec:       testBtf,
+				Kernel:     testBtf,
+				LabelExit:  "exit",
+			})
+			if err == nil || !strings.Contains(err.Error(), tt.want) {
+				t.Fatalf("got error %v, want containing %q", err, tt.want)
+			}
+		})
+	}
+}
+
+func TestCompileRetvalExpr(t *testing.T) {
+	intType := requireType(t, "int")
+	skbType := requireType(t, "sk_buff")
+
+	t.Run("filter loads synthetic final slot", func(t *testing.T) {
+		insns, err := CompileFilterExpr(CompileExprOptions{
+			Expr:       "retval == 7 && (int)$retval < 0",
+			Params:     []btf.FuncParam{{Name: "retval", Type: intType}},
+			RetvalType: intType,
+			Spec:       testBtf,
+			Kernel:     testBtf,
+			LabelExit:  "exit",
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		var loadsReal, loadsRetval, signExtendsRetval, signedComparison bool
+		for _, insn := range insns {
+			if insn.OpCode == asm.LoadMemOp(asm.DWord) && insn.Src == asm.R9 {
+				loadsReal = loadsReal || insn.Offset == 0
+				loadsRetval = loadsRetval || insn.Offset == 8
+			}
+			signExtendsRetval = signExtendsRetval || insn.OpCode == asm.ArSh.Op(asm.ImmSource) && insn.Constant == 32
+			signedComparison = signedComparison || insn.OpCode.JumpOp() == asm.JSGE
+		}
+		if !loadsReal || !loadsRetval {
+			t.Fatalf("expected distinct real and synthetic argument loads, got %v", insns)
+		}
+		if !signExtendsRetval || !signedComparison {
+			t.Fatalf("expected signed retval extension and comparison, got %v", insns)
+		}
+	})
+
+	t.Run("boolean pointer and dereference", func(t *testing.T) {
+		_, err := CompileFilterExpr(CompileExprOptions{
+			Expr:       "(struct sk_buff *)$retval != NULL && ((struct sk_buff *)$retval)->len > 0",
+			RetvalType: &btf.Pointer{Target: skbType},
+			Spec:       testBtf,
+			Kernel:     testBtf,
+			LabelExit:  "exit",
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+	})
+
+	t.Run("eval preserves scalar type", func(t *testing.T) {
+		res, err := CompileEvalExpr(CompileExprOptions{
+			Expr:       "(int)$retval",
+			RetvalType: &btf.Const{Type: intType},
+			Spec:       testBtf,
+			Kernel:     testBtf,
+			LabelExit:  "exit",
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		intResult, ok := mybtf.UnderlyingType(res.Btf).(*btf.Int)
+		if !ok {
+			t.Fatalf("result BTF = %v, want int", res.Btf)
+		}
+		if intResult.Encoding != btf.Signed {
+			t.Fatalf("result BTF encoding = %v, want signed", intResult.Encoding)
+		}
+		if len(res.Insns) == 0 || res.Insns[0].Offset != 0 {
+			t.Fatalf("expected retval load from only slot, got %v", res.Insns)
+		}
+	})
+
+	t.Run("eval preserves pointer type", func(t *testing.T) {
+		res, err := CompileEvalExpr(CompileExprOptions{
+			Expr:       "(struct sk_buff *)$retval",
+			RetvalType: &btf.Pointer{Target: skbType},
+			Spec:       testBtf,
+			Kernel:     testBtf,
+			LabelExit:  "exit",
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, ok := mybtf.UnderlyingType(res.Btf).(*btf.Pointer); !ok {
+			t.Fatalf("result BTF = %v, want pointer", res.Btf)
+		}
+	})
+
+	t.Run("reject mismatched return", func(t *testing.T) {
+		_, err := CompileEvalExpr(CompileExprOptions{
+			Expr:       "(unsigned int)$retval",
+			RetvalType: intType,
+			Spec:       testBtf,
+			Kernel:     testBtf,
+			LabelExit:  "exit",
+		})
+		if err == nil || !strings.Contains(err.Error(), "does not match") {
+			t.Fatalf("got error %v, want type mismatch", err)
+		}
+	})
 }
