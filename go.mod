@@ -11,6 +11,7 @@ require (
 	github.com/fatih/color v1.18.0
 	github.com/gobwas/glob v0.2.3
 	github.com/goccy/go-json v0.10.5
+	github.com/google/jsonschema-go v0.4.3
 	github.com/gopacket/gopacket v1.3.1
 	github.com/jschwinger233/elibpcap v1.0.1
 	github.com/klauspost/compress v1.18.0
@@ -25,7 +26,6 @@ require (
 require (
 	github.com/BurntSushi/toml v1.6.0 // indirect
 	github.com/cloudflare/cbpfc v0.0.0-20230809125630-31aa294050ff // indirect
-	github.com/google/jsonschema-go v0.4.3 // indirect
 	github.com/mattn/go-colorable v0.1.13 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/pkg/errors v0.9.1 // indirect

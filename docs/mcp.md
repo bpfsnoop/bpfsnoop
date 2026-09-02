@@ -5,11 +5,11 @@
 
 # bpfsnoop MCP server
 
-`bpfsnoop --mcp` serves bpfsnoop to MCP clients over stdin/stdout. The
-`bpfsnoop-mcp` launcher selects that mode for AI agents. When it runs as root,
-bpfsnoop serves MCP directly. When it runs as a normal user, it transparently
-proxies MCP messages to a persistent privileged daemon. The launcher contains
-all local transport details, so MCP clients only need to run `bpfsnoop-mcp`.
+The `bpfsnoop-mcp` launcher makes bpfsnoop available to MCP clients. Configure
+an agent to run this launcher directly; it handles communication with the
+privileged bpfsnoop daemon.
+
+## Tools
 
 The initial tool surface is:
 
@@ -18,8 +18,29 @@ The initial tool surface is:
   types;
 - `trace`: run one bounded tracing experiment and return structured events.
 
-`kernel_info` is available. The `find` and `trace` tools currently return a
-not-implemented error until their backends are added.
+`kernel_info` and `find` are available. The `trace` tool currently returns a
+not-implemented error until its backend is added.
+
+`find` accepts an exact name or glob pattern. Its optional `kind` narrows the
+search to `function`, `tracepoint`, `bpf_program`, or `btf_type`; omitting it
+searches all four classes. Results are capped at 50 by default and 200 at most.
+The `total` and `truncated` fields help agents refine broad queries.
+
+Function results include their prototypes, arguments, return types, BTF IDs,
+symbol addresses, modules, sizes, and traceability through fentry, fexit, and
+kprobe.multi. Functions that are not traceable are still returned.
+
+BPF program results include identifiers, names, type, tag, load information,
+sizes, referenced map IDs, BTF function and line information, and available
+JIT metadata. Instruction payloads are omitted by default. With
+`kind: "bpf_program"`, use `include_xlated_insns` to request translated eBPF
+instructions or `include_jited_insns` to request JITed native instruction
+bytes.
+
+BTF type results include details appropriate to each type, such as struct and
+union members, function arguments and return types, array dimensions, enum
+values, integer encoding, linkage, data-section variables, tags, and forward
+declarations.
 
 ## Build
 
@@ -36,12 +57,8 @@ terminal and leave it running:
 sudo ./bpfsnoop-mcp-daemon
 ```
 
-This launcher executes `bpfsnoop --mcp-daemon`. It is also possible to invoke
-that mode directly.
-
 When launched through `sudo`, the daemon permits only the invoking user to
-connect. It cleans up its private local endpoint when stopped with `SIGINT` or
-`SIGTERM`. The daemon serves one active MCP session at a time; another frontend
+connect. The daemon serves one active MCP session at a time; another frontend
 is rejected immediately and can retry after the active session ends.
 
 If the daemon is not available, the frontend exits with an instruction asking
@@ -62,5 +79,4 @@ Configure the client to launch the frontend directly, without `sudo`:
 }
 ```
 
-Run `bpfsnoop -h` for command-line usage. The launchers forward their arguments
-to the corresponding bpfsnoop mode.
+Run `bpfsnoop -h` for command-line usage.

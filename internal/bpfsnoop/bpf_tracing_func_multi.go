@@ -6,7 +6,9 @@ package bpfsnoop
 import (
 	"bufio"
 	"fmt"
+	"maps"
 	"os"
+	"slices"
 	"strings"
 
 	"github.com/cilium/ebpf"
@@ -15,6 +17,7 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/bpfsnoop/bpfsnoop/internal/assert"
+	"github.com/bpfsnoop/bpfsnoop/internal/atomix"
 	"github.com/bpfsnoop/bpfsnoop/internal/bpf"
 	"github.com/bpfsnoop/bpfsnoop/internal/mathx"
 )
@@ -43,7 +46,13 @@ type kfuncMultiGroupInfo struct {
 	fn  *KFunc
 }
 
-func loadAvailableFilterFunctions() (map[string]struct{}, error) {
+var availableFilterFuncsCache = atomix.NewOnce(readAvailableFilterFunctions)
+
+func loadAvailableFilterFunctions() ([]string, error) {
+	return availableFilterFuncsCache.Do()
+}
+
+func readAvailableFilterFunctions() ([]string, error) {
 	var f *os.File
 	var err error
 
@@ -57,7 +66,7 @@ func loadAvailableFilterFunctions() (map[string]struct{}, error) {
 	}
 	defer f.Close()
 
-	funcs := make(map[string]struct{}, 4096)
+	seen := make(map[string]struct{}, 4096)
 	scanner := bufio.NewScanner(f)
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
@@ -65,17 +74,16 @@ func loadAvailableFilterFunctions() (map[string]struct{}, error) {
 			continue
 		}
 		// Usually "<symbol> [module]".
-		name := strings.Fields(line)[0]
-		funcs[name] = struct{}{}
+		seen[strings.Fields(line)[0]] = struct{}{}
 	}
 	if err := scanner.Err(); err != nil {
 		return nil, fmt.Errorf("failed to read available_filter_functions: %w", err)
 	}
 
-	return funcs, nil
+	return slices.Sorted(maps.Keys(seen)), nil
 }
 
-func filterKprobeMultiSymbols(symbols []string, funcs map[string]struct{}) ([]string, []string) {
+func filterKprobeMultiSymbols(symbols, funcs []string) ([]string, []string) {
 	keep := make([]string, 0, len(symbols))
 	skip := make([]string, 0)
 	for _, sym := range symbols {
@@ -84,7 +92,7 @@ func filterKprobeMultiSymbols(symbols []string, funcs map[string]struct{}) ([]st
 			continue
 		}
 
-		if _, ok := funcs[sym]; ok {
+		if _, ok := slices.BinarySearch(funcs, sym); ok {
 			keep = append(keep, sym)
 		} else {
 			skip = append(skip, sym)
