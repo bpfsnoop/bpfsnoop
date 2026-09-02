@@ -16,10 +16,17 @@ The initial tool surface is:
 - `kernel_info`: inspect the running kernel and bpfsnoop tracing capabilities;
 - `find`: discover kernel functions, tracepoints, loaded BPF programs, and BTF
   types;
+- `read`: evaluate typed C expressions against kernel memory;
 - `trace`: run one bounded tracing experiment and return structured events.
 
-`kernel_info` and `find` are available. The `trace` tool currently returns a
-not-implemented error until its backend is added.
+`kernel_info`, `find`, and `read` are available. The `trace` tool currently
+returns a not-implemented error until its backend is added.
+
+`read` accepts one or more typed C expressions and returns ordered records with
+separate `expression`, `type`, and `value` fields. Values use native JSON types:
+arrays are arrays, structs and unions are objects, and scalar values remain
+numbers, strings, booleans, or null. Integers outside JSON's exact integer range
+are returned as decimal strings to avoid precision loss in MCP clients.
 
 `find` accepts an exact name or glob pattern. Its optional `kind` narrows the
 search to `function`, `tracepoint`, `bpf_program`, or `btf_type`; omitting it
