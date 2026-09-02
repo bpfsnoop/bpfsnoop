@@ -17,16 +17,26 @@ The initial tool surface is:
 - `find`: discover kernel functions, tracepoints, loaded BPF programs, and BTF
   types;
 - `read`: evaluate typed C expressions against kernel memory;
+- `disasm`: inspect bounded native disassembly for a kernel function or loaded
+  BPF program;
 - `trace`: run one bounded tracing experiment and return structured events.
 
-`kernel_info`, `find`, and `read` are available. The `trace` tool currently
-returns a not-implemented error until its backend is added.
+`kernel_info`, `find`, `read`, and `disasm` are available. The `trace` tool
+currently returns a not-implemented error until its backend is added.
 
 `read` accepts one or more typed C expressions and returns ordered records with
 separate `expression`, `type`, and `value` fields. Values use native JSON types:
 arrays are arrays, structs and unions are objects, and scalar values remain
 numbers, strings, booleans, or null. Integers outside JSON's exact integer range
 are returned as decimal strings to avoid precision loss in MCP clients.
+
+`disasm` returns bounded structured native instructions for an exact kernel
+function, kernel address, loaded BPF program, or BPF subprogram. Each
+instruction carries its source location when line metadata is available.
+Resolved direct branch and call targets also carry their symbol, offset, and
+source location. BPF metadata can include file, line, column, and source text;
+kernel and module DWARF can additionally identify inlined locations. Missing
+debug symbols do not prevent disassembly.
 
 `find` accepts an exact name or glob pattern. Its optional `kind` narrows the
 search to `function`, `tracepoint`, `bpf_program`, or `btf_type`; omitting it
