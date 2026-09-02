@@ -14,6 +14,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/bpfsnoop/bpfsnoop/internal/bpfsnoop"
+	mcpapi "github.com/bpfsnoop/bpfsnoop/internal/mcp"
 )
 
 const serverInstructions = `bpfsnoop provides Linux kernel and eBPF tracing tools.
@@ -38,6 +39,9 @@ func notImplemented[In any](context.Context, *mcp.CallToolRequest, In) (*mcp.Cal
 
 // Run serves the registered bpfsnoop tools over stdin/stdout.
 func Run(ctx context.Context) error {
+	if err := mcpapi.Start(); err != nil {
+		return err
+	}
 	return server.Run(ctx, &mcp.StdioTransport{})
 }
 

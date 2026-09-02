@@ -18,8 +18,8 @@ The initial tool surface is:
   types;
 - `trace`: run one bounded tracing experiment and return structured events.
 
-The tools are currently registered as a skeleton and return a not-implemented
-error until their backends are added.
+`kernel_info` is available. The `find` and `trace` tools currently return a
+not-implemented error until their backends are added.
 
 ## Build
 

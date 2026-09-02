@@ -3,9 +3,23 @@
 
 package mcpserver
 
-import "github.com/modelcontextprotocol/go-sdk/mcp"
+import (
+	"context"
+
+	"github.com/modelcontextprotocol/go-sdk/mcp"
+
+	mcpapi "github.com/bpfsnoop/bpfsnoop/internal/mcp"
+)
 
 type kernelInfoInput struct{}
+
+func kernelInfo(context.Context, *mcp.CallToolRequest, kernelInfoInput) (*mcp.CallToolResult, mcpapi.KernelInfo, error) {
+	info, err := mcpapi.GetKernelInfo()
+	if err != nil {
+		return nil, mcpapi.KernelInfo{}, err
+	}
+	return nil, info, nil
+}
 
 func init() {
 	mcp.AddTool(server, &mcp.Tool{
@@ -17,5 +31,5 @@ func init() {
 		Annotations: &mcp.ToolAnnotations{
 			ReadOnlyHint: true,
 		},
-	}, notImplemented[kernelInfoInput])
+	}, kernelInfo)
 }
