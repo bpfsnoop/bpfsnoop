@@ -48,6 +48,8 @@ endif
 
 GO_RUN_BPF2GO := go run github.com/cilium/ebpf/cmd/bpf2go -cc clang
 BPF2GO_EXTRA_FLAGS := -g -D__TARGET_ARCH_$(TARGET_ARCH) -I$(CURDIR)/bpf -I$(CURDIR)/bpf/headers -I$(CURDIR)/lib/libbpf/src -Wno-address-of-packed-member -Wall
+BPF_HEADERS := $(wildcard bpf/headers/*.h)
+BPF_DEP_SCRIPT := makefiles/bpf-deps.sh
 
 # We must split this into multiple macros as $(call ...) is a simple template expansion.
 # That is, variable assignments won't be visible until $(eval ...) is called.
@@ -63,6 +65,8 @@ define gen_bpf2go_vars2
 endef
 define gen_bpf2go_vars3
 	BPF_OBJ += $(DIR_BPF)/$(obj)_bpfel.o $(DIR_BPF)/$(obj)_bpfeb.o
+	BPF_OBJ_DEPS__$(obj) := bpf/$(src).c $(BPF_HEADERS) $(BPF_DEP_SCRIPT) \
+		$(shell sh $(BPF_DEP_SCRIPT) bpf/$(src).c)
 	MAP_OBJ_TO_STEM__$(obj) := $(stem)
 
 	BPF_SRC += bpf/$(src).c

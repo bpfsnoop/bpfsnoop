@@ -43,13 +43,18 @@ $(VMLINUX_OBJ): $(VMLINUX_SRC)
 
 # It is required to define a pattern rule to prevent bpf2go from being called twice
 # when building with `make -j'.
-$(DIR_BPF)/%_bpfel.go $(DIR_BPF)/%_bpfeb.go: $(VMLINUX_OBJ)
+.SECONDEXPANSION:
+$(DIR_BPF)/%_bpfel.go: $(VMLINUX_OBJ) $$(BPF_OBJ_DEPS__$$*)
 	cd $(DIR_BPF) && \
 		$(GO_RUN_BPF2GO) -go-package bpf -makebase $(CURDIR) \
 			$(MAP_OBJ_TO_STEM__$*) $(CURDIR)/bpf/$(MAP_OBJ_TO_SRC__$*).c \
 			-- $(BPF2GO_EXTRA_FLAGS)
 
-$(BPFSNOOP_OBJ): $(BPF_OBJBPF_OBJ) $(BPF_GO_SRC) $(BPFSNOOP_SRC) $(LIBCAPSTONE_OBJ) $(LIBPCAP_OBJ)
+# bpf2go emits the big-endian binding together with the little-endian binding.
+$(DIR_BPF)/%_bpfeb.go: $(DIR_BPF)/%_bpfel.go
+	@:
+
+$(BPFSNOOP_OBJ): $(wildcard ./internal/bpf/*bpf*.o) $(BPF_GO_SRC) $(BPFSNOOP_SRC) $(LIBCAPSTONE_OBJ) $(LIBPCAP_OBJ)
 	$(GOBUILD_CGO_CFLAGS) $(GOBUILD_CGO_LDFLAGS) $(GOBUILD)
 
 .PHONY: local_release
