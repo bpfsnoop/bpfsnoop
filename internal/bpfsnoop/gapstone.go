@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"runtime"
 
-	"github.com/bpfsnoop/bpfsnoop/internal/assert"
 	"github.com/bpfsnoop/gapstone"
 )
 
@@ -17,6 +16,14 @@ const (
 )
 
 func createGapstoneEngine() (*gapstone.Engine, error) {
+	syntax := "att"
+	if disasmIntelSyntax {
+		syntax = "intel"
+	}
+	return createGapstoneEngineWithSyntax(syntax)
+}
+
+func createGapstoneEngineWithSyntax(syntax string) (*gapstone.Engine, error) {
 	arch, mode := gapstone.CS_ARCH_X86, gapstone.CS_MODE_64
 	switch runtime.GOARCH {
 	case archARM64:
@@ -27,14 +34,17 @@ func createGapstoneEngine() (*gapstone.Engine, error) {
 		return nil, fmt.Errorf("failed to new gapstone engine: %w", err)
 	}
 
-	if !disasmIntelSyntax {
+	if syntax != "intel" {
 		err = engine.SetOption(uint(gapstone.CS_OPT_SYNTAX), uint(gapstone.CS_OPT_SYNTAX_ATT))
 		if err != nil {
 			_ = engine.Close()
 			return nil, fmt.Errorf("failed to set att syntax: %w", err)
 		}
 	} else {
-		assert.True(runtime.GOARCH == archAMD64, "Intel syntax only supports amd64 architecture")
+		if runtime.GOARCH != archAMD64 {
+			_ = engine.Close()
+			return nil, fmt.Errorf("Intel syntax only supports amd64 architecture")
+		}
 	}
 
 	return &engine, nil
