@@ -16,6 +16,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/bpfsnoop/bpfsnoop/internal/bpfsnoop"
+	mcpapi "github.com/bpfsnoop/bpfsnoop/internal/mcp"
 )
 
 const serverInstructions = `bpfsnoop provides Linux kernel and eBPF tracing tools.
@@ -33,6 +34,11 @@ var server = mcp.NewServer(&mcp.Implementation{
 }, &mcp.ServerOptions{
 	Instructions: serverInstructions,
 })
+
+//go:fix inline
+func intPtr(value int) *int {
+	return new(value)
+}
 
 func notImplemented[In any](context.Context, *mcp.CallToolRequest, In) (*mcp.CallToolResult, any, error) {
 	return nil, nil, errNotImplemented
@@ -62,6 +68,9 @@ func RunConn(ctx context.Context, conn io.ReadWriteCloser) error {
 func Run(ctx context.Context) error {
 	if os.Geteuid() != 0 {
 		return runProxy(ctx)
+	}
+	if err := mcpapi.Start(); err != nil {
+		return err
 	}
 
 	err := server.Run(ctx, &mcp.StdioTransport{})
