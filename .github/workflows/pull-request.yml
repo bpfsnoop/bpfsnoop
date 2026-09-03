@@ -1,0 +1,36 @@
+name: Pull Request
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  fixup-and-testlocal:
+    runs-on: ubuntu-26.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: ./.github/actions/setup-build-environment
+
+      - name: Install gofumpt
+        run: |
+          go install mvdan.cc/gofumpt@latest
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+
+      - name: Show kernel version
+        run: uname -r
+
+      - name: Build bpfsnoop
+        run: make -j8
+
+      - name: Check formatting
+        run: |
+          make fixup
+          git diff --exit-code
+
+      - name: Run local tests
+        run: sudo make testlocal

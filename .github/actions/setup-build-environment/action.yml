@@ -1,0 +1,43 @@
+name: Setup build environment
+description: Install the toolchain and tools required to build bpfsnoop on Ubuntu.
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-go@v5
+      with:
+        go-version: "1.26.0"
+
+    - uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cache/go-build
+          ~/go/pkg/mod
+        key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+        restore-keys: |
+          ${{ runner.os }}-go-
+
+    - name: Install build dependencies
+      shell: bash
+      run: |
+        sudo apt-get update
+        sudo apt-get install --yes \
+          linux-tools-common \
+          linux-tools-generic \
+          libcapstone-dev \
+          llvm-21 \
+          clang-21
+        for tool in clang llc llvm-strip
+        do
+          sudo rm -f /usr/bin/$tool
+          sudo ln -s /usr/bin/$tool-21 /usr/bin/$tool
+        done
+
+    - name: Install static bpftool
+      shell: bash
+      run: |
+        bpftool_archive="$RUNNER_TEMP/bpftool-v7.7.0-amd64.tar.gz"
+        curl -sL -o "$bpftool_archive" https://github.com/libbpf/bpftool/releases/download/v7.7.0/bpftool-v7.7.0-amd64.tar.gz
+        tar -xzf "$bpftool_archive" -C "$RUNNER_TEMP"
+        chmod +x "$RUNNER_TEMP/bpftool"
+        sudo mv "$RUNNER_TEMP/bpftool" /usr/sbin/bpftool
