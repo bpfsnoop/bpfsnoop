@@ -15,6 +15,11 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
+type mcpCallOutcome struct {
+	result *mcp.CallToolResult
+	err    error
+}
+
 func testMCP(w io.Writer, t testCase) bool {
 	started := time.Now()
 
@@ -55,6 +60,22 @@ func testMCP(w io.Writer, t testCase) bool {
 		defer killCmd(trigger)
 	}
 
+	var abortDone chan mcpCallOutcome
+	if t.abortAfter > 0 {
+		abortDone = make(chan mcpCallOutcome, 1)
+		go func() {
+			timer := time.NewTimer(t.abortAfter)
+			defer timer.Stop()
+			select {
+			case <-timer.C:
+				result, err := session.CallTool(ctx, &mcp.CallToolParams{Name: "abort", Arguments: map[string]any{}})
+				abortDone <- mcpCallOutcome{result: result, err: err}
+			case <-ctx.Done():
+				abortDone <- mcpCallOutcome{err: ctx.Err()}
+			}
+		}()
+	}
+
 	result, err := session.CallTool(ctx, &mcp.CallToolParams{
 		Name:      t.tool,
 		Arguments: arguments,
@@ -62,6 +83,23 @@ func testMCP(w io.Writer, t testCase) bool {
 	if err != nil {
 		prErr(w, red, "Test FAILED in %s (MCP call failed: %v)\n", time.Since(started), err)
 		return false
+	}
+	if abortDone != nil {
+		outcome := <-abortDone
+		if outcome.err != nil {
+			prErr(w, red, "Test FAILED in %s (MCP abort failed: %v)\n", time.Since(started), outcome.err)
+			return false
+		}
+		if outcome.result.IsError {
+			prErr(w, red, "Test FAILED in %s (MCP abort returned an error)\n", time.Since(started))
+			return false
+		}
+		output, _ := json.Marshal(outcome.result.StructuredContent)
+		fmt.Fprintln(w, string(output))
+		if !strings.Contains(string(output), `"aborted":true`) {
+			prErr(w, red, "Test FAILED in %s (MCP abort found no active trace)\n", time.Since(started))
+			return false
+		}
 	}
 
 	if result.IsError {

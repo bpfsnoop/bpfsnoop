@@ -96,8 +96,8 @@ type traceFlameGraphEntryOutput struct {
 
 // TraceOutput contains one bounded structured tracing experiment.
 type TraceOutput struct {
-	Status     string                       `json:"status" jsonschema:"completed when the bounded experiment ended normally"`
-	StoppedBy  string                       `json:"stopped_by" jsonschema:"limit that ended the experiment: duration or max_events"`
+	Status     string                       `json:"status" jsonschema:"completed when a limit ended the experiment; aborted when abort cancelled it"`
+	StoppedBy  string                       `json:"stopped_by" jsonschema:"condition that ended the experiment: duration, max_events, or abort"`
 	Stats      traceStatsOutput             `json:"stats" jsonschema:"bounded trace statistics"`
 	Events     []traceEventOutput           `json:"events" jsonschema:"ordered structured function events"`
 	FlameGraph []traceFlameGraphEntryOutput `json:"flame_graph,omitempty" jsonschema:"aggregated root-to-leaf kernel stacks"`

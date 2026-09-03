@@ -19,9 +19,10 @@ The initial tool surface is:
 - `read`: evaluate typed C expressions against kernel memory;
 - `disasm`: inspect bounded native disassembly for a kernel function or loaded
   BPF program;
-- `trace`: run one bounded tracing experiment and return structured events.
+- `trace`: run one bounded tracing experiment and return structured events;
+- `abort`: cancel the active trace without closing the MCP session.
 
-All five tools are available. `trace` supports kernel-function, tracepoint, and
+All six tools are available. `trace` supports kernel-function, tracepoint, and
 loaded BPF program targets.
 
 `read` accepts one or more typed C expressions and returns ordered records with
@@ -59,9 +60,14 @@ graph.
 The duration defaults to 3000 ms and must be between 100 and 30000 ms. The
 event limit defaults to 100 and must be between 1 and 1000. Duration starts
 only after all tracing programs have attached. Results report `stopped_by` as
-`duration` or `max_events`, statistics, and ordered structured events. Values
-retain their BTF type and native JSON representation where possible; pointers
-and integers outside JSON's exact range are strings.
+`duration`, `max_events`, or `abort`, statistics, and ordered structured
+events. Values retain their BTF type and native JSON representation where
+possible; pointers and integers outside JSON's exact range are strings.
+
+Use `abort` when a trace is waiting for an event that cannot be triggered. It
+waits for tracing resources to be released, leaves the MCP session connected,
+and reports whether an active trace was found. The interrupted `trace` call
+returns any events already collected with `status: "aborted"`.
 
 `find` accepts an exact name or glob pattern. Its optional `kind` narrows the
 search to `function`, `tracepoint`, `bpf_program`, or `btf_type`; omitting it

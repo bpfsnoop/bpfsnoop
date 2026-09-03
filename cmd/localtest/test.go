@@ -23,6 +23,7 @@ type testCase struct {
 	match           string
 	expectError     bool
 	timeout         time.Duration
+	abortAfter      time.Duration
 	requiredProcess string
 	triggerProcess  string
 }

@@ -75,6 +75,14 @@ func parseTestCase(scanner *bufio.Scanner) (testCase, bool, error) {
 			}
 			continue
 
+		case "abort-after":
+			var err error
+			t.abortAfter, err = time.ParseDuration(b)
+			if err != nil {
+				return t, false, fmt.Errorf("invalid abort-after: %s", b)
+			}
+			continue
+
 		case "prerequisite":
 			t.requiredProcess = b
 			continue

@@ -25,7 +25,8 @@ Start an investigation with kernel_info, use find when a target name is
 uncertain, use read for focused kernel-memory inspection, use disasm for
 bounded native-code inspection, and use trace only for a bounded tracing
 experiment. Refine an investigation by issuing another trace; the server does
-not keep hidden tracing sessions.`
+not keep hidden tracing sessions. Use abort when a trace is waiting for an
+event that cannot be triggered.`
 
 var server = mcp.NewServer(&mcp.Implementation{
 	Name:    "bpfsnoop",

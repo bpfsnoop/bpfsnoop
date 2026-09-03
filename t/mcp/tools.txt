@@ -50,3 +50,14 @@ arguments: {"targets":[{"kind":"function","name":"vfs_read"}],"filter":{"comm":"
 match: "comm":"dd"
 timeout: 30s
 trigger: while true; do dd if=/proc/version of=/dev/null bs=1 count=1 >/dev/null 2>&1; done
+
+---
+
+# Abort a trace whose filter deliberately cannot match an event.
+name: mcp::abort
+tag: mcp,abort,trace
+tool: trace
+arguments: {"targets":[{"kind":"function","name":"vfs_read"}],"filter":{"comm":"never-match"},"limits":{"duration_ms":30000,"max_events":1}}
+match: "stopped_by":"abort"
+abort-after: 2s
+timeout: 20s

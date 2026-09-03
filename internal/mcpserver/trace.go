@@ -145,7 +145,7 @@ func init() {
 			"Function selectors may be exact names or globs; fentry/fexit is capped at 200 resolved functions, while kprobe_multi has no function-count cap. Loaded BPF program targets have no count cap. " +
 			"Executed instructions require fentry kernel-function targets, and cannot be combined with a function graph. " +
 			"Duration and event-count limits are mandatory server invariants even when omitted by the caller. " +
-			"Only one trace runs at a time; a concurrent request is rejected. Issue another trace to refine the investigation.",
+			"Only one trace runs at a time; a concurrent request is rejected. Use abort if the expected event cannot be triggered, or issue another trace after this one completes to refine the investigation.",
 		Annotations: &mcp.ToolAnnotations{
 			DestructiveHint: &notDestructive,
 			ReadOnlyHint:    false,

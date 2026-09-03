@@ -217,13 +217,15 @@ func Trace(ctx context.Context, options TraceOptions) (TraceOutput, error) {
 		Events: make([]traceEventOutput, 0, options.MaxEvents),
 	}
 	flameGraph := make(map[string]*traceFlameGraphEntryOutput)
-	runCtx, cancel := context.WithCancel(ctx)
-	defer cancel()
+	runCtx, session, err := beginTrace(ctx)
+	if err != nil {
+		return TraceOutput{}, err
+	}
 
 	var setupExpired atomic.Bool
 	setupTimer := time.AfterFunc(traceSetupTimeout, func() {
 		setupExpired.Store(true)
-		cancel()
+		session.cancel()
 	})
 	defer setupTimer.Stop()
 
@@ -237,7 +239,7 @@ func Trace(ctx context.Context, options TraceOptions) (TraceOutput, error) {
 		started = time.Now()
 		durationTimer = time.AfterFunc(options.Duration, func() {
 			durationExpired.Store(true)
-			cancel()
+			session.cancel()
 		})
 	}
 	event := func(event bpfsnoop.TraceEvent) error {
@@ -274,16 +276,17 @@ func Trace(ctx context.Context, options TraceOptions) (TraceOutput, error) {
 	if durationTimer != nil {
 		durationTimer.Stop()
 	}
+	aborted := finishTrace(session)
 	if ctx.Err() != nil {
 		return TraceOutput{}, ctx.Err()
 	}
 	if setupExpired.Load() {
 		return TraceOutput{}, fmt.Errorf("trace did not become ready within %s", traceSetupTimeout)
 	}
-	if err != nil {
+	if err != nil && !aborted {
 		return TraceOutput{}, err
 	}
-	if started.IsZero() {
+	if started.IsZero() && !aborted {
 		return TraceOutput{}, errors.New("trace exited before becoming ready")
 	}
 	for _, entry := range flameGraph {
@@ -294,7 +297,14 @@ func Trace(ctx context.Context, options TraceOptions) (TraceOutput, error) {
 	})
 
 	output.Stats.Returned = len(output.Events)
-	output.Stats.DurationMS = time.Since(started).Milliseconds()
+	if !started.IsZero() {
+		output.Stats.DurationMS = time.Since(started).Milliseconds()
+	}
+	if aborted {
+		output.Status = "aborted"
+		output.StoppedBy = "abort"
+		return output, nil
+	}
 	if durationExpired.Load() {
 		output.StoppedBy = "duration"
 		return output, nil
