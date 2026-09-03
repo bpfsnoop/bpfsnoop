@@ -26,7 +26,8 @@ uncertain, use read for focused kernel-memory inspection, use disasm for
 bounded native-code inspection, and use trace only for a bounded tracing
 experiment. Refine an investigation by issuing another trace; the server does
 not keep hidden tracing sessions. Use trace action=start to wait for attachment,
-then action=wait to collect its result or action=abort to cancel it. Always present every trace result for human review:
+then action=wait to collect its result or action=abort to cancel it. Use status
+to inspect an active trace. Always present every trace result for human review:
 use a concise chronological event list, or an indented call tree for
 function_graph, while retaining the full result for follow-up analysis.`
 

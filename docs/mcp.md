@@ -19,9 +19,10 @@ The initial tool surface is:
 - `read`: evaluate typed C expressions against kernel memory;
 - `disasm`: inspect bounded native disassembly for a kernel function or loaded
   BPF program;
-- `trace`: run one bounded tracing experiment and return structured events.
+- `trace`: start, wait for, or abort one bounded tracing experiment;
+- `status`: inspect the active tracing session.
 
-All five tools are available. `trace` supports kernel-function, tracepoint, and
+All six tools are available. `trace` supports kernel-function, tracepoint, and
 loaded BPF program targets.
 
 `read` accepts one or more typed C expressions and returns ordered records with
@@ -69,8 +70,12 @@ expressions or retval packet sources.
 
 The duration defaults to 3000 ms and must be between 100 and 30000 ms. The
 event limit defaults to 100 and must be between 1 and 1000. Duration starts
-only after all tracing programs have attached. Results report `stopped_by` as
-`duration` or `max_events`, statistics, and ordered structured events. Values
+only after all tracing programs have attached. Call `trace` with `action: "start"`;
+it returns only once attachment is complete. Generate the event, then call
+`trace` with `action: "wait"` to collect the result. Use `action: "abort"` to
+cancel the sole active trace. Omitting `action` retains the
+synchronous trace behavior. Results report `stopped_by` as `duration`,
+`max_events`, or `abort`, statistics, and ordered structured events. Values
 retain their BTF type and native JSON representation where possible; pointers
 and integers outside JSON's exact range are strings.
 
@@ -81,6 +86,11 @@ process, CPU, timestamp, selected values, return value, and duration. Present
 arguments, return value, and duration, as the CLI does. Keep the full
 structured result available for follow-up analysis, but summarize a large
 trace and identify omitted events or branches.
+
+Use `status` to check whether the daemon is idle or tracing. For an active
+trace, it reports the setup, running, or aborting state together with elapsed
+time, the number of collected events, and the normalized targets, filters,
+captures, and limits. Status is a snapshot and does not interrupt the trace.
 
 `find` accepts an exact name or glob pattern. Its optional `kind` narrows the
 search to `function`, `tracepoint`, `bpf_program`, `btf_type`, or `ksym`;
@@ -132,10 +142,8 @@ sudo ./bpfsnoop-mcp-daemon
 ```
 
 When launched through `sudo`, the daemon permits only the invoking user to
-connect. Only one daemon instance may run at a time. It cleans up its private
-local endpoint when stopped with `SIGINT` or `SIGTERM`. The daemon serves one
-active MCP session at a time; another frontend is rejected immediately and can
-retry after the active session ends.
+connect. Only one daemon instance may run at a time. It accepts concurrent MCP
+sessions, but only one trace may be active at a time.
 
 If the daemon is not available, the frontend exits with an instruction asking
 the user to start `bpfsnoop-mcp-daemon`; it never attempts to prompt for a

@@ -80,15 +80,18 @@ type TraceOptions struct {
 }
 
 type traceSession struct {
-	cancel   context.CancelFunc
-	ready    chan struct{}
-	done     chan struct{}
-	readyAt  time.Time
-	deadline time.Time
-	aborted  bool
-	warnings []string
-	output   TraceOutput
-	err      error
+	cancel    context.CancelFunc
+	ready     chan struct{}
+	done      chan struct{}
+	startedAt time.Time
+	readyAt   time.Time
+	deadline  time.Time
+	aborted   bool
+	events    int
+	options   TraceOptions
+	warnings  []string
+	output    TraceOutput
+	err       error
 }
 
 var traces struct {
@@ -339,7 +342,7 @@ func handleTraceFlameGraph(event *bpfsnoop.TraceEvent, flameGraph map[string]*tr
 	}
 }
 
-func runTrace(ctx context.Context, options TraceOptions, readyNotify func(), warningNotify func(string), isAborted func() bool) (TraceOutput, error) {
+func runTrace(ctx context.Context, options TraceOptions, readyNotify func(), warningNotify func(string), eventNotify func(), isAborted func() bool) (TraceOutput, error) {
 	options, err := normalizeTraceOptions(options)
 	if err != nil {
 		return TraceOutput{}, err
@@ -389,6 +392,9 @@ func runTrace(ctx context.Context, options TraceOptions, readyNotify func(), war
 			return err
 		}
 		output.Events = append(output.Events, converted)
+		if eventNotify != nil {
+			eventNotify()
+		}
 		return nil
 	}
 
@@ -470,7 +476,7 @@ func runTrace(ctx context.Context, options TraceOptions, readyNotify func(), war
 
 // Trace validates and runs one bounded tracing experiment synchronously.
 func Trace(ctx context.Context, options TraceOptions) (TraceOutput, error) {
-	return runTrace(ctx, options, nil, nil, nil)
+	return runTrace(ctx, options, nil, nil, nil, nil)
 }
 
 // StartTrace returns only after the sole trace session is attached and ready.
@@ -495,7 +501,7 @@ func StartTrace(ctx context.Context, options TraceOptions) (TraceStartOutput, er
 		}
 	}
 	runCtx, cancel := context.WithCancel(context.Background())
-	session := &traceSession{cancel: cancel, ready: make(chan struct{}), done: make(chan struct{})}
+	session := &traceSession{cancel: cancel, ready: make(chan struct{}), done: make(chan struct{}), startedAt: time.Now(), options: options}
 	traces.session = session
 	traces.Unlock()
 
@@ -509,6 +515,10 @@ func StartTrace(ctx context.Context, options TraceOptions) (TraceStartOutput, er
 		}, func(warning string) {
 			traces.Lock()
 			session.warnings = append(session.warnings, warning)
+			traces.Unlock()
+		}, func() {
+			traces.Lock()
+			session.events++
 			traces.Unlock()
 		}, func() bool {
 			traces.Lock()

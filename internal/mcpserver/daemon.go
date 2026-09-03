@@ -82,7 +82,8 @@ func serveDaemon(ctx context.Context, listener *net.UnixListener) error {
 	}
 }
 
-// RunDaemon serves one MCP session at a time over the private local socket.
+// RunDaemon serves MCP sessions over the private local socket. Trace itself
+// still permits only one active tracing experiment.
 func RunDaemon(ctx context.Context) error {
 	if os.Geteuid() != 0 {
 		return errors.New("root privileges are required; run bpfsnoop-mcp-daemon with sudo")
