@@ -23,9 +23,20 @@ import (
 	"github.com/bpfsnoop/bpfsnoop/internal/mathx"
 )
 
+type EventHandlerFactory func(maps map[string]*ebpf.Map, output io.Writer, helpers *Helpers) (EventHandler, func(), error)
+
+type BootConfig struct {
+	Output          io.Writer
+	NewEventHandler EventHandlerFactory
+	MaxEvents       uint
+	MaxKernelFuncs  int
+	Ready           func()
+	isEventStream   bool
+}
+
 // Boot initializes bpfsnoop and runs the operation selected by flags. Tracing
 // operations run until their event limit is reached or ctx is cancelled.
-func Boot(ctx context.Context, flags *Flags, output io.Writer) error {
+func Boot(ctx context.Context, flags *Flags, config BootConfig) error {
 	if err := rlimit.RemoveMemlock(); err != nil {
 		return fmt.Errorf("failed to remove memlock limit: %w", err)
 	}
@@ -49,10 +60,10 @@ func Boot(ctx context.Context, flags *Flags, output io.Writer) error {
 		return nil
 	}
 
-	return bootTracing(ctx, flags, output)
+	return bootTracing(ctx, flags, config)
 }
 
-func bootTracing(ctx context.Context, flags *Flags, output io.Writer) error {
+func bootTracing(ctx context.Context, flags *Flags, config BootConfig) error {
 	var r syscall.Rlimit
 	if err := syscall.Getrlimit(syscall.RLIMIT_NOFILE, &r); err != nil {
 		return fmt.Errorf("failed to get nofile rlimit: %w", err)
@@ -121,6 +132,10 @@ func bootTracing(ctx context.Context, flags *Flags, output io.Writer) error {
 	if err != nil {
 		return fmt.Errorf("failed to find kernel functions: %w", err)
 	}
+	if config.MaxKernelFuncs > 0 && len(kfuncs) > config.MaxKernelFuncs {
+		return fmt.Errorf("fentry/fexit target pattern resolved to %d kernel functions; maximum is %d, use kprobe_multi for an unbounded function set", len(kfuncs), config.MaxKernelFuncs)
+	}
+
 	VerboseLog("Detect %d kernel functions traceable ..", len(kfuncs))
 	kfuncs, err = DetectTraceable(kfuncs)
 	if err != nil {
@@ -238,7 +253,7 @@ func bootTracing(ctx context.Context, flags *Flags, output io.Writer) error {
 			return fmt.Errorf("failed to create output file: %w", err)
 		}
 		defer file.Close()
-		output = file
+		config.Output = file
 	}
 
 	helpers := &Helpers{
@@ -251,14 +266,38 @@ func bootTracing(ctx context.Context, flags *Flags, output io.Writer) error {
 		Graphs:    graphs,
 		KfnsMulti: kfuncsMulti,
 	}
+	newHandler := config.NewEventHandler
+	if newHandler == nil {
+		newHandler = func(maps map[string]*ebpf.Map, output io.Writer, helpers *Helpers) (EventHandler, func(), error) {
+			if output == nil {
+				return nil, nil, errors.New("trace output writer is nil")
+			}
+			handler, cleanup := NewOutputEventHandler(maps, output, helpers)
+			return handler, cleanup, nil
+		}
+	}
+	handler, cleanupHandler, err := newHandler(reusedMaps, config.Output, helpers)
+	if err != nil {
+		return fmt.Errorf("failed to create event handler: %w", err)
+	}
+	if cleanupHandler != nil {
+		defer cleanupHandler()
+	}
+
 	readyData := reusedMaps[".data.ready"]
 	if err := readyData.Put(uint32(0), uint32(1)); err != nil {
 		return fmt.Errorf("failed to mark bpfsnoop ready: %w", err)
 	}
 	defer readyData.Put(uint32(0), uint32(0))
-	DebugLog("bpfsnoop pid is %d", os.Getpid())
-	log.Print("bpfsnoop is running..")
-	defer log.Print("bpfsnoop is exiting..")
+	if config.Ready != nil {
+		config.Ready()
+	}
+
+	if !config.isEventStream {
+		DebugLog("bpfsnoop pid is %d", os.Getpid())
+		log.Print("bpfsnoop is running..")
+		defer log.Print("bpfsnoop is exiting..")
+	}
 
 	errgroup, runCtx := errgroup.WithContext(ctx)
 	errgroup.Go(func() error {
@@ -267,7 +306,13 @@ func bootTracing(ctx context.Context, flags *Flags, output io.Writer) error {
 		return nil
 	})
 
-	errgroup.Go(func() error { return Run(reader, reusedMaps, output, helpers) })
+	errgroup.Go(func() error {
+		maxEvents := config.MaxEvents
+		if maxEvents == 0 {
+			maxEvents = limitEvents
+		}
+		return Run(reader, handler, maxEvents)
+	})
 
 	if err := errgroup.Wait(); err != nil && !errors.Is(err, ErrFinished) {
 		return fmt.Errorf("bpfsnoop run failed: %w", err)

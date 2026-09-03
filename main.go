@@ -21,6 +21,6 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
 	defer stop()
 
-	err = bpfsnoop.Boot(ctx, flags, os.Stdout)
+	err = bpfsnoop.Boot(ctx, flags, bpfsnoop.BootConfig{Output: os.Stdout})
 	assert.NoVerifierErr(err, "Failed to boot bpfsnoop: %v")
 }

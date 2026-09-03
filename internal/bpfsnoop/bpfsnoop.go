@@ -63,7 +63,35 @@ type Helpers struct {
 	KfnsMulti []kfuncInfoMulti
 }
 
-func Run(reader *ringbuf.Reader, maps map[string]*ebpf.Map, w io.Writer, helpers *Helpers) error {
+type EventHandler func(data []byte) (bool, error)
+
+func Run(reader *ringbuf.Reader, handler EventHandler, maxEvents uint) error {
+	var outputEvent bool
+	var record ringbuf.Record
+	record.Handle = func(data []byte) error {
+		var err error
+		outputEvent, err = handler(data)
+		return err
+	}
+
+	unlimited := maxEvents == 0
+	for remaining := int64(maxEvents); unlimited || remaining > 0; {
+		outputEvent = false
+		if err := reader.ReadInto(&record); err != nil {
+			if errors.Is(err, ringbuf.ErrClosed) {
+				return nil
+			}
+			return fmt.Errorf("failed to read ringbuf: %w", err)
+		}
+		if outputEvent {
+			remaining--
+		}
+	}
+
+	return ErrFinished
+}
+
+func NewOutputEventHandler(maps map[string]*ebpf.Map, w io.Writer, helpers *Helpers) (EventHandler, func()) {
 	lbrStack := newLBRStack()
 	fnStack := newFnStack()
 	sessions := NewSessions()
@@ -77,21 +105,16 @@ func Run(reader *ringbuf.Reader, maps map[string]*ebpf.Map, w io.Writer, helpers
 	var lbrData LbrData
 
 	fg := NewFlameGraph()
-	defer fg.Save(outputFlameGraph)
-
 	hist := newHistogram(helpers.Flags.histExpr)
-	defer hist.render(w)
-
 	tdigest := newTDigest(helpers.Flags.tdigestExpr)
-	defer tdigest.render(w)
 
 	var sb strings.Builder
 
 	fgraphMaxDepth := helpers.Flags.fgraphDepth
-	outputEvent := false
-
-	var record ringbuf.Record
-	record.Handle = func(data []byte) error {
+	handler := func(data []byte) (bool, error) {
+		if len(data) < 2 {
+			return false, nil
+		}
 		currts := time.Now()
 
 		typ := *(*uint16)(unsafe.Pointer(&data[0]))
@@ -99,14 +122,14 @@ func Run(reader *ringbuf.Reader, maps map[string]*ebpf.Map, w io.Writer, helpers
 			event := (*InsnEvent)(unsafe.Pointer(&data[0]))
 			outputInsnEvent(&sb, sessions, helpers.Insns, event)
 			sb.Reset()
-			return nil
+			return false, nil
 		}
 
 		if typ == eventTypeGraphEntry || typ == eventTypeGraphExit {
 			event := (*GraphEvent)(unsafe.Pointer(&data[0]))
 			graph, ok := helpers.Graphs[event.FuncIP]
 			if !ok {
-				return nil
+				return false, nil
 			}
 
 			isExit := typ == eventTypeGraphExit
@@ -118,11 +141,11 @@ func Run(reader *ringbuf.Reader, maps map[string]*ebpf.Map, w io.Writer, helpers
 
 			outputGraphEvent(&sb, sessions, helpers.Graphs, event, s, !isExit)
 			sb.Reset()
-			return nil
+			return false, nil
 		}
 
 		if len(data) < sizeOfEvent {
-			return nil
+			return false, nil
 		}
 
 		event := (*Event)(unsafe.Pointer(&data[0]))
@@ -147,10 +170,10 @@ func Run(reader *ringbuf.Reader, maps map[string]*ebpf.Map, w io.Writer, helpers
 					sess = s
 					duration = time.Duration(event.KernNs - s.started)
 					if duration < runDelta {
-						return nil
+						return false, nil
 					}
 				} else {
-					return nil // skip if session not found
+					return false, nil // skip if session not found
 				}
 			}
 		}
@@ -184,7 +207,7 @@ func Run(reader *ringbuf.Reader, maps map[string]*ebpf.Map, w io.Writer, helpers
 			f := findSymbolHelper(uint64(event.FuncIP), helpers)
 			err := outputFuncArgAttrs(&sb, fnInfo.args, data[:argDataSz], hist, tdigest, f)
 			if err != nil {
-				return fmt.Errorf("failed to output function arg attrs: %w", err)
+				return false, fmt.Errorf("failed to output function arg attrs: %w", err)
 			}
 
 			data = data[argDataSz:]
@@ -193,17 +216,18 @@ func Run(reader *ringbuf.Reader, maps map[string]*ebpf.Map, w io.Writer, helpers
 		if haveFlag(event.TraceeFlags, traceeFlagOutputLbr) && event.LBRRetval > 0 {
 			err := lbrStack.outputStack(&sb, helpers, &lbrData, lbrs, event)
 			if err != nil {
-				return fmt.Errorf("failed to output LBR stack: %w", err)
+				return false, fmt.Errorf("failed to output LBR stack: %w", err)
 			}
 		}
 
 		if haveFlag(event.TraceeFlags, traceeFlagOutputStack) && event.StackID >= 0 {
 			err := fnStack.output(&sb, helpers, stacks, fg, event)
 			if err != nil {
-				return fmt.Errorf("failed to output function stack: %w", err)
+				return false, fmt.Errorf("failed to output function stack: %w", err)
 			}
 		}
 
+		outputEvent := false
 		if sess != nil {
 			sess.outputs = append(sess.outputs, sb.String())
 			if haveRetval {
@@ -222,26 +246,13 @@ func Run(reader *ringbuf.Reader, maps map[string]*ebpf.Map, w io.Writer, helpers
 		lbrStack.reset()
 		fnStack.reset()
 
-		return nil
+		return outputEvent, nil
 	}
 
-	unlimited := limitEvents == 0
-	for i := int64(limitEvents); unlimited || i > 0; {
-		outputEvent = false
-
-		err := reader.ReadInto(&record)
-		if err != nil {
-			if errors.Is(err, ringbuf.ErrClosed) {
-				return nil
-			}
-
-			return fmt.Errorf("failed to read ringbuf: %w", err)
-		}
-
-		if outputEvent {
-			i--
-		}
+	cleanup := func() {
+		tdigest.render(w)
+		hist.render(w)
+		fg.Save(outputFlameGraph)
 	}
-
-	return ErrFinished
+	return handler, cleanup
 }
