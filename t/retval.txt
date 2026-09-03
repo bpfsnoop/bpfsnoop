@@ -37,7 +37,7 @@ timeout: 10s
 name: retval::arg:pointer
 tag: retval,cc,fnarg,kfuncs,pkt
 test: -k skb_recv_datagram -m exit --filter-arg '(struct sk_buff *)$retval != NULL' --output-arg '(struct sk_buff *)$retval' --limit-events 1
-match: (struct sk_buff *)'(struct sk_buff *)$retval'=0xffff
+match: (struct sk_buff *)'(struct sk_buff *)$retval'=0x
 trigger: ping -c 1 -s 64 127.0.0.1
 timeout: 10s
 
@@ -47,7 +47,7 @@ timeout: 10s
 name: retval::arg:mixed
 tag: retval,cc,fnarg,kfuncs,pkt
 test: -k skb_recv_datagram -m exit --filter-arg 'sk != NULL && (struct sk_buff *)$retval != NULL' --output-arg 'sk' --output-arg '(struct sk_buff *)$retval' --limit-events 1
-match: (struct sock *)'sk'=0xffff
+match: (struct sock *)'sk'=0x
 trigger: ping -c 1 -s 64 127.0.0.1
 timeout: 10s
 

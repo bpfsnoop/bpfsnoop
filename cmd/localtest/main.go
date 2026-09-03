@@ -108,10 +108,14 @@ func printFailedTests(w io.Writer) {
 		if name == "" {
 			name = "<unnamed>"
 		}
+		target := failed.test
+		if mcpMode {
+			target = failed.tool
+		}
 		if failed.file != "" {
-			prErr(w, red, "- %s: %s (%s)\n", failed.file, name, failed.test)
+			prErr(w, red, "- %s: %s (%s)\n", failed.file, name, target)
 		} else {
-			prErr(w, red, "- %s (%s)\n", name, failed.test)
+			prErr(w, red, "- %s (%s)\n", name, target)
 		}
 	}
 }
