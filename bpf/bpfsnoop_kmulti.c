@@ -109,10 +109,6 @@ emit_bpfsnoop_kmulti_event(struct pt_regs *ctx)
     else
         lbr->nr_bytes = 0;
 
-    (void) read_args_from_ctx(ctx, args);
-    if (mode == BPFSNOOP_MODE_EXIT || mode == BPFSNOOP_MODE_SESSION_EXIT)
-        retval = PT_REGS_RC(ctx);
-
     func_ip = bpf_get_func_ip(ctx);
     pid_tgid = bpf_get_current_pid_tgid();
     pid = pid_tgid >> 32;
@@ -124,6 +120,10 @@ emit_bpfsnoop_kmulti_event(struct pt_regs *ctx)
     bpf_get_current_comm(comm, sizeof(comm));
     if (!filter_comm(comm))
         return BPF_OK;
+
+    (void) read_args_from_ctx(ctx, args);
+    if (mode == BPFSNOOP_MODE_EXIT || mode == BPFSNOOP_MODE_SESSION_EXIT)
+        retval = PT_REGS_RC(ctx);
 
     switch (mode) {
     case BPFSNOOP_MODE_SESSION_ENTRY:

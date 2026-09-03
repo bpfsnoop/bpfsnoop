@@ -20,6 +20,7 @@ type funcInfo struct {
 	params   []FuncParamFlags
 	retParam FuncParamFlags
 	progType ebpf.ProgramType
+	progID   uint32
 }
 
 func findKfuncInMulti(funcIP uintptr, helpers *Helpers) *KFunc {
@@ -46,6 +47,7 @@ func getFuncInfo(funcIP uintptr, helpers *Helpers, graph *FuncGraph, traceeFlags
 		info.params = progInfo.funcParams
 		info.retParam = progInfo.retParam
 		info.progType = progInfo.progType
+		info.progID = uint32(progInfo.progID)
 		return &info
 	}
 
