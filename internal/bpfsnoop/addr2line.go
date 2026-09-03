@@ -14,6 +14,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/Asphaltt/addr2line"
 	"github.com/klauspost/compress/zstd"
@@ -31,9 +32,10 @@ type kmodAddr2line struct {
 
 // Addr2Line is a wrapper around addr2line.Addr2Line with a cache.
 type Addr2Line struct {
-	ready bool
-	err   error
-	done  chan struct{}
+	mu sync.Mutex
+
+	err  error
+	done chan struct{}
 
 	vmlinux string
 	a2l     *addr2line.Addr2Line
@@ -47,6 +49,8 @@ type Addr2Line struct {
 }
 
 func (a2l *Addr2Line) create() {
+	defer close(a2l.done)
+
 	__a2l, err := addr2line.New(a2l.vmlinux)
 	if err != nil {
 		a2l.err = fmt.Errorf("failed to create addr2line from %s: %w", a2l.vmlinux, err)
@@ -67,16 +71,11 @@ func (a2l *Addr2Line) create() {
 	}
 
 	a2l.buildDir = sysBpfLineInfo.File[:len(sysBpfLineInfo.File)-len(bpfSyscallFile)]
-	close(a2l.done)
-	a2l.ready = true
 	a2l.a2l = __a2l
 }
 
 func (a2l *Addr2Line) wait() error {
-	if !a2l.ready {
-		<-a2l.done
-	}
-
+	<-a2l.done
 	return a2l.err
 }
 
@@ -303,12 +302,15 @@ func (a2l *Addr2Line) getMod(ksym *KsymEntry) (*addr2line.Addr2Line, Kaslr, erro
 
 // get returns the addr2line entry from the vmlinux file for the given address.
 func (a2l *Addr2Line) get(addr uintptr, ksym *KsymEntry) (*addr2line.Addr2LineEntry, error) {
-	if e, ok := a2l.cache.get(addr); ok {
-		return e, nil
-	}
-
 	if err := a2l.wait(); err != nil {
 		return nil, err
+	}
+
+	a2l.mu.Lock()
+	defer a2l.mu.Unlock()
+
+	if e, ok := a2l.cache.get(addr); ok {
+		return e, nil
 	}
 
 	a2lMod, kaslr, err := a2l.getMod(ksym)

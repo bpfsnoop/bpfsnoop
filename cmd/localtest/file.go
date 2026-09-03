@@ -9,6 +9,7 @@ import (
 	"io"
 	"os"
 	"runtime"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -46,6 +47,22 @@ func parseTestCase(scanner *bufio.Scanner) (testCase, bool, error) {
 			t.test = "./bpfsnoop " + b
 			continue
 
+		case "tool":
+			t.tool = b
+			continue
+
+		case "arguments":
+			t.arguments = b
+			continue
+
+		case "expect-error":
+			var err error
+			t.expectError, err = strconv.ParseBool(b)
+			if err != nil {
+				return t, false, fmt.Errorf("invalid expect-error: %s", b)
+			}
+			continue
+
 		case "match", "match_" + runtime.GOARCH:
 			t.match = b
 			continue
@@ -55,6 +72,14 @@ func parseTestCase(scanner *bufio.Scanner) (testCase, bool, error) {
 			t.timeout, err = time.ParseDuration(b)
 			if err != nil {
 				return t, false, fmt.Errorf("invalid timeout: %s", b)
+			}
+			continue
+
+		case "abort-after":
+			var err error
+			t.abortAfter, err = time.ParseDuration(b)
+			if err != nil {
+				return t, false, fmt.Errorf("invalid abort-after: %s", b)
 			}
 			continue
 

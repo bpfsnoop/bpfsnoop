@@ -65,17 +65,25 @@ func prepareFuncArgument(expr string) (funcArgument, error) {
 }
 
 func prepareFuncArguments(exprs []string) argumentFilter {
+	filter, err := prepareFuncArgumentsE(exprs)
+	if err != nil {
+		log.Fatalf("failed to prepare func arguments: %v", err)
+	}
+	return filter
+}
+
+func prepareFuncArgumentsE(exprs []string) (argumentFilter, error) {
 	var argFilter argumentFilter
 	for _, expr := range exprs {
 		arg, err := prepareFuncArgument(expr)
 		if err != nil {
-			log.Fatalf("failed to prepare func argument with expr '%s': %v", expr, err)
+			return argumentFilter{}, fmt.Errorf("failed to prepare func argument with expr '%s': %w", expr, err)
 		}
 
 		argFilter.args = append(argFilter.args, arg)
 	}
 
-	return argFilter
+	return argFilter, nil
 }
 
 func clearFilterArgSubprog(prog *ebpf.ProgramSpec) {

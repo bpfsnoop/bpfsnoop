@@ -88,11 +88,6 @@ emit_bpfsnoop_event(void *ctx)
     /* Other filters must be after bpf_get_branch_snapshot() to avoid polluting
      * LBR entries.
      */
-    (void) bpf_probe_read_kernel(args, 8*cfg->fn_args.args_nr, ctx);
-    if (cfg->fn_args.with_retval && (mode == BPFSNOOP_MODE_EXIT ||
-                                     mode == BPFSNOOP_MODE_SESSION_EXIT))
-        (void) bpf_probe_read_kernel(&retval, sizeof(retval), ctx + 8*cfg->fn_args.args_nr);
-
     func_ip = FUNC_IP;
     pid_tgid = bpf_get_current_pid_tgid();
     pid = pid_tgid >> 32;
@@ -104,6 +99,11 @@ emit_bpfsnoop_event(void *ctx)
     bpf_get_current_comm(comm, sizeof(comm));
     if (!filter_comm(comm))
         return BPF_OK;
+
+    (void) bpf_probe_read_kernel(args, 8*cfg->fn_args.args_nr, ctx);
+    if (cfg->fn_args.with_retval && (mode == BPFSNOOP_MODE_EXIT ||
+                                     mode == BPFSNOOP_MODE_SESSION_EXIT))
+        (void) bpf_probe_read_kernel(&retval, sizeof(retval), ctx + 8*cfg->fn_args.args_nr);
 
     /* fp of tracee caller */
     fp = get_tracee_caller_fp(ctx, cfg->fn_args.args_nr,

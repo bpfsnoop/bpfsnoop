@@ -4,6 +4,7 @@
 package bpfsnoop
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"log"
@@ -154,48 +155,24 @@ func dumpKfunc(kfunc string, kmods []string, bytes uint) {
 	assert.True(slices.Contains(supportedArchs, runtime.GOARCH), "Unsupported arch %s", runtime.GOARCH)
 
 	VerboseLog("Reading /proc/kallsyms ..")
-	kallsyms, err := NewKallsyms()
-	assert.NoErr(err, "Failed to read /proc/kallsyms: %v")
-
-	var addr2line *Addr2Line
-
-	vmlinux, err := FindVmlinux()
-	if err != nil {
-		if errors.Is(err, ErrNotFound) {
-			VerboseLog("Dbgsym vmlinux not found")
-		} else {
-			assert.NoErr(err, "Failed to find vmlinux: %v")
-		}
+	syntax := "att"
+	if disasmIntelSyntax {
+		syntax = "intel"
 	}
-	if err == nil {
-		VerboseLog("Found vmlinux: %s", vmlinux)
+	dis, err := NewDisassembler(context.Background(), syntax)
+	assert.NoErr(err, "Failed to create disassembler: %v")
+	defer dis.Close()
+	dis.verboseLog()
 
-		textAddr, err := ReadTextAddrFromVmlinux(vmlinux)
-		assert.NoErr(err, "Failed to read .text address from vmlinux: %v")
-
-		VerboseLog("Creating addr2line from vmlinux ..")
-		kaslr := NewKaslr(kallsyms.Stext(), textAddr)
-		addr2line, err = NewAddr2Line(vmlinux, kaslr, kallsyms.SysBPF(), kallsyms.Stext())
-		assert.NoErr(err, "Failed to create addr2line: %v")
-	}
-
+	kallsyms, addr2line := dis.kallsyms, dis.addr2line
 	kaddr, kfunc := parseDisasmKfunc(kfunc, kmods, kallsyms, addr2line)
-
-	bytes = guessBytes(uintptr(kaddr), kallsyms, bytes)
 	assert.False(bytes > readLimit, "Disasm bytes %d is larger than limit %d", bytes, readLimit)
-	data, err := readKernel(kaddr, uint32(bytes))
+	target, err := dis.readKernelFunction(kfunc, kaddr, "", uint32(bytes), readLimit)
 	assert.NoErr(err, "Failed to read kernel memory: %v")
-
-	defer FlushReadObjs()
-
-	data = trimTailingInsns(data)
+	data := target.Bytes
 	log.Printf("Disassembling %s at %s (%d bytes) ..",
 		color.New(color.FgYellow, color.Bold).Sprint(kfunc),
 		color.New(color.FgBlue).Sprintf("%#x", kaddr), len(data))
-
-	engine, err := createGapstoneEngine()
-	assert.NoErr(err, "Failed to create gapstone engine: %v")
-	defer engine.Close()
 
 	VerboseLog("Disassembling bpf progs ..")
 	bpfProgs, err := NewBPFProgs([]ProgFlag{{all: true}}, false, true)
@@ -229,7 +206,7 @@ func dumpKfunc(kfunc string, kmods []string, bytes uint) {
 
 	b, pc := data[:], uint64(kaddr)
 	for len(b) != 0 {
-		insts, err := engine.Disasm(b, pc, 1)
+		inst, err := dis.DecodeOne(b, pc)
 		if err != nil && len(b) <= 10 {
 			break
 		}
@@ -257,8 +234,7 @@ func dumpKfunc(kfunc string, kmods []string, bytes uint) {
 			prev = li
 		}
 
-		inst := insts[0]
-		opstr := inst.OpStr
+		opstr := inst.Operands
 		fmt.Fprint(&sb, printInsnInfo(pc, pc-kaddr, inst.Bytes, inst.Mnemonic, opstr))
 
 		var endpoint *branchEndpoint
