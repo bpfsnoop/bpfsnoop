@@ -13,6 +13,7 @@ import (
 
 var (
 	colorful bool
+	mcpMode  bool
 	testName string
 )
 
@@ -29,8 +30,12 @@ func parseFlags() *flags {
 	var f flags
 
 	flag.BoolVar(&f.noColor, "no-color", false, "disable colored output")
+	flag.BoolVar(&mcpMode, "mcp", false, "run test cases as MCP tool calls")
 	flag.StringVar(&f.tag, "tag", "", "tags for the test case")
 	flag.StringVar(&f.test, "test", "", "test case to run")
+	flag.StringVar(&f.tool, "tool", "", "MCP tool to call")
+	flag.StringVar(&f.arguments, "arguments", "{}", "JSON arguments for the MCP tool")
+	flag.BoolVar(&f.expectError, "expect-error", false, "expect the MCP tool to return an error")
 	flag.StringVar(&f.match, "match", "", "match test case stderr/stdout output")
 	flag.DurationVar(&f.timeout, "timeout", 5*time.Second, "timeout for the test case")
 	flag.StringVar(&f.requiredProcess, "required-process", "", "required process to run the test case")

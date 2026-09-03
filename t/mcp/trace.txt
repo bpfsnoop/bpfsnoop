@@ -1,0 +1,111 @@
+# Copyright 2026 Leon Hwang.
+# SPDX-License-Identifier: Apache-2.0
+
+# Filter a tracepoint with a C argument expression.
+name: mcp::trace:filter-arg
+tag: mcp,trace,filter-arg,tracepoint
+tool: trace
+arguments: {"targets":[{"kind":"tracepoint","name":"netif_receive_skb"}],"filter":{"expr":"1 == skb->dev->ifindex"},"capture":{"arguments":true},"limits":{"duration_ms":10000,"max_events":1}}
+match: "kind":"tracepoint"
+timeout: 30s
+trigger: while true; do ping -c 1 -s 64 127.0.0.1 >/dev/null 2>&1; done
+
+---
+
+# Evaluate selected C expressions for a tracepoint event.
+name: mcp::trace:output-arg
+tag: mcp,trace,output-arg,tracepoint
+tool: trace
+arguments: {"targets":[{"kind":"tracepoint","name":"netif_receive_skb"}],"filter":{"packet":"icmp and host 127.0.0.1"},"capture":{"argument_expressions":["skb->dev->name","skb->cb[2]"]},"limits":{"duration_ms":10000,"max_events":1}}
+match: "selected_arguments":[
+timeout: 30s
+trigger: while true; do ping -c 1 -s 64 127.0.0.1 >/dev/null 2>&1; done
+
+---
+
+# Apply a pcap filter and return a structured packet tuple.
+name: mcp::trace:filter-pkt:output-pkt
+tag: mcp,trace,filter-pkt,output-pkt,kernel-function
+tool: trace
+arguments: {"targets":[{"kind":"function","name":"icmp_rcv"}],"filter":{"packet":"icmp and host 127.0.0.1"},"capture":{"packet":true},"limits":{"duration_ms":10000,"max_events":1}}
+match: "protocol":"icmp"
+timeout: 30s
+trigger: while true; do ping -c 1 -s 64 127.0.0.1 >/dev/null 2>&1; done
+
+---
+
+# Return a structured kernel call stack.
+name: mcp::trace:output-stack
+tag: mcp,trace,output-stack,kernel-function
+tool: trace
+arguments: {"targets":[{"kind":"function","name":"icmp_rcv"}],"filter":{"packet":"icmp and host 127.0.0.1"},"capture":{"kernel_stack":true},"limits":{"duration_ms":10000,"max_events":1}}
+match: "kernel_stack":[
+timeout: 30s
+trigger: while true; do ping -c 1 -s 64 127.0.0.1 >/dev/null 2>&1; done
+
+---
+
+# Aggregate kernel stacks into structured flame-graph entries.
+name: mcp::trace:output-flamegraph
+tag: mcp,trace,output-flamegraph,kernel-function
+tool: trace
+arguments: {"targets":[{"kind":"function","name":"icmp_rcv"}],"filter":{"packet":"icmp and host 127.0.0.1"},"capture":{"flame_graph":true},"limits":{"duration_ms":10000,"max_events":1}}
+match: "flame_graph":[
+timeout: 30s
+trigger: while true; do ping -c 1 -s 64 127.0.0.1 >/dev/null 2>&1; done
+
+---
+
+# Return the structured function-call graph rooted at a kernel function.
+name: mcp::trace:funcgraph
+tag: mcp,trace,funcgraph,kernel-function
+tool: trace
+arguments: {"targets":[{"kind":"function","name":"icmp_rcv"}],"filter":{"packet":"icmp and host 127.0.0.1"},"capture":{"function_graph":true},"function_graph_depth":3,"limits":{"duration_ms":10000,"max_events":1}}
+match: "function_graph":[
+timeout: 30s
+trigger: while true; do ping -c 1 -s 64 127.0.0.1 >/dev/null 2>&1; done
+
+---
+
+# Return the executed native instruction path of a kernel function.
+name: mcp::trace:funcinsn
+tag: mcp,trace,funcinsn,kernel-function
+tool: trace
+arguments: {"targets":[{"kind":"function","name":"icmp_rcv"}],"filter":{"packet":"icmp and host 127.0.0.1"},"capture":{"instructions":true},"limits":{"duration_ms":10000,"max_events":1}}
+match: "instructions":[
+timeout: 30s
+trigger: while true; do ping -c 1 -s 64 127.0.0.1 >/dev/null 2>&1; done
+
+---
+
+# Trace a kernel function with typed arguments and retval.
+name: mcp::trace:kernel-function
+tag: mcp,trace,kernel-function
+tool: trace
+arguments: {"targets":[{"kind":"function","name":"vfs_read"}],"filter":{"comm":"dd"},"capture":{"arguments":true,"retval":true},"limits":{"duration_ms":10000,"max_events":1}}
+match: "name":"vfs_read"
+timeout: 30s
+trigger: while true; do dd if=/proc/version of=/dev/null bs=1 count=1 >/dev/null 2>&1; done
+
+---
+
+# Select a loaded BPF program by name and trace its root function.
+name: mcp::trace:bpf-program
+tag: mcp,trace,bpf-program
+tool: trace
+arguments: {"targets":[{"kind":"bpf_program","program_name":"crc","name":"crc"}],"capture":{"arguments":true},"limits":{"duration_ms":10000,"max_events":1}}
+match: "kind":"bpf_program"
+timeout: 30s
+prerequisite: ./xdpcrc -d lo
+trigger: while true; do ping -c 1 -s 64 127.0.0.1 >/dev/null 2>&1; done
+
+---
+
+# Trace a tracepoint directly.
+name: mcp::trace:tracepoint
+tag: mcp,trace,tracepoint
+tool: trace
+arguments: {"targets":[{"kind":"tracepoint","name":"netif_receive_skb"}],"capture":{"arguments":true},"limits":{"duration_ms":10000,"max_events":1}}
+match: "name":"netif_receive_skb"
+timeout: 30s
+trigger: while true; do ping -c 1 -s 64 127.0.0.1 >/dev/null 2>&1; done
