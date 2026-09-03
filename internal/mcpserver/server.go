@@ -25,9 +25,10 @@ Start an investigation with kernel_info, use find when a target name is
 uncertain, use read for focused kernel-memory inspection, use disasm for
 bounded native-code inspection, and use trace only for a bounded tracing
 experiment. Refine an investigation by issuing another trace; the server does
-not keep hidden tracing sessions.`
-
-var errNotImplemented = errors.New("this bpfsnoop MCP tool is not implemented yet")
+not keep hidden tracing sessions. Use trace action=start to wait for attachment,
+then action=wait to collect its result or action=abort to cancel it. Always present every trace result for human review:
+use a concise chronological event list, or an indented call tree for
+function_graph, while retaining the full result for follow-up analysis.`
 
 var server = mcp.NewServer(&mcp.Implementation{
 	Name:    "bpfsnoop",
@@ -39,10 +40,6 @@ var server = mcp.NewServer(&mcp.Implementation{
 //go:fix inline
 func intPtr(value int) *int {
 	return new(value)
-}
-
-func notImplemented[In any](context.Context, *mcp.CallToolRequest, In) (*mcp.CallToolResult, any, error) {
-	return nil, nil, errNotImplemented
 }
 
 type closeOnceReadWriteCloser struct {

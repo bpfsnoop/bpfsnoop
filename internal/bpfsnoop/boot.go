@@ -31,6 +31,7 @@ type BootConfig struct {
 	MaxEvents       uint
 	MaxKernelFuncs  int
 	Ready           func()
+	Warning         func(string)
 	isEventStream   bool
 }
 
@@ -199,11 +200,20 @@ func bootTracing(ctx context.Context, flags *Flags, config BootConfig) error {
 	DebugLog("Found %d graph functions/progs cost %s", len(graphs), time.Since(graphStarted))
 
 	if err := ctx.Err(); err != nil {
-		log.Print("bpfsnoop is exiting early ..")
+		if !config.isEventStream {
+			log.Print("bpfsnoop is exiting early ..")
+		}
 		return nil
 	}
 
-	WarnLogIf(len(graphs) != 0, "funcgraph is possible to crash your kernel, please use it with caution!")
+	if len(graphs) != 0 {
+		warning := "funcgraph is possible to crash your kernel, please use it with caution!"
+		if config.Warning != nil {
+			config.Warning(warning)
+		} else {
+			WarnLog(warning)
+		}
+	}
 	tracingTargets := bpfProgs.Tracings()
 	if len(tracingTargets)+len(kfuncs)+len(insns)+len(graphs)+len(kfuncsMulti) == 0 {
 		return errors.New("no tracing target")
@@ -214,8 +224,10 @@ func bootTracing(ctx context.Context, flags *Flags, config BootConfig) error {
 	reusedMaps := PrepareBPFMaps(bpfSpec)
 	defer CloseBPFMaps(reusedMaps)
 
-	LogIf(len(kfuncs) > 20, "bpfsnoop is tracing %d kernel functions/tracepoints, this may take a while", len(kfuncs))
-	LogIf(len(graphs) > 20, "bpfsnoop is tracing %d graph functions/progs, this may take a while", len(graphs))
+	if !config.isEventStream {
+		LogIf(len(kfuncs) > 20, "bpfsnoop is tracing %d kernel functions/tracepoints, this may take a while", len(kfuncs))
+		LogIf(len(graphs) > 20, "bpfsnoop is tracing %d graph functions/progs, this may take a while", len(graphs))
+	}
 
 	tracingStarted := time.Now()
 	tracings, err := NewBPFTracing(bpfSpec, reusedMaps, bpfProgs, kfuncs, insns, graphs, kfuncsMulti)

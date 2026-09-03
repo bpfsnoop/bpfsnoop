@@ -83,19 +83,27 @@ func prepareArgOutput(expr string) (funcArgumentOutput, error) {
 }
 
 func prepareFuncArgOutput(exprs []string) argDataOutput {
+	output, err := prepareFuncArgOutputE(exprs)
+	if err != nil {
+		log.Fatalf("failed to prepare arg output: %v", err)
+	}
+	return output
+}
+
+func prepareFuncArgOutputE(exprs []string) (argDataOutput, error) {
 	var arg argDataOutput
 	arg.args = make([]funcArgumentOutput, 0, len(exprs))
 
 	for _, expr := range exprs {
 		a, err := prepareArgOutput(expr)
 		if err != nil {
-			log.Fatalf("failed to prepare arg output: %v", err)
+			return argDataOutput{}, err
 		}
 
 		arg.args = append(arg.args, a)
 	}
 
-	return arg
+	return arg, nil
 }
 
 func (arg *funcArgumentOutput) emit(insns ...asm.Instruction) {
