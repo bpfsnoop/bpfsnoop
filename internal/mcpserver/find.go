@@ -12,14 +12,6 @@ import (
 	mcpapi "github.com/bpfsnoop/bpfsnoop/internal/mcp"
 )
 
-type findInput struct {
-	Pattern            string `json:"pattern" jsonschema:"kernel object name or glob pattern to search for; * matches any sequence of characters"`
-	Kind               string `json:"kind,omitempty" jsonschema:"optional object kind: function, tracepoint, bpf_program, or btf_type; omit to search all kinds"`
-	Limit              int    `json:"limit,omitempty" jsonschema:"maximum number of matches to return; defaults to 50 and cannot exceed 200"`
-	IncludeXlatedInsns bool   `json:"include_xlated_insns,omitempty" jsonschema:"include structured kernel-translated eBPF instructions; requires kind bpf_program"`
-	IncludeJitedInsns  bool   `json:"include_jited_insns,omitempty" jsonschema:"include hexadecimal JITed native instruction bytes grouped by function; requires kind bpf_program"`
-}
-
 func findInputSchema() *jsonschema.Schema {
 	minimum := 1.0
 	maximum := float64(mcpapi.MaxFindLimit)
@@ -30,7 +22,7 @@ func findInputSchema() *jsonschema.Schema {
 			"pattern": {
 				Type:        "string",
 				Description: "kernel object name or glob pattern to search for; * matches any sequence of characters",
-				MinLength:   findIntPtr(1),
+				MinLength:   intPtr(1),
 			},
 			"kind": {
 				Type:        "string",
@@ -63,22 +55,9 @@ func findInputSchema() *jsonschema.Schema {
 	}
 }
 
-func findIntPtr(value int) *int {
-	return &value
-}
-
-func find(ctx context.Context, _ *mcp.CallToolRequest, input findInput) (*mcp.CallToolResult, mcpapi.FindOutput, error) {
-	output, err := mcpapi.Find(ctx, mcpapi.FindOptions{
-		Pattern:            input.Pattern,
-		Kind:               input.Kind,
-		Limit:              input.Limit,
-		IncludeXlatedInsns: input.IncludeXlatedInsns,
-		IncludeJitedInsns:  input.IncludeJitedInsns,
-	})
-	if err != nil {
-		return nil, mcpapi.FindOutput{}, err
-	}
-	return nil, output, nil
+func find(ctx context.Context, _ *mcp.CallToolRequest, input mcpapi.FindOptions) (*mcp.CallToolResult, mcpapi.FindOutput, error) {
+	output, err := mcpapi.Find(ctx, input)
+	return nil, output, err
 }
 
 func init() {

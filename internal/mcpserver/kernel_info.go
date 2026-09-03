@@ -15,10 +15,7 @@ type kernelInfoInput struct{}
 
 func kernelInfo(context.Context, *mcp.CallToolRequest, kernelInfoInput) (*mcp.CallToolResult, mcpapi.KernelInfo, error) {
 	info, err := mcpapi.GetKernelInfo()
-	if err != nil {
-		return nil, mcpapi.KernelInfo{}, err
-	}
-	return nil, info, nil
+	return nil, info, err
 }
 
 func init() {

@@ -13,16 +13,16 @@ import (
 )
 
 type disasmTargetInput struct {
-	Kind string `json:"kind" jsonschema:"target kind: function or bpf_program"`
-	Name string `json:"name,omitempty" jsonschema:"exact kernel function name, hexadecimal kernel address, or optional BPF subprogram name"`
-	ID   uint32 `json:"id,omitempty" jsonschema:"loaded BPF program ID; required for bpf_program"`
+	Kind string `json:"kind"`
+	Name string `json:"name,omitempty"`
+	ID   uint32 `json:"id,omitempty"`
 }
 
 type disasmInput struct {
-	Target          disasmTargetInput `json:"target" jsonschema:"kernel function or loaded BPF program to disassemble"`
-	Bytes           uint32            `json:"bytes,omitempty" jsonschema:"kernel bytes to read; omit to infer the function size, maximum 4096"`
-	MaxInstructions int               `json:"max_instructions,omitempty" jsonschema:"maximum instructions to return across all functions; defaults to 256, maximum 2048"`
-	Syntax          string            `json:"syntax,omitempty" jsonschema:"assembly syntax: att or intel; defaults to att, and intel is amd64-only"`
+	Target          disasmTargetInput `json:"target"`
+	Bytes           uint32            `json:"bytes,omitempty"`
+	MaxInstructions int               `json:"max_instructions,omitempty"`
+	Syntax          string            `json:"syntax,omitempty"`
 }
 
 func disasmInputSchema() *jsonschema.Schema {
@@ -45,7 +45,7 @@ func disasmInputSchema() *jsonschema.Schema {
 					"name": {
 						Type:        "string",
 						Description: "exact kernel function name, hexadecimal address, or optional BPF subprogram name",
-						MinLength:   findIntPtr(1),
+						MinLength:   intPtr(1),
 					},
 					"id": {
 						Type:        "integer",
@@ -86,10 +86,7 @@ func disasm(ctx context.Context, _ *mcp.CallToolRequest, input disasmInput) (*mc
 		MaxInstructions: input.MaxInstructions,
 		Syntax:          input.Syntax,
 	})
-	if err != nil {
-		return nil, mcpapi.DisasmOutput{}, err
-	}
-	return nil, output, nil
+	return nil, output, err
 }
 
 func init() {

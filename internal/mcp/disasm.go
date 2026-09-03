@@ -39,57 +39,58 @@ type DisasmOptions struct {
 
 // DisasmSource identifies the source line associated with an instruction.
 type DisasmSource struct {
-	File   string
-	Line   uint32
-	Column uint32
-	Text   string
-	Inline bool
+	File   string `json:"file,omitempty" jsonschema:"source file path from BPF or kernel debug metadata"`
+	Line   uint32 `json:"line,omitempty" jsonschema:"one-based source line number"`
+	Column uint32 `json:"column,omitempty" jsonschema:"one-based source column number"`
+	Text   string `json:"text,omitempty" jsonschema:"source line text when available"`
+	Inline bool   `json:"inline,omitempty" jsonschema:"true when debug metadata identifies an inlined call site"`
 }
 
 // DisasmLocation identifies the symbol containing an instruction or branch
 // target.
 type DisasmLocation struct {
-	Name        string
-	Address     string
-	OffsetBytes uint64
-	Module      string
-	BPF         bool
-	Source      *DisasmSource
+	Name        string        `json:"name,omitempty" jsonschema:"function or symbol containing the address"`
+	Address     string        `json:"address" jsonschema:"exact hexadecimal target address"`
+	OffsetBytes uint64        `json:"offset_bytes" jsonschema:"offset from the containing function or symbol"`
+	Module      string        `json:"module,omitempty" jsonschema:"kernel module containing the target"`
+	BPF         bool          `json:"bpf,omitempty" jsonschema:"true when the target is a JITed BPF function"`
+	Source      *DisasmSource `json:"source,omitempty" jsonschema:"source line at the branch target when available"`
 }
 
 // DisasmInstruction is one native machine instruction.
 type DisasmInstruction struct {
-	Address      string
-	OffsetBytes  uint64
-	Bytes        string
-	Mnemonic     string
-	Operands     string
-	Source       *DisasmSource
-	BranchTarget *DisasmLocation
+	Address      string          `json:"address" jsonschema:"exact hexadecimal instruction address"`
+	OffsetBytes  uint64          `json:"offset_bytes" jsonschema:"instruction offset from the function start"`
+	Bytes        string          `json:"bytes" jsonschema:"machine instruction bytes as a hexadecimal string"`
+	Mnemonic     string          `json:"mnemonic" jsonschema:"instruction mnemonic"`
+	Operands     string          `json:"operands,omitempty" jsonschema:"architecture-specific instruction operands"`
+	Source       *DisasmSource   `json:"source,omitempty" jsonschema:"source line active at this instruction"`
+	BranchTarget *DisasmLocation `json:"branch_target,omitempty" jsonschema:"resolved direct branch or call target"`
 }
 
 // DisasmFunction contains the bounded instruction stream of one function.
 type DisasmFunction struct {
-	Name              string
-	Prototype         string
-	Address           string
-	SizeBytes         uint64
-	BytesDisassembled uint64
-	Instructions      []DisasmInstruction
-	Truncated         bool
+	Name              string              `json:"name" jsonschema:"function name"`
+	Prototype         string              `json:"prototype,omitempty" jsonschema:"BTF function prototype when available"`
+	Address           string              `json:"address" jsonschema:"exact hexadecimal function start address"`
+	SizeBytes         uint64              `json:"size_bytes" jsonschema:"number of machine-code bytes in the selected function range"`
+	BytesDisassembled uint64              `json:"bytes_disassembled" jsonschema:"number of bytes represented by returned instructions"`
+	Instructions      []DisasmInstruction `json:"instructions" jsonschema:"ordered native machine instructions"`
+	Truncated         bool                `json:"truncated" jsonschema:"true when the instruction limit or undecodable trailing bytes shortened this function"`
 }
 
-// DisasmResult is the structured disassembly of one requested target.
-type DisasmResult struct {
-	Kind         string
-	Name         string
-	ProgramID    uint32
-	ProgramName  string
-	ProgramType  string
-	Architecture string
-	Syntax       string
-	Functions    []DisasmFunction
-	Truncated    bool
+// DisasmOutput contains bounded, structured native disassembly for an MCP
+// request.
+type DisasmOutput struct {
+	Kind         string           `json:"kind" jsonschema:"disassembled target kind"`
+	Name         string           `json:"name" jsonschema:"resolved target name"`
+	ProgramID    uint32           `json:"program_id,omitempty" jsonschema:"loaded BPF program ID"`
+	ProgramName  string           `json:"program_name,omitempty" jsonschema:"kernel-visible BPF program name"`
+	ProgramType  string           `json:"program_type,omitempty" jsonschema:"loaded BPF program type"`
+	Architecture string           `json:"architecture" jsonschema:"native instruction architecture"`
+	Syntax       string           `json:"syntax" jsonschema:"assembly operand syntax"`
+	Functions    []DisasmFunction `json:"functions" jsonschema:"ordered disassembled functions"`
+	Truncated    bool             `json:"truncated" jsonschema:"true when the global instruction limit shortened the result"`
 }
 
 type disasmFunctionRange struct {
@@ -143,29 +144,29 @@ func validateDisasmOptions(options *DisasmOptions) error {
 	return nil
 }
 
-// disassemble returns bounded native disassembly for one kernel function or
-// loaded BPF program.
-func disassemble(ctx context.Context, options DisasmOptions) (DisasmResult, error) {
+// Disasm returns bounded native disassembly for one kernel function or loaded
+// BPF program.
+func Disasm(ctx context.Context, options DisasmOptions) (DisasmOutput, error) {
 	if err := ctx.Err(); err != nil {
-		return DisasmResult{}, err
+		return DisasmOutput{}, err
 	}
 	if err := validateDisasmOptions(&options); err != nil {
-		return DisasmResult{}, err
+		return DisasmOutput{}, err
 	}
 	if runtime.GOARCH != "amd64" && runtime.GOARCH != "arm64" {
-		return DisasmResult{}, fmt.Errorf("unsupported architecture %s", runtime.GOARCH)
+		return DisasmOutput{}, fmt.Errorf("unsupported architecture %s", runtime.GOARCH)
 	}
 
 	disassembler, err := bpfsnoop.NewDisassembler(ctx, options.Syntax)
 	if err != nil {
-		return DisasmResult{}, err
+		return DisasmOutput{}, err
 	}
 	defer disassembler.Close()
 	if err := ctx.Err(); err != nil {
-		return DisasmResult{}, err
+		return DisasmOutput{}, err
 	}
 
-	result := DisasmResult{
+	result := DisasmOutput{
 		Kind:         options.Kind,
 		Architecture: runtime.GOARCH,
 		Syntax:       options.Syntax,
@@ -183,11 +184,11 @@ func disassemble(ctx context.Context, options DisasmOptions) (DisasmResult, erro
 
 func disassembleKernelFunction(ctx context.Context, options DisasmOptions,
 	disassembler *bpfsnoop.Disassembler,
-	result DisasmResult,
-) (DisasmResult, error) {
+	result DisasmOutput,
+) (DisasmOutput, error) {
 	target, err := disassembler.KernelFunction(options.Name, options.Bytes, MaxDisasmBytes)
 	if err != nil {
-		return DisasmResult{}, err
+		return DisasmOutput{}, err
 	}
 
 	ranges := []disasmFunctionRange{{
@@ -200,7 +201,7 @@ func disassembleKernelFunction(ctx context.Context, options DisasmOptions,
 	function, err := disassembleFunctionBytes(ctx, disassembler, target.Bytes, ranges[0],
 		target.Prototype, nil, ranges, &remaining)
 	if err != nil {
-		return DisasmResult{}, err
+		return DisasmOutput{}, err
 	}
 
 	result.Name = target.Name
@@ -211,37 +212,37 @@ func disassembleKernelFunction(ctx context.Context, options DisasmOptions,
 
 func disassembleBPFProgram(ctx context.Context, options DisasmOptions,
 	disassembler *bpfsnoop.Disassembler,
-	result DisasmResult,
-) (DisasmResult, error) {
+	result DisasmOutput,
+) (DisasmOutput, error) {
 	program, err := ebpf.NewProgramFromID(ebpf.ProgramID(options.ProgramID))
 	if err != nil {
-		return DisasmResult{}, fmt.Errorf("failed to open BPF program %d: %w", options.ProgramID, err)
+		return DisasmOutput{}, fmt.Errorf("failed to open BPF program %d: %w", options.ProgramID, err)
 	}
 	defer program.Close()
 
 	info, err := program.Info()
 	if err != nil {
-		return DisasmResult{}, fmt.Errorf("failed to inspect BPF program %d: %w", options.ProgramID, err)
+		return DisasmOutput{}, fmt.Errorf("failed to inspect BPF program %d: %w", options.ProgramID, err)
 	}
 	jitedInsns, ok := info.JitedInsns()
 	if !ok || len(jitedInsns) == 0 {
-		return DisasmResult{}, fmt.Errorf("BPF program %d has no JITed instructions", options.ProgramID)
+		return DisasmOutput{}, fmt.Errorf("BPF program %d has no JITed instructions", options.ProgramID)
 	}
 	jitedAddresses, ok := info.JitedKsymAddrs()
 	if !ok {
-		return DisasmResult{}, fmt.Errorf("BPF program %d has no JITed function addresses", options.ProgramID)
+		return DisasmOutput{}, fmt.Errorf("BPF program %d has no JITed function addresses", options.ProgramID)
 	}
 	jitedLengths, ok := info.JitedFuncLens()
 	if !ok {
-		return DisasmResult{}, fmt.Errorf("BPF program %d has no JITed function lengths", options.ProgramID)
+		return DisasmOutput{}, fmt.Errorf("BPF program %d has no JITed function lengths", options.ProgramID)
 	}
 	funcInfos, err := info.FuncInfos()
 	if err != nil {
-		return DisasmResult{}, fmt.Errorf("BPF program %d has no function metadata: %w",
+		return DisasmOutput{}, fmt.Errorf("BPF program %d has no function metadata: %w",
 			options.ProgramID, err)
 	}
 	if len(funcInfos) != len(jitedAddresses) || len(funcInfos) != len(jitedLengths) {
-		return DisasmResult{}, fmt.Errorf(
+		return DisasmOutput{}, fmt.Errorf(
 			"BPF program %d metadata mismatch: funcs=%d addresses=%d lengths=%d",
 			options.ProgramID, len(funcInfos), len(jitedAddresses), len(jitedLengths),
 		)
@@ -288,11 +289,11 @@ func disassembleBPFProgram(ctx context.Context, options DisasmOptions,
 	matched := false
 	for i, function := range funcInfos {
 		if err := ctx.Err(); err != nil {
-			return DisasmResult{}, err
+			return DisasmOutput{}, err
 		}
 		length := int(jitedLengths[i])
 		if length < 0 || insnOffset+length > len(jitedInsns) {
-			return DisasmResult{}, fmt.Errorf("BPF program %d function %s is out of instruction bounds",
+			return DisasmOutput{}, fmt.Errorf("BPF program %d function %s is out of instruction bounds",
 				options.ProgramID, function.Func.Name)
 		}
 		functionData := jitedInsns[insnOffset : insnOffset+length]
@@ -309,14 +310,14 @@ func disassembleBPFProgram(ctx context.Context, options DisasmOptions,
 		disassembled, err := disassembleFunctionBytes(ctx, disassembler, functionData,
 			ranges[i], formatFuncPrototype(function.Func), sources, ranges, &remaining)
 		if err != nil {
-			return DisasmResult{}, fmt.Errorf("failed to disassemble BPF function %s: %w",
+			return DisasmOutput{}, fmt.Errorf("failed to disassemble BPF function %s: %w",
 				function.Func.Name, err)
 		}
 		result.Functions = append(result.Functions, disassembled)
 		result.Truncated = result.Truncated || disassembled.Truncated
 	}
 	if options.Name != "" && !matched {
-		return DisasmResult{}, fmt.Errorf("BPF program %d has no function %q",
+		return DisasmOutput{}, fmt.Errorf("BPF program %d has no function %q",
 			options.ProgramID, options.Name)
 	}
 	if insnOffset < len(jitedInsns) && options.Name == "" {

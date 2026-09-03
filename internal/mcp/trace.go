@@ -36,24 +36,24 @@ const (
 
 // TraceTarget selects one kernel function, tracepoint, or loaded BPF program.
 type TraceTarget struct {
-	Kind        string
-	Name        string
-	ID          uint32
-	ProgramName string
-	Attach      string
+	Kind        string `json:"kind"`
+	Name        string `json:"name,omitempty"`
+	ID          uint32 `json:"id,omitempty"`
+	ProgramName string `json:"program_name,omitempty"`
+	Attach      string `json:"attach,omitempty"`
 }
 
 // TraceCapture selects the data returned for each event.
 type TraceCapture struct {
-	Arguments           bool
-	Retval              bool
-	Duration            bool
-	KernelStack         bool
-	ArgumentExpressions []string
-	Packet              bool
-	FlameGraph          bool
-	FunctionGraph       bool
-	Instructions        bool
+	Arguments           bool     `json:"arguments,omitempty"`
+	Retval              bool     `json:"retval,omitempty"`
+	Duration            bool     `json:"duration,omitempty"`
+	KernelStack         bool     `json:"kernel_stack,omitempty"`
+	ArgumentExpressions []string `json:"argument_expressions,omitempty"`
+	Packet              bool     `json:"packet,omitempty"`
+	FlameGraph          bool     `json:"flame_graph,omitempty"`
+	FunctionGraph       bool     `json:"function_graph,omitempty"`
+	Instructions        bool     `json:"instructions,omitempty"`
 }
 
 // TraceOptions controls one bounded trace request.
@@ -67,25 +67,6 @@ type TraceOptions struct {
 	FunctionGraphDepth int
 	Duration           time.Duration
 	MaxEvents          int
-}
-
-type traceStats struct {
-	returned   int
-	durationMS int64
-}
-
-type traceFlameGraphEntry struct {
-	stack []string
-	count int
-}
-
-type traceResult struct {
-	status     string
-	stoppedBy  string
-	stats      traceStats
-	events     []bpfsnoop.TraceEvent
-	flameGraph []traceFlameGraphEntry
-	truncated  bool
 }
 
 func normalizeTraceOptions(options TraceOptions) (TraceOptions, error) {
@@ -194,7 +175,7 @@ func backendTraceTargets(targets []TraceTarget) []bpfsnoop.TraceTarget {
 	return result
 }
 
-func handleTraceFlameGraph(event *bpfsnoop.TraceEvent, flameGraph map[string]*traceFlameGraphEntry, keepStack bool) {
+func handleTraceFlameGraph(event *bpfsnoop.TraceEvent, flameGraph map[string]*traceFlameGraphEntryOutput, keepStack bool) {
 	if len(event.KernelStack) == 0 {
 		return
 	}
@@ -212,29 +193,30 @@ func handleTraceFlameGraph(event *bpfsnoop.TraceEvent, flameGraph map[string]*tr
 	key := strings.Join(stack, "\x00")
 	entry := flameGraph[key]
 	if entry == nil {
-		entry = &traceFlameGraphEntry{stack: stack}
+		entry = &traceFlameGraphEntryOutput{Stack: stack}
 		flameGraph[key] = entry
 	}
-	entry.count++
+	entry.Count++
 	if !keepStack {
 		event.KernelStack = nil
 	}
 }
 
-func runTrace(ctx context.Context, options TraceOptions) (traceResult, error) {
+// Trace validates and runs one bounded tracing experiment.
+func Trace(ctx context.Context, options TraceOptions) (TraceOutput, error) {
 	options, err := normalizeTraceOptions(options)
 	if err != nil {
-		return traceResult{}, err
+		return TraceOutput{}, err
 	}
 	if err := ctx.Err(); err != nil {
-		return traceResult{}, err
+		return TraceOutput{}, err
 	}
 
-	result := traceResult{
-		status: "completed",
-		events: make([]bpfsnoop.TraceEvent, 0, options.MaxEvents),
+	output := TraceOutput{
+		Status: "completed",
+		Events: make([]traceEventOutput, 0, options.MaxEvents),
 	}
-	flameGraph := make(map[string]*traceFlameGraphEntry)
+	flameGraph := make(map[string]*traceFlameGraphEntryOutput)
 	runCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
@@ -262,7 +244,7 @@ func runTrace(ctx context.Context, options TraceOptions) (traceResult, error) {
 		if options.Capture.FlameGraph {
 			handleTraceFlameGraph(&event, flameGraph, options.Capture.KernelStack)
 		}
-		result.events = append(result.events, event)
+		output.Events = append(output.Events, makeTraceEventOutput(event))
 		return nil
 	}
 
@@ -293,34 +275,34 @@ func runTrace(ctx context.Context, options TraceOptions) (traceResult, error) {
 		durationTimer.Stop()
 	}
 	if ctx.Err() != nil {
-		return traceResult{}, ctx.Err()
+		return TraceOutput{}, ctx.Err()
 	}
 	if setupExpired.Load() {
-		return traceResult{}, fmt.Errorf("trace did not become ready within %s", traceSetupTimeout)
+		return TraceOutput{}, fmt.Errorf("trace did not become ready within %s", traceSetupTimeout)
 	}
 	if err != nil {
-		return traceResult{}, err
+		return TraceOutput{}, err
 	}
 	if started.IsZero() {
-		return traceResult{}, errors.New("trace exited before becoming ready")
+		return TraceOutput{}, errors.New("trace exited before becoming ready")
 	}
 	for _, entry := range flameGraph {
-		result.flameGraph = append(result.flameGraph, *entry)
+		output.FlameGraph = append(output.FlameGraph, *entry)
 	}
-	slices.SortFunc(result.flameGraph, func(a, b traceFlameGraphEntry) int {
-		return strings.Compare(strings.Join(a.stack, "\x00"), strings.Join(b.stack, "\x00"))
+	slices.SortFunc(output.FlameGraph, func(a, b traceFlameGraphEntryOutput) int {
+		return strings.Compare(strings.Join(a.Stack, "\x00"), strings.Join(b.Stack, "\x00"))
 	})
 
-	result.stats.returned = len(result.events)
-	result.stats.durationMS = time.Since(started).Milliseconds()
+	output.Stats.Returned = len(output.Events)
+	output.Stats.DurationMS = time.Since(started).Milliseconds()
 	if durationExpired.Load() {
-		result.stoppedBy = "duration"
-		return result, nil
+		output.StoppedBy = "duration"
+		return output, nil
 	}
-	if len(result.events) == options.MaxEvents {
-		result.stoppedBy = "max_events"
-		result.truncated = true
-		return result, nil
+	if len(output.Events) == options.MaxEvents {
+		output.StoppedBy = "max_events"
+		output.Truncated = true
+		return output, nil
 	}
-	return traceResult{}, errors.New("trace exited before reaching a trace limit")
+	return TraceOutput{}, errors.New("trace exited before reaching a trace limit")
 }

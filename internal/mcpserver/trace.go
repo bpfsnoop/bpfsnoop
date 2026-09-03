@@ -13,44 +13,24 @@ import (
 	mcpapi "github.com/bpfsnoop/bpfsnoop/internal/mcp"
 )
 
-type traceTarget struct {
-	Kind        string `json:"kind" jsonschema:"target kind: function, tracepoint, or bpf_program"`
-	Name        string `json:"name,omitempty" jsonschema:"kernel function or tracepoint name, or optional exact BPF subprogram name"`
-	ID          uint32 `json:"id,omitempty" jsonschema:"loaded BPF program ID"`
-	ProgramName string `json:"program_name,omitempty" jsonschema:"loaded BPF program name; alternative to id"`
-	Attach      string `json:"attach,omitempty" jsonschema:"function attachment: fentry or kprobe_multi; defaults to fentry"`
-}
-
 type traceFilter struct {
-	PID    uint32 `json:"pid,omitempty" jsonschema:"only trace this process ID"`
-	Comm   string `json:"comm,omitempty" jsonschema:"only trace this exact Linux task name, at most 15 bytes"`
-	Expr   string `json:"expr,omitempty" jsonschema:"bpfsnoop argument filter expression applied to every target"`
-	Packet string `json:"packet,omitempty" jsonschema:"pcap filter applied to skb or XDP packet arguments"`
-}
-
-type traceCapture struct {
-	Arguments           bool     `json:"arguments,omitempty" jsonschema:"include typed function arguments"`
-	Retval              bool     `json:"retval,omitempty" jsonschema:"include the typed function return value"`
-	Duration            bool     `json:"duration,omitempty" jsonschema:"pair entry and exit and include duration_ns; implies retval"`
-	KernelStack         bool     `json:"kernel_stack,omitempty" jsonschema:"include structured kernel stack frames"`
-	ArgumentExpressions []string `json:"argument_expressions,omitempty" jsonschema:"evaluate selected bpfsnoop C expressions for matching targets"`
-	Packet              bool     `json:"packet,omitempty" jsonschema:"include a structured packet tuple"`
-	FlameGraph          bool     `json:"flame_graph,omitempty" jsonschema:"aggregate kernel stacks into structured flame-graph entries"`
-	FunctionGraph       bool     `json:"function_graph,omitempty" jsonschema:"include structured child function calls"`
-	Instructions        bool     `json:"instructions,omitempty" jsonschema:"include the executed native instruction path for kernel functions"`
+	PID    uint32 `json:"pid,omitempty"`
+	Comm   string `json:"comm,omitempty"`
+	Expr   string `json:"expr,omitempty"`
+	Packet string `json:"packet,omitempty"`
 }
 
 type traceLimits struct {
-	DurationMS int `json:"duration_ms,omitempty" jsonschema:"trace duration after attachment; defaults to 3000, minimum 100, maximum 30000"`
-	MaxEvents  int `json:"max_events,omitempty" jsonschema:"maximum returned events; defaults to 100, maximum 1000"`
+	DurationMS int `json:"duration_ms,omitempty"`
+	MaxEvents  int `json:"max_events,omitempty"`
 }
 
 type traceInput struct {
-	Targets            []traceTarget `json:"targets" jsonschema:"one or more kernel-function, tracepoint, or loaded-BPF-program selectors"`
-	Filter             *traceFilter  `json:"filter,omitempty" jsonschema:"optional filters combined with AND semantics"`
-	Capture            *traceCapture `json:"capture,omitempty" jsonschema:"fields to capture; defaults to arguments and retval"`
-	Limits             *traceLimits  `json:"limits,omitempty" jsonschema:"bounded execution limits"`
-	FunctionGraphDepth int           `json:"function_graph_depth,omitempty" jsonschema:"maximum function graph depth; defaults to 3, maximum 20"`
+	Targets            []mcpapi.TraceTarget `json:"targets"`
+	Filter             *traceFilter         `json:"filter,omitempty"`
+	Capture            *mcpapi.TraceCapture `json:"capture,omitempty"`
+	Limits             *traceLimits         `json:"limits,omitempty"`
+	FunctionGraphDepth int                  `json:"function_graph_depth,omitempty"`
 }
 
 func traceInputSchema() *jsonschema.Schema {
@@ -60,7 +40,7 @@ func traceInputSchema() *jsonschema.Schema {
 	maxEvents := float64(mcpapi.MaxTraceEvents)
 	maxGraphDepth := float64(mcpapi.MaxTraceFunctionDepth)
 	minItems := 1
-	minLength, maxCommLength := 1, 15
+	minLength, maxCommLength := 1, mcpapi.MaxTraceCommLength
 	return &jsonschema.Schema{
 		Type:     "object",
 		Required: []string{"targets"},
@@ -132,16 +112,7 @@ func traceInputSchema() *jsonschema.Schema {
 }
 
 func trace(ctx context.Context, _ *mcp.CallToolRequest, input traceInput) (*mcp.CallToolResult, mcpapi.TraceOutput, error) {
-	options := mcpapi.TraceOptions{Targets: make([]mcpapi.TraceTarget, 0, len(input.Targets))}
-	for _, target := range input.Targets {
-		options.Targets = append(options.Targets, mcpapi.TraceTarget{
-			Kind:        target.Kind,
-			Name:        target.Name,
-			ID:          target.ID,
-			ProgramName: target.ProgramName,
-			Attach:      target.Attach,
-		})
-	}
+	options := mcpapi.TraceOptions{Targets: input.Targets}
 	if input.Filter != nil {
 		options.PID = input.Filter.PID
 		options.Comm = input.Filter.Comm
@@ -152,17 +123,7 @@ func trace(ctx context.Context, _ *mcp.CallToolRequest, input traceInput) (*mcp.
 		options.Capture.Arguments = true
 		options.Capture.Retval = true
 	} else {
-		options.Capture = mcpapi.TraceCapture{
-			Arguments:           input.Capture.Arguments,
-			Retval:              input.Capture.Retval,
-			Duration:            input.Capture.Duration,
-			KernelStack:         input.Capture.KernelStack,
-			ArgumentExpressions: input.Capture.ArgumentExpressions,
-			Packet:              input.Capture.Packet,
-			FlameGraph:          input.Capture.FlameGraph,
-			FunctionGraph:       input.Capture.FunctionGraph,
-			Instructions:        input.Capture.Instructions,
-		}
+		options.Capture = *input.Capture
 	}
 	options.FunctionGraphDepth = input.FunctionGraphDepth
 	if input.Limits != nil {
@@ -171,10 +132,7 @@ func trace(ctx context.Context, _ *mcp.CallToolRequest, input traceInput) (*mcp.
 	}
 
 	result, err := mcpapi.Trace(ctx, options)
-	if err != nil {
-		return nil, mcpapi.TraceOutput{}, err
-	}
-	return nil, result, nil
+	return nil, result, err
 }
 
 func init() {

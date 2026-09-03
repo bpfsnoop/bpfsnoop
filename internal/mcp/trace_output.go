@@ -3,11 +3,7 @@
 
 package mcp
 
-import (
-	"context"
-
-	"github.com/bpfsnoop/bpfsnoop/internal/bpfsnoop"
-)
+import "github.com/bpfsnoop/bpfsnoop/internal/bpfsnoop"
 
 type traceTargetOutput struct {
 	Kind string `json:"kind" jsonschema:"target kind: function, tracepoint, or bpf_program"`
@@ -246,36 +242,4 @@ func makeTraceEventOutput(event bpfsnoop.TraceEvent) traceEventOutput {
 		FunctionGraph:     makeTraceFunctionGraphOutput(event.FunctionGraph),
 		Instructions:      makeTraceInstructionsOutput(event.Instructions),
 	}
-}
-
-// Trace validates, runs, and converts one bounded tracing experiment.
-func Trace(ctx context.Context, options TraceOptions) (TraceOutput, error) {
-	result, err := runTrace(ctx, options)
-	if err != nil {
-		return TraceOutput{}, err
-	}
-
-	output := TraceOutput{
-		Status:    result.status,
-		StoppedBy: result.stoppedBy,
-		Stats: traceStatsOutput{
-			Returned:   result.stats.returned,
-			DurationMS: result.stats.durationMS,
-		},
-		Events:    make([]traceEventOutput, 0, len(result.events)),
-		Truncated: result.truncated,
-	}
-	for _, event := range result.events {
-		output.Events = append(output.Events, makeTraceEventOutput(event))
-	}
-	if len(result.flameGraph) != 0 {
-		output.FlameGraph = make([]traceFlameGraphEntryOutput, 0, len(result.flameGraph))
-		for _, entry := range result.flameGraph {
-			output.FlameGraph = append(output.FlameGraph, traceFlameGraphEntryOutput{
-				Stack: entry.stack,
-				Count: entry.count,
-			})
-		}
-	}
-	return output, nil
 }

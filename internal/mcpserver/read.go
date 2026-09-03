@@ -13,7 +13,7 @@ import (
 )
 
 type readInput struct {
-	Expressions []string `json:"expressions" jsonschema:"one or more kernel-memory C expressions to evaluate"`
+	Expressions []string `json:"expressions"`
 }
 
 func readInputSchema() *jsonschema.Schema {
@@ -37,11 +37,8 @@ func readInputSchema() *jsonschema.Schema {
 }
 
 func read(ctx context.Context, _ *mcp.CallToolRequest, input readInput) (*mcp.CallToolResult, mcpapi.ReadOutput, error) {
-	output, err := mcpapi.Read(ctx, mcpapi.ReadOptions{Expressions: input.Expressions})
-	if err != nil {
-		return nil, mcpapi.ReadOutput{}, err
-	}
-	return nil, output, nil
+	output, err := mcpapi.Read(ctx, input.Expressions)
+	return nil, output, err
 }
 
 func init() {

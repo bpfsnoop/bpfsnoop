@@ -38,97 +38,97 @@ const (
 
 // FindOptions controls kernel object discovery.
 type FindOptions struct {
-	Pattern            string
-	Kind               string
-	Limit              int
-	IncludeXlatedInsns bool
-	IncludeJitedInsns  bool
+	Pattern            string `json:"pattern"`
+	Kind               string `json:"kind,omitempty"`
+	Limit              int    `json:"limit,omitempty"`
+	IncludeXlatedInsns bool   `json:"include_xlated_insns,omitempty"`
+	IncludeJitedInsns  bool   `json:"include_jited_insns,omitempty"`
 }
 
 // FindBTFMember describes one immediate member of a BTF struct or union.
 type FindBTFMember struct {
-	Name         string
-	Type         string
-	OffsetBits   uint32
-	BitfieldSize uint32
+	Name         string `json:"name" jsonschema:"BTF member name; empty for an anonymous member"`
+	Type         string `json:"type" jsonschema:"BTF member type"`
+	OffsetBits   uint32 `json:"offset_bits" jsonschema:"member offset from the containing type in bits"`
+	BitfieldSize uint32 `json:"bitfield_size,omitempty" jsonschema:"bitfield width in bits; omitted for non-bitfield members"`
 }
 
 // FindBTFArgument describes one argument of a BTF function or function
 // prototype.
 type FindBTFArgument struct {
-	Name string
-	Type string
+	Name string `json:"name" jsonschema:"BTF function argument name; empty when unnamed"`
+	Type string `json:"type" jsonschema:"BTF function argument type"`
 }
 
 // FindBTFEnumValue describes one named BTF enum value.
 type FindBTFEnumValue struct {
-	Name  string
-	Value string
+	Name  string `json:"name" jsonschema:"BTF enum value name"`
+	Value string `json:"value" jsonschema:"BTF enum value as an exact decimal integer"`
 }
 
 // FindBTFVariable describes one entry in a BTF data section.
 type FindBTFVariable struct {
-	Kind        string
-	Name        string
-	Type        string
-	OffsetBytes uint32
-	SizeBytes   uint32
+	Kind        string `json:"kind" jsonschema:"BTF data-section entry kind"`
+	Name        string `json:"name" jsonschema:"BTF variable or function name"`
+	Type        string `json:"type" jsonschema:"BTF variable type or function prototype"`
+	OffsetBytes uint32 `json:"offset_bytes" jsonschema:"offset in the BTF data section in bytes"`
+	SizeBytes   uint32 `json:"size_bytes" jsonschema:"size in the BTF data section in bytes"`
 }
 
 // FindBPFProgramFunction describes one BTF function record associated with a
 // loaded BPF program.
 type FindBPFProgramFunction struct {
-	InstructionOffset uint64
-	Name              string
-	Prototype         string
+	InstructionOffset uint64 `json:"instruction_offset" jsonschema:"raw BPF instruction offset of the function record"`
+	Name              string `json:"name" jsonschema:"BPF function name"`
+	Prototype         string `json:"prototype" jsonschema:"BTF function prototype"`
 }
 
 // FindBPFProgramLine describes one BTF line record associated with a loaded
 // BPF program.
 type FindBPFProgramLine struct {
-	InstructionOffset uint64
-	File              string
-	Line              uint32
-	Column            uint32
-	Text              string
+	InstructionOffset uint64 `json:"instruction_offset" jsonschema:"raw BPF instruction offset where the source line becomes active"`
+	File              string `json:"file,omitempty" jsonschema:"source file path"`
+	Line              uint32 `json:"line,omitempty" jsonschema:"one-based source line number"`
+	Column            uint32 `json:"column,omitempty" jsonschema:"one-based source column number"`
+	Text              string `json:"text,omitempty" jsonschema:"source line text when available"`
 }
 
 // FindBPFInstruction describes one kernel-translated eBPF instruction.
 type FindBPFInstruction struct {
-	InstructionOffset uint64
-	Width             uint32
-	OpCode            string
-	Dst               string
-	Src               string
-	Offset            int16
-	Constant          string
-	Symbol            string
-	Reference         string
-	Text              string
-	Function          string
-	Prototype         string
-	Source            *FindBPFProgramLine
+	InstructionOffset uint64              `json:"instruction_offset" jsonschema:"raw eBPF instruction offset accounting for double-wide instructions"`
+	Width             uint32              `json:"width" jsonschema:"instruction width in raw eBPF instruction slots"`
+	OpCode            string              `json:"opcode" jsonschema:"decoded eBPF opcode"`
+	Dst               string              `json:"dst" jsonschema:"raw destination register"`
+	Src               string              `json:"src" jsonschema:"raw source register"`
+	Offset            int16               `json:"offset" jsonschema:"raw signed instruction offset field"`
+	Constant          string              `json:"constant" jsonschema:"raw signed instruction constant as an exact decimal integer"`
+	Symbol            string              `json:"symbol,omitempty" jsonschema:"BPF symbol beginning at this instruction"`
+	Reference         string              `json:"reference,omitempty" jsonschema:"BPF symbol or map referenced by this instruction"`
+	Text              string              `json:"text" jsonschema:"human-readable decoded eBPF instruction"`
+	Function          string              `json:"function,omitempty" jsonschema:"BTF function beginning at this instruction"`
+	Prototype         string              `json:"prototype,omitempty" jsonschema:"BTF function prototype when a function begins here"`
+	Source            *FindBPFProgramLine `json:"source,omitempty" jsonschema:"BTF source line active at this instruction"`
 }
 
-// FindBPFJitedFunction contains the native instruction bytes for one JITed
+// findBPFJitedFunction contains the native instruction bytes for one JITed
 // BPF function.
-type FindBPFJitedFunction struct {
+type findBPFJitedFunction struct {
 	Name    string
 	Address uint64
 	Bytes   []byte
 }
 
-// FindKernelFunctionSymbol describes one kallsyms address associated with a
+// findKernelFunctionSymbol describes one kallsyms address associated with a
 // kernel function. A name can have more than one address across the kernel and
 // its modules.
-type FindKernelFunctionSymbol struct {
+type findKernelFunctionSymbol struct {
 	Address   uint64
 	SizeBytes uint64
 	Module    string
 }
 
-// FindMatch describes one kernel object found by FindObjects.
-type FindMatch struct {
+// findMatch describes one kernel object found by findObjects.
+type findMatch struct {
 	Kind                     string
 	Name                     string
 	Module                   string
@@ -153,10 +153,10 @@ type FindMatch struct {
 	ProgramFunctions         []FindBPFProgramFunction
 	ProgramLines             []FindBPFProgramLine
 	ProgramXlatedInsns       []FindBPFInstruction
-	ProgramJitedInsns        []FindBPFJitedFunction
+	ProgramJitedInsns        []findBPFJitedFunction
 	Traceable                bool
 	FunctionBTFID            *uint32
-	FunctionSymbols          []FindKernelFunctionSymbol
+	FunctionSymbols          []findKernelFunctionSymbol
 	FunctionFentry           bool
 	FunctionFexit            bool
 	FunctionKprobeMultiEntry bool
@@ -181,9 +181,9 @@ type FindMatch struct {
 	function *btf.Func
 }
 
-// FindResult contains bounded, deterministically ordered discovery results.
-type FindResult struct {
-	Matches   []FindMatch
+// findResult contains bounded, deterministically ordered discovery results.
+type findResult struct {
+	Matches   []findMatch
 	Total     int
 	Truncated bool
 }
@@ -192,14 +192,14 @@ type findCollector struct {
 	limit   int
 	total   int
 	seen    map[string]struct{}
-	matches []FindMatch
+	matches []findMatch
 }
 
 func newFindCollector(limit int) *findCollector {
 	return &findCollector{
 		limit:   limit,
 		seen:    make(map[string]struct{}),
-		matches: make([]FindMatch, 0, limit),
+		matches: make([]findMatch, 0, limit),
 	}
 }
 
@@ -218,7 +218,7 @@ func findKindRank(kind string) int {
 	}
 }
 
-func compareFindMatch(a, b FindMatch) int {
+func compareFindMatch(a, b findMatch) int {
 	if cmp := findKindRank(a.Kind) - findKindRank(b.Kind); cmp != 0 {
 		return cmp
 	}
@@ -240,7 +240,7 @@ func compareFindMatch(a, b FindMatch) int {
 	return strings.Compare(a.BTFKind, b.BTFKind)
 }
 
-func (c *findCollector) add(match FindMatch) {
+func (c *findCollector) add(match findMatch) {
 	key := fmt.Sprintf("%s\x00%s\x00%s\x00%d\x00%s\x00%s",
 		match.Kind, match.Name, match.Module, match.ID, match.ProgramName, match.BTFKind)
 	if _, ok := c.seen[key]; ok {
@@ -253,7 +253,7 @@ func (c *findCollector) add(match FindMatch) {
 		return compareFindMatch(c.matches[i], match) >= 0
 	})
 	if len(c.matches) < c.limit {
-		c.matches = append(c.matches, FindMatch{})
+		c.matches = append(c.matches, findMatch{})
 		copy(c.matches[idx+1:], c.matches[idx:])
 		c.matches[idx] = match
 		return
@@ -262,14 +262,14 @@ func (c *findCollector) add(match FindMatch) {
 		return
 	}
 
-	c.matches = append(c.matches, FindMatch{})
+	c.matches = append(c.matches, findMatch{})
 	copy(c.matches[idx+1:], c.matches[idx:c.limit])
 	c.matches[idx] = match
 	c.matches = c.matches[:c.limit]
 }
 
-func (c *findCollector) result() FindResult {
-	return FindResult{
+func (c *findCollector) result() findResult {
+	return findResult{
 		Matches:   c.matches,
 		Total:     c.total,
 		Truncated: c.total > len(c.matches),
@@ -405,7 +405,7 @@ func btfDetailType(typ btf.Type) btf.Type {
 	}
 }
 
-func populateBTFDetails(match *FindMatch, typ btf.Type) {
+func populateBTFDetails(match *findMatch, typ btf.Type) {
 	switch value := typ.(type) {
 	case *btf.Typedef:
 		match.BTFTargetType = btfx.Repr(value.Type)
@@ -535,8 +535,8 @@ func populateBTFDetails(match *FindMatch, typ btf.Type) {
 	}
 }
 
-func newBTFTypeMatch(name, module string, typ btf.Type) FindMatch {
-	match := FindMatch{
+func newBTFTypeMatch(name, module string, typ btf.Type) findMatch {
+	match := findMatch{
 		Kind:    FindKindBTFType,
 		Name:    name,
 		Module:  module,
@@ -597,7 +597,7 @@ func addKernelFunctionMatch(module string, spec *btf.Spec, fn *btf.Func, ksyms *
 	if len(info.Symbols) != 0 {
 		functionModule = info.Symbols[0].Module
 	}
-	match := FindMatch{
+	match := findMatch{
 		Kind:      FindKindFunction,
 		Name:      fn.Name,
 		Module:    functionModule,
@@ -699,7 +699,7 @@ func findKernelBTFObjects(ctx context.Context, matcher glob.Glob, findFunctions,
 	})
 }
 
-func populateKernelFunctionMetadata(ctx context.Context, result *FindResult, ksyms *bpfsnoop.Kallsyms) error {
+func populateKernelFunctionMetadata(ctx context.Context, result *findResult, ksyms *bpfsnoop.Kallsyms) error {
 	hasFunction := false
 	for i := range result.Matches {
 		if result.Matches[i].Kind == FindKindFunction {
@@ -736,9 +736,9 @@ func populateKernelFunctionMetadata(ctx context.Context, result *FindResult, ksy
 			continue
 		}
 		info := bpfsnoop.FindKernelFunction(match.function, ksyms)
-		match.FunctionSymbols = make([]FindKernelFunctionSymbol, len(info.Symbols))
+		match.FunctionSymbols = make([]findKernelFunctionSymbol, len(info.Symbols))
 		for i, symbol := range info.Symbols {
-			match.FunctionSymbols[i] = FindKernelFunctionSymbol(symbol)
+			match.FunctionSymbols[i] = findKernelFunctionSymbol(symbol)
 		}
 		match.Traceable = false
 		if !info.Traceable {
@@ -802,7 +802,7 @@ func findTracepoints(ctx context.Context, pattern string, ksyms *bpfsnoop.Kallsy
 		return err
 	}
 	for name, tracepoint := range tracepoints {
-		collector.add(FindMatch{
+		collector.add(findMatch{
 			Kind:      FindKindTracepoint,
 			Name:      name,
 			Prototype: formatFuncPrototype(tracepoint.Func),
@@ -824,7 +824,7 @@ func bpfProgramLoadedAt(loadTime time.Duration) string {
 	return loadedAt.Format(time.RFC3339Nano)
 }
 
-func populateBPFProgramMetadata(match *FindMatch, info *ebpf.ProgramInfo, options FindOptions) error {
+func populateBPFProgramMetadata(match *findMatch, info *ebpf.ProgramInfo, options FindOptions) error {
 	if uid, ok := info.CreatedByUID(); ok {
 		match.ProgramUID = findValuePtr(uid)
 	}
@@ -929,7 +929,7 @@ func populateBPFProgramMetadata(match *FindMatch, info *ebpf.ProgramInfo, option
 	}
 
 	if options.IncludeJitedInsns {
-		match.ProgramJitedInsns = make([]FindBPFJitedFunction, 0)
+		match.ProgramJitedInsns = make([]findBPFJitedFunction, 0)
 		instructions, ok := info.JitedInsns()
 		if !ok {
 			return fmt.Errorf("BPF program %d has no JITed instructions", match.ID)
@@ -941,7 +941,7 @@ func populateBPFProgramMetadata(match *FindMatch, info *ebpf.ProgramInfo, option
 				if end > len(instructions) {
 					return fmt.Errorf("BPF program %d JITed function lengths exceed instruction payload", match.ID)
 				}
-				function := FindBPFJitedFunction{
+				function := findBPFJitedFunction{
 					Name:  match.ProgramFunctions[i].Name,
 					Bytes: slices.Clone(instructions[offset:end]),
 				}
@@ -959,7 +959,7 @@ func populateBPFProgramMetadata(match *FindMatch, info *ebpf.ProgramInfo, option
 			if len(match.ProgramKsyms) != 0 {
 				address = match.ProgramKsyms[0]
 			}
-			match.ProgramJitedInsns = append(match.ProgramJitedInsns, FindBPFJitedFunction{
+			match.ProgramJitedInsns = append(match.ProgramJitedInsns, findBPFJitedFunction{
 				Name:    match.Name,
 				Address: address,
 				Bytes:   slices.Clone(instructions),
@@ -1014,7 +1014,7 @@ func findBPFPrograms(ctx context.Context, matcher glob.Glob, options FindOptions
 		if name == "" {
 			name = idText
 		}
-		match := FindMatch{
+		match := findMatch{
 			Kind:        FindKindBPFProgram,
 			Name:        name,
 			ID:          uint32(id),
@@ -1031,16 +1031,16 @@ func findBPFPrograms(ctx context.Context, matcher glob.Glob, options FindOptions
 }
 
 // findObjects discovers kernel and BPF objects matching a name or glob.
-func findObjects(ctx context.Context, options FindOptions) (FindResult, error) {
+func findObjects(ctx context.Context, options FindOptions) (findResult, error) {
 	if err := ctx.Err(); err != nil {
-		return FindResult{}, err
+		return findResult{}, err
 	}
 	if err := validateFindOptions(&options); err != nil {
-		return FindResult{}, err
+		return findResult{}, err
 	}
 	matcher, err := glob.Compile(options.Pattern)
 	if err != nil {
-		return FindResult{}, fmt.Errorf("invalid find pattern %q: %w", options.Pattern, err)
+		return findResult{}, fmt.Errorf("invalid find pattern %q: %w", options.Pattern, err)
 	}
 
 	findFunctions := wantsFindKind(options.Kind, FindKindFunction)
@@ -1051,7 +1051,7 @@ func findObjects(ctx context.Context, options FindOptions) (FindResult, error) {
 	if findFunctions || findTracepoint {
 		ksyms, err = bpfsnoop.NewKallsyms()
 		if err != nil {
-			return FindResult{}, err
+			return findResult{}, err
 		}
 	}
 
@@ -1064,24 +1064,24 @@ func findObjects(ctx context.Context, options FindOptions) (FindResult, error) {
 			err = findKernelBTFObjects(ctx, matcher, findFunctions, findTypes, ksyms, collector)
 		}
 		if err != nil {
-			return FindResult{}, err
+			return findResult{}, err
 		}
 	}
 	if findTracepoint {
 		if err := findTracepoints(ctx, options.Pattern, ksyms, collector); err != nil {
-			return FindResult{}, err
+			return findResult{}, err
 		}
 	}
 	if findPrograms {
 		if err := findBPFPrograms(ctx, matcher, options, collector); err != nil {
-			return FindResult{}, err
+			return findResult{}, err
 		}
 	}
 
 	result := collector.result()
 	if findFunctions {
 		if err := populateKernelFunctionMetadata(ctx, &result, ksyms); err != nil {
-			return FindResult{}, err
+			return findResult{}, err
 		}
 	}
 	return result, nil

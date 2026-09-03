@@ -34,6 +34,10 @@ var server = mcp.NewServer(&mcp.Implementation{
 	Instructions: serverInstructions,
 })
 
+func intPtr(value int) *int {
+	return &value
+}
+
 type closeOnceReadWriteCloser struct {
 	io.ReadWriteCloser
 	once sync.Once
