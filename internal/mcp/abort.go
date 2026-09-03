@@ -6,13 +6,19 @@ package mcp
 import (
 	"context"
 	"errors"
+	"slices"
 	"sync"
+	"time"
 )
 
 type activeTraceSession struct {
-	cancel  context.CancelFunc
-	aborted bool
-	done    chan struct{}
+	cancel    context.CancelFunc
+	aborted   bool
+	done      chan struct{}
+	startedAt time.Time
+	readyAt   time.Time
+	events    int
+	options   TraceOptions
 }
 
 var activeTrace struct {
@@ -20,7 +26,7 @@ var activeTrace struct {
 	session *activeTraceSession
 }
 
-func beginTrace(ctx context.Context) (context.Context, *activeTraceSession, error) {
+func beginTrace(ctx context.Context, options TraceOptions) (context.Context, *activeTraceSession, error) {
 	activeTrace.Lock()
 	defer activeTrace.Unlock()
 	if activeTrace.session != nil {
@@ -28,9 +34,32 @@ func beginTrace(ctx context.Context) (context.Context, *activeTraceSession, erro
 	}
 
 	runCtx, cancel := context.WithCancel(ctx)
-	session := &activeTraceSession{cancel: cancel, done: make(chan struct{})}
+	options.Targets = slices.Clone(options.Targets)
+	options.Capture.ArgumentExpressions = slices.Clone(options.Capture.ArgumentExpressions)
+	session := &activeTraceSession{
+		cancel:    cancel,
+		done:      make(chan struct{}),
+		startedAt: time.Now(),
+		options:   options,
+	}
 	activeTrace.session = session
 	return runCtx, session, nil
+}
+
+func traceReady(session *activeTraceSession) {
+	activeTrace.Lock()
+	defer activeTrace.Unlock()
+	if activeTrace.session == session {
+		session.readyAt = time.Now()
+	}
+}
+
+func traceEventCollected(session *activeTraceSession) {
+	activeTrace.Lock()
+	defer activeTrace.Unlock()
+	if activeTrace.session == session {
+		session.events++
+	}
 }
 
 func finishTrace(session *activeTraceSession) bool {

@@ -217,7 +217,7 @@ func Trace(ctx context.Context, options TraceOptions) (TraceOutput, error) {
 		Events: make([]traceEventOutput, 0, options.MaxEvents),
 	}
 	flameGraph := make(map[string]*traceFlameGraphEntryOutput)
-	runCtx, session, err := beginTrace(ctx)
+	runCtx, session, err := beginTrace(ctx, options)
 	if err != nil {
 		return TraceOutput{}, err
 	}
@@ -237,6 +237,7 @@ func Trace(ctx context.Context, options TraceOptions) (TraceOutput, error) {
 			return
 		}
 		started = time.Now()
+		traceReady(session)
 		durationTimer = time.AfterFunc(options.Duration, func() {
 			durationExpired.Store(true)
 			session.cancel()
@@ -247,6 +248,7 @@ func Trace(ctx context.Context, options TraceOptions) (TraceOutput, error) {
 			handleTraceFlameGraph(&event, flameGraph, options.Capture.KernelStack)
 		}
 		output.Events = append(output.Events, makeTraceEventOutput(event))
+		traceEventCollected(session)
 		return nil
 	}
 

@@ -61,3 +61,12 @@ arguments: {"targets":[{"kind":"function","name":"vfs_read"}],"filter":{"comm":"
 match: "stopped_by":"abort"
 abort-after: 2s
 timeout: 20s
+
+---
+
+# Report an idle daemon when no trace is active.
+name: mcp::status
+tag: mcp,status
+tool: status
+arguments: {}
+match: "status":"idle"

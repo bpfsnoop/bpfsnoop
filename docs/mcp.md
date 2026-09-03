@@ -20,9 +20,10 @@ The initial tool surface is:
 - `disasm`: inspect bounded native disassembly for a kernel function or loaded
   BPF program;
 - `trace`: run one bounded tracing experiment and return structured events;
+- `status`: inspect the active tracing session;
 - `abort`: cancel the active trace without closing the MCP session.
 
-All six tools are available. `trace` supports kernel-function, tracepoint, and
+All seven tools are available. `trace` supports kernel-function, tracepoint, and
 loaded BPF program targets.
 
 `read` accepts one or more typed C expressions and returns ordered records with
@@ -68,6 +69,11 @@ Use `abort` when a trace is waiting for an event that cannot be triggered. It
 waits for tracing resources to be released, leaves the MCP session connected,
 and reports whether an active trace was found. The interrupted `trace` call
 returns any events already collected with `status: "aborted"`.
+
+Use `status` to check whether the daemon is idle or tracing. For an active
+trace, it reports the setup, running, or aborting state together with elapsed
+time, the number of collected events, and the normalized targets, filters,
+captures, and limits. Status is a snapshot and does not interrupt the trace.
 
 `find` accepts an exact name or glob pattern. Its optional `kind` narrows the
 search to `function`, `tracepoint`, `bpf_program`, or `btf_type`; omitting it
