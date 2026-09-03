@@ -1,0 +1,52 @@
+# Copyright 2026 Leon Hwang.
+# SPDX-License-Identifier: Apache-2.0
+
+# Inspect the kernel through a fresh MCP frontend session.
+name: mcp::kernel_info
+tag: mcp,kernel_info
+tool: kernel_info
+arguments: {}
+match: "kprobe.multi":
+timeout: 10s
+
+---
+
+# Find a stable kernel function and verify structured function metadata.
+name: mcp::find
+tag: mcp,find
+tool: find
+arguments: {"pattern":"vfs_read","kind":"function","limit":1}
+match: "name":"vfs_read"
+timeout: 15s
+
+---
+
+# Verify that an invalid kernel address is rejected through MCP.
+name: mcp::read
+tag: mcp,read
+tool: read
+arguments: {"expressions":["*(int *)0"]}
+match: failed to read kernel data
+expect-error: true
+timeout: 15s
+
+---
+
+# Disassemble a bounded portion of a stable kernel function.
+name: mcp::disasm
+tag: mcp,disasm
+tool: disasm
+arguments: {"target":{"kind":"function","name":"vfs_read"},"bytes":64,"max_instructions":8}
+match: "instructions":[
+timeout: 15s
+
+---
+
+# Repeated reads ensure the trigger remains active until attachment completes.
+name: mcp::trace
+tag: mcp,trace
+tool: trace
+arguments: {"targets":[{"kind":"function","name":"vfs_read"}],"filter":{"comm":"dd"},"capture":{"arguments":true,"retval":true},"limits":{"duration_ms":10000,"max_events":1}}
+match: "comm":"dd"
+timeout: 30s
+trigger: while true; do dd if=/proc/version of=/dev/null bs=1 count=1 >/dev/null 2>&1; done
