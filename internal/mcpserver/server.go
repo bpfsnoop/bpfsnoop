@@ -27,18 +27,12 @@ bounded native-code inspection, and use trace only for a bounded tracing
 experiment. Refine an investigation by issuing another trace; the server does
 not keep hidden tracing sessions.`
 
-var errNotImplemented = errors.New("this bpfsnoop MCP tool is not implemented yet")
-
 var server = mcp.NewServer(&mcp.Implementation{
 	Name:    "bpfsnoop",
 	Version: "dev",
 }, &mcp.ServerOptions{
 	Instructions: serverInstructions,
 })
-
-func notImplemented[In any](context.Context, *mcp.CallToolRequest, In) (*mcp.CallToolResult, any, error) {
-	return nil, nil, errNotImplemented
-}
 
 type closeOnceReadWriteCloser struct {
 	io.ReadWriteCloser

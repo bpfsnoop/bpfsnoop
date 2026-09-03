@@ -21,8 +21,8 @@ The initial tool surface is:
   BPF program;
 - `trace`: run one bounded tracing experiment and return structured events.
 
-`kernel_info`, `find`, `read`, and `disasm` are available. The `trace` tool
-currently returns a not-implemented error until its backend is added.
+All five tools are available. `trace` supports kernel-function, tracepoint, and
+loaded BPF program targets.
 
 `read` accepts one or more typed C expressions and returns ordered records with
 separate `expression`, `type`, and `value` fields. Values use native JSON types:
@@ -37,6 +37,31 @@ Resolved direct branch and call targets also carry their symbol, offset, and
 source location. BPF metadata can include file, line, column, and source text;
 kernel and module DWARF can additionally identify inlined locations. Missing
 debug symbols do not prevent disassembly.
+
+`trace` runs one bounded experiment. It accepts kernel-function names or globs,
+tracepoint names, and loaded BPF program IDs or program names with an optional
+exact subprogram name. Function targets default to fentry/fexit and may select
+`kprobe_multi` explicitly. fentry/fexit requests may resolve to at most 200
+kernel functions. A kprobe.multi request has no function-count cap, and the
+number of loaded BPF program targets is not capped. kprobe.multi without a
+common typed argument does not support an argument expression filter.
+
+Optional filters select PID, exact `comm`, a bpfsnoop argument expression, and
+a pcap packet expression. Capture switches control typed arguments, selected
+argument expressions, return values, duration, structured packet tuples,
+kernel stacks, aggregated flame graphs, function graphs, and executed native
+instructions. Omitting `capture` returns arguments and the return value.
+Requesting duration pairs function entry and exit and implies a return value.
+Function-graph depth defaults to 3 and is capped at 20. Executed instructions
+require fentry kernel-function targets and cannot be combined with a function
+graph.
+
+The duration defaults to 3000 ms and must be between 100 and 30000 ms. The
+event limit defaults to 100 and must be between 1 and 1000. Duration starts
+only after all tracing programs have attached. Results report `stopped_by` as
+`duration` or `max_events`, statistics, and ordered structured events. Values
+retain their BTF type and native JSON representation where possible; pointers
+and integers outside JSON's exact range are strings.
 
 `find` accepts an exact name or glob pattern. Its optional `kind` narrows the
 search to `function`, `tracepoint`, `bpf_program`, or `btf_type`; omitting it

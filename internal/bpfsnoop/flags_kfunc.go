@@ -100,8 +100,8 @@ func parseKfuncFlag(k string) (KfuncFlag, error) {
 		return kf, fmt.Errorf("invalid kfunc flag: %s", k)
 	}
 
-	if kf.multi && kf.typ == "" {
-		return kf, fmt.Errorf("multi mode requires typed argument, e.g. '(m)*:(struct sk_buff *)skb', got '%s'", k)
+	if kf.multi && kf.typ == "" && (len(filterArg) != 0 || filterPkt != "" || len(outputArg) != 0 || outputPkt) {
+		return kf, fmt.Errorf("multi mode requires a typed argument when filtering or capturing selected arguments, e.g. '(m)*:(struct sk_buff *)skb', got '%s'", k)
 	}
 
 	if kf.multi {

@@ -1,7 +1,7 @@
 // Copyright 2026 Leon Hwang.
 // SPDX-License-Identifier: Apache-2.0
 
-package mcp
+package bpfsnoop
 
 import (
 	"encoding/binary"
@@ -13,28 +13,27 @@ import (
 	"github.com/Asphaltt/mybtf"
 	"github.com/cilium/ebpf/btf"
 
-	"github.com/bpfsnoop/bpfsnoop/internal/bpfsnoop"
 	"github.com/bpfsnoop/bpfsnoop/internal/btfx"
 	"github.com/bpfsnoop/bpfsnoop/internal/cc"
 	"github.com/bpfsnoop/bpfsnoop/internal/strx"
 )
 
-func kernelReadValue(result *bpfsnoop.ReadKernelResult) (any, error) {
-	if result.Size <= 0 || len(result.Buffer) < result.Size {
-		return nil, fmt.Errorf("kernel read returned %d bytes, need %d", len(result.Buffer), result.Size)
+func kernelReadValue(arg *funcArgumentOutput, buff []byte) (any, error) {
+	if arg.size <= 0 || len(buff) < arg.size {
+		return nil, fmt.Errorf("kernel read returned %d bytes, need %d", len(buff), arg.size)
 	}
-	if result.Buffer[result.Size-1] != 0 {
+	if buff[arg.size-1] != 0 {
 		return nil, nil
 	}
 
-	data := result.Buffer[:result.DataSize]
+	data := buff[:arg.trueDataSize]
 	switch {
-	case result.String:
+	case arg.isString:
 		return strx.NullTerminated(data), nil
-	case result.BufferValue:
+	case arg.isBuf:
 		return bytesAsNumbers(data), nil
-	case result.Slice:
-		size, err := btf.Sizeof(result.BTFType)
+	case arg.isSlice:
+		size, err := btf.Sizeof(arg.t)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get slice element size: %w", err)
 		}
@@ -43,42 +42,42 @@ func kernelReadValue(result *bpfsnoop.ReadKernelResult) (any, error) {
 		}
 		values := make([]any, 0, len(data)/size)
 		for offset := 0; offset < len(data); offset += size {
-			value, err := btfx.DecodeValue(result.BTFType, data[offset:offset+size])
+			value, err := btfx.DecodeValue(arg.t, data[offset:offset+size])
 			if err != nil {
 				return nil, fmt.Errorf("failed to decode slice element %d: %w", offset/size, err)
 			}
 			values = append(values, value)
 		}
 		return values, nil
-	case result.Hex:
+	case arg.isHex:
 		return fmt.Sprintf("%x", data), nil
-	case result.IntegerType != "":
-		return decodeExplicitInteger(result.IntegerType, data)
-	case result.AddressType != "":
-		return decodeAddress(result.AddressType, data)
-	case result.PortType != "":
-		return decodePort(result.PortType, data)
-	case result.Packet:
-		return map[string]any{"type": result.PacketType, "bytes": bytesAsNumbers(data)}, nil
-	case result.NumericPointer:
+	case arg.isInt:
+		return decodeExplicitInteger(arg.intType, data)
+	case arg.isAddr:
+		return decodeAddress(arg.addrType, data)
+	case arg.isPort:
+		return decodePort(arg.portType, data)
+	case arg.isPkt:
+		return map[string]any{"type": arg.pktType, "bytes": bytesAsNumbers(data)}, nil
+	case arg.isNumPtr:
 		if len(data) < 8 {
 			return nil, fmt.Errorf("numeric pointer data is too short: %d", len(data))
 		}
 		address := binary.NativeEndian.Uint64(data[:8])
-		output := map[string]any{"address": fmt.Sprintf("%#x", address)}
+		result := map[string]any{"address": fmt.Sprintf("%#x", address)}
 		if address == 0 {
-			output["value"] = nil
-			return output, nil
+			result["value"] = nil
+			return result, nil
 		}
-		ptr := mybtf.UnderlyingType(result.BTFType).(*btf.Pointer)
+		ptr := mybtf.UnderlyingType(arg.t).(*btf.Pointer)
 		value, err := btfx.DecodeValue(ptr.Target, data[8:])
 		if err != nil {
 			return nil, fmt.Errorf("failed to decode numeric pointer target: %w", err)
 		}
-		output["value"] = value
-		return output, nil
+		result["value"] = value
+		return result, nil
 	default:
-		return btfx.DecodeValue(result.BTFType, data)
+		return btfx.DecodeValue(arg.t, data)
 	}
 }
 
@@ -141,6 +140,22 @@ func decodeExplicitInteger(kind string, data []byte) (any, error) {
 	}
 }
 
+const maxJSONSafeInteger = uint64(1<<53 - 1)
+
+func jsonUnsignedInteger(value uint64) any {
+	if value <= maxJSONSafeInteger {
+		return value
+	}
+	return strconv.FormatUint(value, 10)
+}
+
+func jsonSignedInteger(value int64) any {
+	if value >= -int64(maxJSONSafeInteger) && value <= int64(maxJSONSafeInteger) {
+		return value
+	}
+	return strconv.FormatInt(value, 10)
+}
+
 func decodeAddress(kind string, data []byte) (any, error) {
 	var size, count int
 	switch kind {
@@ -195,20 +210,4 @@ func decodePort(kind string, data []byte) (any, error) {
 		return values[0], nil
 	}
 	return values, nil
-}
-
-const maxJSONSafeInteger = uint64(1<<53 - 1)
-
-func jsonUnsignedInteger(value uint64) any {
-	if value <= maxJSONSafeInteger {
-		return value
-	}
-	return strconv.FormatUint(value, 10)
-}
-
-func jsonSignedInteger(value int64) any {
-	if value >= -int64(maxJSONSafeInteger) && value <= int64(maxJSONSafeInteger) {
-		return value
-	}
-	return strconv.FormatInt(value, 10)
 }

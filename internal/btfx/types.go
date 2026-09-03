@@ -4,8 +4,13 @@
 package btfx
 
 import (
+	"encoding/binary"
+	"errors"
 	"fmt"
+	"math"
+	"strconv"
 	"strings"
+	"unicode"
 	"unsafe"
 
 	"github.com/Asphaltt/mybtf"
@@ -208,6 +213,244 @@ func GetU64(data []byte, offset int) uint64 {
 
 func SetU64(data []byte, val uint64) {
 	*(*uint64)(unsafe.Pointer(&data[0])) = val
+}
+
+// DecodeValue converts native bytes for a BTF type into JSON-safe Go values.
+func DecodeValue(typ btf.Type, data []byte) (any, error) {
+	switch value := typ.(type) {
+	case *btf.Typedef:
+		return DecodeValue(value.Type, data)
+	case *btf.Volatile:
+		return DecodeValue(value.Type, data)
+	case *btf.Const:
+		return DecodeValue(value.Type, data)
+	case *btf.Restrict:
+		return DecodeValue(value.Type, data)
+	case *btf.TypeTag:
+		return DecodeValue(value.Type, data)
+	case *btf.Var:
+		decoded, err := DecodeValue(value.Type, data)
+		if err != nil {
+			return nil, err
+		}
+		return map[string]any{value.Name: decoded}, nil
+	}
+
+	size, err := btf.Sizeof(typ)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get size of %T: %w", typ, err)
+	}
+	if len(data) < size {
+		return nil, fmt.Errorf("data for %T is too short: got %d, need %d", typ, len(data), size)
+	}
+	data = data[:size]
+
+	switch value := typ.(type) {
+	case *btf.Int:
+		return decodeInteger(value, data)
+	case *btf.Pointer:
+		if len(data) < 8 {
+			return nil, fmt.Errorf("pointer data is too short: %d", len(data))
+		}
+		return fmt.Sprintf("%#x", binary.NativeEndian.Uint64(data)), nil
+	case *btf.Enum:
+		number, err := decodeUnsigned(data)
+		if err != nil {
+			return nil, err
+		}
+		result := map[string]any{"value": jsonUnsignedInteger(number)}
+		if value.Signed {
+			result["value"] = jsonSignedInteger(signedInteger(number, len(data)*8))
+		}
+		for _, enumValue := range value.Values {
+			if enumValue.Value == number {
+				result["name"] = enumValue.Name
+				break
+			}
+		}
+		return result, nil
+	case *btf.Array:
+		if mybtf.IsChar(value.Type) {
+			length := len(data)
+			if index := strings.IndexByte(string(data), 0); index >= 0 {
+				length = index
+			}
+			return string(data[:length]), nil
+		}
+		elementSize, err := btf.Sizeof(value.Type)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get array element size: %w", err)
+		}
+		values := make([]any, 0, value.Nelems)
+		for i := uint32(0); i < value.Nelems; i++ {
+			offset := int(i) * elementSize
+			decoded, err := DecodeValue(value.Type, data[offset:offset+elementSize])
+			if err != nil {
+				return nil, fmt.Errorf("failed to decode array element %d: %w", i, err)
+			}
+			values = append(values, decoded)
+		}
+		return values, nil
+	case *btf.Struct:
+		return decodeMembers(value.Members, data)
+	case *btf.Union:
+		return decodeMembers(value.Members, data)
+	case *btf.Float:
+		switch value.Size {
+		case 4:
+			return math.Float32frombits(binary.NativeEndian.Uint32(data)), nil
+		case 8:
+			return math.Float64frombits(binary.NativeEndian.Uint64(data)), nil
+		default:
+			return nil, fmt.Errorf("unsupported float size %d", value.Size)
+		}
+	case *btf.Datasec:
+		result := make(map[string]any, len(value.Vars))
+		for i, variable := range value.Vars {
+			start := int(variable.Offset)
+			end := start + int(variable.Size)
+			if start < 0 || end > len(data) {
+				return nil, fmt.Errorf("data section entry %d is out of bounds", i)
+			}
+			decoded, err := DecodeValue(variable.Type, data[start:end])
+			if err != nil {
+				return nil, fmt.Errorf("failed to decode data section entry %d: %w", i, err)
+			}
+			name := fmt.Sprintf("$entry_%d", i)
+			if variableValue, ok := variable.Type.(*btf.Var); ok && variableValue.Name != "" {
+				name = variableValue.Name
+				if nested, ok := decoded.(map[string]any); ok {
+					decoded = nested[name]
+				}
+			}
+			result[name] = decoded
+		}
+		return result, nil
+	default:
+		return nil, fmt.Errorf("unsupported BTF value type %T", typ)
+	}
+}
+
+func decodeInteger(value *btf.Int, data []byte) (any, error) {
+	number, err := decodeUnsigned(data)
+	if err != nil {
+		return nil, err
+	}
+	switch value.Encoding {
+	case btf.Bool:
+		return number != 0, nil
+	case btf.Signed:
+		return jsonSignedInteger(signedInteger(number, len(data)*8)), nil
+	case btf.Char:
+		r := rune(byte(number))
+		if unicode.IsPrint(r) {
+			return string(r), nil
+		}
+		return number, nil
+	default:
+		return jsonUnsignedInteger(number), nil
+	}
+}
+
+func decodeUnsigned(data []byte) (uint64, error) {
+	switch len(data) {
+	case 1:
+		return uint64(data[0]), nil
+	case 2:
+		return uint64(binary.NativeEndian.Uint16(data)), nil
+	case 4:
+		return uint64(binary.NativeEndian.Uint32(data)), nil
+	case 8:
+		return binary.NativeEndian.Uint64(data), nil
+	default:
+		return 0, fmt.Errorf("unsupported integer size %d", len(data))
+	}
+}
+
+func signedInteger(value uint64, bits int) int64 {
+	switch bits {
+	case 8:
+		return int64(int8(value))
+	case 16:
+		return int64(int16(value))
+	case 32:
+		return int64(int32(value))
+	default:
+		return int64(value)
+	}
+}
+
+const maxJSONSafeInteger = uint64(1<<53 - 1)
+
+func jsonUnsignedInteger(value uint64) any {
+	if value <= maxJSONSafeInteger {
+		return value
+	}
+	return strconv.FormatUint(value, 10)
+}
+
+func jsonSignedInteger(value int64) any {
+	if value >= -int64(maxJSONSafeInteger) && value <= int64(maxJSONSafeInteger) {
+		return value
+	}
+	return strconv.FormatInt(value, 10)
+}
+
+func decodeMembers(members []btf.Member, data []byte) (map[string]any, error) {
+	result := make(map[string]any, len(members))
+	for i, member := range members {
+		name := member.Name
+		if name == "" {
+			name = fmt.Sprintf("$anonymous_%d", i)
+		}
+		var decoded any
+		var err error
+		if member.BitfieldSize != 0 {
+			decoded, err = decodeBitfield(member, data)
+		} else {
+			start := int(member.Offset.Bytes())
+			memberSize, sizeErr := btf.Sizeof(member.Type)
+			if sizeErr != nil {
+				return nil, fmt.Errorf("failed to get size of member %q: %w", name, sizeErr)
+			}
+			end := start + memberSize
+			if start < 0 || end > len(data) {
+				return nil, fmt.Errorf("member %q is out of bounds", name)
+			}
+			decoded, err = DecodeValue(member.Type, data[start:end])
+		}
+		if err != nil {
+			return nil, fmt.Errorf("failed to decode member %q: %w", name, err)
+		}
+		result[name] = decoded
+	}
+	return result, nil
+}
+
+func decodeBitfield(member btf.Member, data []byte) (any, error) {
+	size := int(member.BitfieldSize)
+	if size <= 0 || size > 64 {
+		return nil, fmt.Errorf("unsupported bitfield size %d", size)
+	}
+	offset := int(member.Offset)
+	if offset+size > len(data)*8 {
+		return nil, errors.New("bitfield is out of bounds")
+	}
+	var number uint64
+	for bit := range size {
+		absolute := offset + bit
+		if data[absolute/8]&(1<<uint(absolute%8)) != 0 {
+			number |= 1 << uint(bit)
+		}
+	}
+	underlying := mybtf.UnderlyingType(member.Type)
+	if integer, ok := underlying.(*btf.Int); ok && integer.Encoding == btf.Signed {
+		if size < 64 && number&(1<<uint(size-1)) != 0 {
+			number |= ^uint64(0) << uint(size)
+		}
+		return jsonSignedInteger(int64(number)), nil
+	}
+	return jsonUnsignedInteger(number), nil
 }
 
 func reprMember(sb *strings.Builder, m *btf.Member, data []byte, showMemberName bool, find FindSymbol) {

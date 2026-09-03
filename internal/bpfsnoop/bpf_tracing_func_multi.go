@@ -111,7 +111,7 @@ func (t *bpfTracing) traceFuncsMulti(errg *errgroup.Group, reusedMaps map[string
 	for _, fn := range fns {
 		for _, kf := range fn.fns {
 			idx := findMatchedArgIndex(kf)
-			assert.True(idx >= 0, "Failed to find arg index")
+			assert.True(idx >= 0 || kf.Flag.argName == "", "Failed to find arg index")
 			g, ok := groups[idx]
 			if !ok {
 				g = &kfuncMultiGroupInfo{
