@@ -90,6 +90,12 @@ testcc:
 	@rm -f coverage.txt
 	@go clean -testcache
 
+.PHONY: fixup
+fixup: $(BPF_GO_SRC) $(XDPCRC_OBJ)
+	$(GOBUILD_CGO_CFLAGS) $(GOBUILD_CGO_LDFLAGS) go fix ./...
+	@echo "gofumpt -w .go files..."
+	@gofumpt -w $(GO_SRC)
+
 $(LOCALTEST_OBJ): $(LOCALTEST_SRC)
 	$(GOBUILD) -o $(LOCALTEST_OBJ) ./cmd/localtest
 
