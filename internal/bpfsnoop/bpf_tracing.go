@@ -44,6 +44,12 @@ type traceeConfig struct {
 	session       bool
 }
 
+type traceeOutputs struct {
+	args        []funcArgumentOutput
+	argDataSize int
+	pkt         bool
+}
+
 func (t *bpfTracing) Progs() []*ebpf.Program {
 	return t.progs
 }
@@ -196,6 +202,25 @@ func (t *bpfTracing) injectArgOutput(prog *ebpf.ProgramSpec, params []btf.FuncPa
 	debugLogIf(len(args) != 0, "Injected --output-arg expr to func %s", fnName)
 
 	return args, size, nil
+}
+
+func (t *bpfTracing) injectTraceeOutputs(prog *ebpf.ProgramSpec, params []btf.FuncParam, spec *btf.Spec, fnName string, outputPkt bool) (traceeOutputs, error) {
+	var outputs traceeOutputs
+
+	outputs.pkt = t.injectPktOutput(outputPkt, prog, params, fnName)
+	if err := t.injectPktFilter(prog, params, fnName); err != nil {
+		return outputs, err
+	}
+	if err := t.injectArgFilter(prog, params, spec, fnName); err != nil {
+		return outputs, err
+	}
+	var err error
+	outputs.args, outputs.argDataSize, err = t.injectArgOutput(prog, params, spec, fnName)
+	if err != nil {
+		return outputs, err
+	}
+
+	return outputs, nil
 }
 
 func (t *bpfTracing) injectSkbFilter(prog *ebpf.ProgramSpec, index int, typ btf.Type) error {

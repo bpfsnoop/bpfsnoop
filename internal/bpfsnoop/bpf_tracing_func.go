@@ -74,19 +74,13 @@ func (t *bpfTracing) traceFunc(spec *ebpf.CollectionSpec, reusedMaps map[string]
 	progSpec := spec.Programs[tracingFuncName]
 	funcProto := fn.Func.Type.(*btf.FuncProto)
 	params := funcProto.Params
-	fn.Pkt = t.injectPktOutput(fn.Flag.pkt, progSpec, params, traceeName)
-	if err := t.injectPktFilter(progSpec, params, traceeName); err != nil {
-		return err
-	}
-	if err := t.injectArgFilter(progSpec, params, fn.Btf, traceeName); err != nil {
-		return err
-	}
-	args, argDataSize, err := t.injectArgOutput(progSpec, params, fn.Btf, traceeName)
+	outputs, err := t.injectTraceeOutputs(progSpec, params, fn.Btf, traceeName, fn.Flag.pkt)
 	if err != nil {
 		return err
 	}
-	fn.Args = args
-	fn.Data = argDataSize
+	fn.Args = outputs.args
+	fn.Data = outputs.argDataSize
+	fn.Pkt = outputs.pkt
 
 	withRet := !isTracepoint && isExit
 	fnArgsBufSize, err := injectOutputFuncArgs(progSpec, fn.Prms, fn.Ret, withRet)
@@ -114,7 +108,7 @@ func (t *bpfTracing) traceFunc(spec *ebpf.CollectionSpec, reusedMaps map[string]
 		fnArgsBufSz:   fnArgsBufSize,
 		argEntrySz:    argEntrySize,
 		argExitSz:     argExitSize,
-		argDataSz:     argDataSize,
+		argDataSz:     outputs.argDataSize,
 		outputLbr:     fn.Flag.lbr,
 		outputStack:   stack,
 		outputPkt:     fn.Pkt,
