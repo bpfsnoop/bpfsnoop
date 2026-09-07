@@ -10,6 +10,18 @@ import (
 	"rsc.io/c2go/cc"
 )
 
+var builtinVars = map[string]int64{
+	"NULL":  0,
+	"null":  0,
+	"false": 0,
+	"true":  1,
+}
+
+func isBuiltinVar(name string) bool {
+	_, ok := builtinVars[name]
+	return ok
+}
+
 func ExtractVarNames(expr string) ([]string, error) {
 	e, err := cc.ParseExpr(expr)
 	if err != nil {
@@ -24,7 +36,9 @@ func ExtractVarNames(expr string) ([]string, error) {
 	cc.Walk(e, func(node cc.Syntax) {
 		if v, ok := node.(*cc.Expr); ok {
 			if v.Op == cc.Name {
-				names = append(names, v.Text)
+				if !isBuiltinVar(v.Text) {
+					names = append(names, v.Text)
+				}
 			}
 		}
 	}, func(node cc.Syntax) {})

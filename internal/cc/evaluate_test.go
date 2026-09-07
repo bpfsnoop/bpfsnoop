@@ -63,7 +63,7 @@ func TestEvaluateName(t *testing.T) {
 
 	t.Run("special constants", func(t *testing.T) {
 		defer c.reset()
-		for name, want := range map[string]int64{"NULL": 0, "false": 0, "true": 1} {
+		for name, want := range map[string]int64{"NULL": 0, "null": 0, "false": 0, "true": 1} {
 			expr := &cc.Expr{Op: cc.Name, Text: name}
 			v, err := c.evaluate(expr)
 			test.AssertNoErr(t, err)

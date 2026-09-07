@@ -137,12 +137,9 @@ func (c *compiler) evaluate(expr *cc.Expr) (exprValue, error) {
 // evaluateName handles variable name lookup.
 // Returns Pending if it's a known variable, EnumMaybe otherwise.
 func (c *compiler) evaluateName(expr *cc.Expr) (exprValue, error) {
-	// Check for special constants
-	if slices.Contains([]string{"NULL", "false"}, expr.Text) {
-		return newConstant(0), nil
-	}
-	if expr.Text == "true" {
-		return newConstant(1), nil
+	// Check for built-in constants before resolving function parameters.
+	if value, ok := builtinVars[expr.Text]; ok {
+		return newConstant(value), nil
 	}
 
 	// Look up variable
