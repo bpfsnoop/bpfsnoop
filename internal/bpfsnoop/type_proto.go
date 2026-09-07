@@ -39,7 +39,7 @@ func findStructUnionType(typeName string) (btf.Type, error) {
 
 		for _, t := range types {
 			switch t.(type) {
-			case *btf.Struct, *btf.Union:
+			case *btf.Struct, *btf.Union, *btf.Func, *btf.Enum:
 				typ = t
 				return true
 			}
@@ -203,6 +203,8 @@ func showFnProto(fn *btf.Func) {
 
 func showTypeProto(structs []string) {
 	var sb strings.Builder
+
+	assert.NoErr(PrepareKernelBTF(), "Failed to prepare kernel BTF spec: %v")
 
 	for i, s := range structs {
 		if i != 0 {
