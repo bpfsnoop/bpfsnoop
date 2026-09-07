@@ -1,0 +1,29 @@
+# Copyright 2026 Leon Hwang.
+# SPDX-License-Identifier: Apache-2.0
+
+# These tests are for showing types in the kernel.
+
+# icmp_rcv
+name: type::func:icmp_rcv
+tag: type
+test: -C icmp_rcv
+match: int icmp_rcv(struct sk_buff *skb)
+timeout: 5s
+
+---
+
+# bpf_attach_type
+name: type::enum:bpf_attach_type
+tag: type
+test: -C bpf_attach_type
+match: enum bpf_attach_type
+timeout: 5s
+
+---
+
+# bpf_attr
+name: type::union,bpf_attr
+tag: type
+test: -C bpf_attr
+match: union bpf_attr {
+timeout: 5s
