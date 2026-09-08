@@ -34,3 +34,6 @@ jobs:
 
       - name: Run local tests
         run: sudo make testlocal
+
+      - name: Run MCP tests
+        run: sudo make testmcp
