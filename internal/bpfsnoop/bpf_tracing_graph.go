@@ -60,9 +60,10 @@ func (t *bpfTracing) traceGraph(spec *ebpf.CollectionSpec,
 	if err != nil {
 		return fmt.Errorf("failed to inject output func args: %w", err)
 	}
-	if entry {
+	if entry || fsession {
 		graph.ArgsEnSz = fnArgsBufSize
-	} else {
+	}
+	if !entry || fsession {
 		graph.ArgsExSz = fnArgsBufSize
 	}
 
