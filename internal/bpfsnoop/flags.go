@@ -88,6 +88,8 @@ type Flags struct {
 
 	outputTDigest bool
 	tdigestExpr   string
+
+	args []string
 }
 
 func ParseFlags() (*Flags, error) {
@@ -161,7 +163,13 @@ func ParseFlags() (*Flags, error) {
 
 	args, retvalOutput := normalizePacketOutputArgs(os.Args)
 	outputPktRetval = retvalOutput
+
 	err := f.Parse(args)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse flags: %w", err)
+	}
+	flags.args = f.Args()
+
 	if mcp && mcpDaemon {
 		return nil, fmt.Errorf("--mcp and --mcp-daemon cannot be used together")
 	}

@@ -112,7 +112,11 @@ func ShowFuncProto(f *Flags) {
 		}
 	}
 
-	if len(f.kfuncs) != 0 {
+	kfuncs := f.kfuncs
+	if len(kfuncs) == 0 {
+		kfuncs = f.args
+	}
+	if len(kfuncs) != 0 {
 		kallsyms, err := NewKallsyms()
 		assert.NoErr(err, "Failed to read /proc/kallsyms: %v")
 
@@ -121,15 +125,15 @@ func ShowFuncProto(f *Flags) {
 		}
 
 		var kmods []string
-		if ksym, ok := kallsyms.findBySymbol(f.kfuncs[0]); ok && ksym.mod != "" {
+		if ksym, ok := kallsyms.findBySymbol(kfuncs[0]); ok && ksym.mod != "" {
 			kmods = []string{ksym.mod}
 		} else {
-			kmods, err = inferenceKfuncKmods(f.kfuncs, kfuncKmods, kallsyms)
+			kmods, err = inferenceKfuncKmods(kfuncs, kfuncKmods, kallsyms)
 			assert.NoErr(err, "Failed to inference kernel module names for kernel functions: %v")
 		}
 
 		kmods = sortCompact(append([]string{"vmlinux"}, kmods...))
-		kfuncs, err := findKernelFuncs(f.kfuncs, kmods, kallsyms, MAX_BPF_FUNC_ARGS, false, true)
+		kfuncs, err := findKernelFuncs(kfuncs, kmods, kallsyms, MAX_BPF_FUNC_ARGS, false, true)
 		assert.NoErr(err, "Failed to find kernel functions: %v")
 
 		fmt.Fprint(&sb, "Kernel functions:")
