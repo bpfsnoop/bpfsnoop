@@ -71,6 +71,9 @@ func parseKfuncFlag(k string) (KfuncFlag, error) {
 	if kf.multi && kf.insn {
 		return kf, fmt.Errorf("kfunc %s cannot be traced with both multi and insn", k)
 	}
+	if kf.multi && kf.graph {
+		return kf, fmt.Errorf("kfunc %s cannot be traced with both multi and graph", k)
+	}
 
 	fields := strings.Split(k, ":")
 	switch len(fields) {

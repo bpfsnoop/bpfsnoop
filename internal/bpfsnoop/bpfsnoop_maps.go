@@ -97,8 +97,12 @@ func PrepareBPFMaps(spec *ebpf.CollectionSpec) map[string]*ebpf.Map {
 	events, err := ebpf.NewMap(spec.Maps["bpfsnoop_events"])
 	assert.NoErr(err, "Failed to create events map: %v")
 
+	fgraphActive, err := ebpf.NewMap(spec.Maps["bpfsnoop_fgraph_active"])
+	assert.NoErr(err, "Failed to create fgraph active map: %v")
+
 	return map[string]*ebpf.Map{
-		"bpfsnoop_sessions": sessions,
+		"bpfsnoop_sessions":      sessions,
+		"bpfsnoop_fgraph_active": fgraphActive,
 
 		"bpfsnoop_events": events,
 		"bpfsnoop_lbrs":   lbrs,

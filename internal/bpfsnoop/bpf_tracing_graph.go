@@ -218,10 +218,11 @@ func (t *bpfTracing) traceGraphs(reusedMaps map[string]*ebpf.Map, graphs FuncGra
 	defer traceeIPs.Close()
 
 	replacedMaps := map[string]*ebpf.Map{
-		traceeIPsMapName:    traceeIPs,
-		".data.ready":       reusedMaps[".data.ready"],
-		"bpfsnoop_events":   reusedMaps["bpfsnoop_events"],
-		"bpfsnoop_sessions": reusedMaps["bpfsnoop_sessions"],
+		traceeIPsMapName:         traceeIPs,
+		".data.ready":            reusedMaps[".data.ready"],
+		"bpfsnoop_events":        reusedMaps["bpfsnoop_events"],
+		"bpfsnoop_sessions":      reusedMaps["bpfsnoop_sessions"],
+		"bpfsnoop_fgraph_active": reusedMaps["bpfsnoop_fgraph_active"],
 	}
 
 	var errg errgroup.Group

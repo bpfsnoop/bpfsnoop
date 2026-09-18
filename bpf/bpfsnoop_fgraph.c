@@ -6,6 +6,7 @@
 #include "bpf_map_helpers.h"
 
 #include "bpfsnoop_event.h"
+#include "bpfsnoop_fgraph_active.h"
 #include "bpfsnoop_fn_args_output.h"
 #include "bpfsnoop_sess.h"
 #include "bpfsnoop_session.h"
@@ -98,6 +99,9 @@ try_get_session(void *ctx, int *depth, __u64 pid_tgid)
     bool after_current = false;
     int nr_bytes, nr_ips;
     __u32 max_stack;
+
+    if (!is_fgraph_active(bpf_get_current_task_btf()))
+        return 0;
 
     stack = get_fgraph_stack_buf();
     if (!stack)

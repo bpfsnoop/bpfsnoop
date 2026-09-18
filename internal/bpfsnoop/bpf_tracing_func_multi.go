@@ -125,6 +125,9 @@ func (t *bpfTracing) traceFuncsMulti(errg *errgroup.Group, reusedMaps map[string
 		}
 	}
 
+	reusedMaps = maps.Clone(reusedMaps)
+	delete(reusedMaps, "bpfsnoop_fgraph_active")
+
 	for i, g := range groups {
 
 		symbols, skipped := filterKprobeMultiSymbols(g.fns, availableFilterFuncs)

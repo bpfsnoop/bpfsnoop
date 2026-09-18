@@ -12,6 +12,7 @@
 #include "bpfsnoop_comm_filter.h"
 #include "bpfsnoop_event.h"
 #include "bpfsnoop_event_output.h"
+#include "bpfsnoop_fgraph_active.h"
 #include "bpfsnoop_fn_args_output.h"
 #include "bpfsnoop_lbr.h"
 #include "bpfsnoop_mode.h"
@@ -144,6 +145,15 @@ emit_bpfsnoop_event(void *ctx)
         event_type = (mode == BPFSNOOP_MODE_ENTRY) ? BPFSNOOP_EVENT_TYPE_FUNC_ENTRY
                                                    : BPFSNOOP_EVENT_TYPE_FUNC_EXIT;
         break;
+    }
+
+    if (cfg->flags.graph_mode) {
+        struct task_struct *tsk = bpf_get_current_task_btf();
+
+        if (event_type == BPFSNOOP_EVENT_TYPE_FUNC_ENTRY)
+            mark_fgraph_active(tsk);
+        else
+            unset_fgraph_active(tsk);
     }
 
     output_pkt = cfg->flags.output_pkt;
