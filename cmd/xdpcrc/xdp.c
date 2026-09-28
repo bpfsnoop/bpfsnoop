@@ -77,12 +77,26 @@ __u16 connection_crc_hash(__u32 src, __u16 src_port, __u32 dest, __u16 dest_port
     return crc16(merge);
 }
 
+/* A static subprog taking a pointer, which makes the verifier mark its BTF
+ * unreliable, so a trampoline on it saves MAX_BPF_FUNC_REG_ARGS args instead
+ * of the one in BTF. Traced by the retval tests; always returns 42.
+ */
+static __noinline int retval_probe(int *v)
+{
+    return *v + 1;
+}
+
 SEC("xdp")
 int crc(struct xdp_md *ctx)
 {
     struct ethhdr *eth = (typeof(eth)) ctx_ptr(ctx, data);
     struct iphdr *iph = (typeof(iph)) (eth + 1);
     struct tcphdr *tcph = (typeof(tcph)) (iph + 1);
+    int v = 41, ret;
+
+    __sink(v);
+    ret = retval_probe(&v);
+    __sink(ret);
 
     if ((void *)(tcph + 1) > ctx_ptr(ctx, data_end))
         return XDP_PASS;

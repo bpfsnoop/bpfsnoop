@@ -29,3 +29,23 @@ test: -p 'n:crc' --filter-pkt 'host 127.0.0.1 and icmp' --output-arg '*ctx' --ou
 match: → crc[bpf]
 prerequisite: ./xdpcrc -d lo
 trigger: ping -c 1 -s 64 127.0.0.1
+
+---
+
+# retval of a bpf subprog whose BTF the verifier marks unreliable
+name: xdp::subprog_retval
+tag: xdp,retval
+test: -p 'n:crc:retval_probe' -m exit --filter-arg '(int)$retval == 42' --limit-events 1
+match: ← retval_probe[bpf]
+prerequisite: ./xdpcrc -d lo
+trigger: ping -c 1 -s 64 127.0.0.1
+
+---
+
+# the same subprog seen through the function graph of its prog
+name: xdp::subprog_retval:fgraph
+tag: xdp,retval,fngraph
+test: -p 'n:crc' -m exit --output-fgraph --fgraph-max-depth 1 --limit-events 1
+match: (41)) retval=42
+prerequisite: ./xdpcrc -d lo
+trigger: ping -c 1 -s 64 127.0.0.1
