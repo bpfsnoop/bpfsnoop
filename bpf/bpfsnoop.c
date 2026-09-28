@@ -37,14 +37,14 @@ filter(__u64 *args, __u64 session_id)
 }
 
 static __always_inline __u64
-get_tracee_caller_fp(void *ctx, __u32 args_nr, bool retval)
+get_tracee_caller_fp(void *ctx, bool retval)
 {
     u64 fp, fp_caller;
 
     if (cfg->flags.is_tp)
         return FUNC_IP;
 
-    fp = get_tramp_fp(ctx, args_nr, retval); /* read tramp fp */
+    fp = get_tramp_fp(ctx, get_tramp_args_nr(ctx), retval); /* read tramp fp */
     (void) bpf_probe_read_kernel(&fp_caller, sizeof(fp_caller), (void *) fp); /* fp of tracee caller */
     return fp_caller;
 }
@@ -106,12 +106,11 @@ emit_bpfsnoop_event(void *ctx)
     (void) bpf_probe_read_kernel(args, 8*cfg->fn_args.args_nr, ctx);
     if (cfg->fn_args.with_retval && (mode == BPFSNOOP_MODE_EXIT ||
                                      mode == BPFSNOOP_MODE_SESSION_EXIT))
-        (void) bpf_probe_read_kernel(&retval, sizeof(retval), ctx + 8*cfg->fn_args.args_nr);
+        (void) bpf_probe_read_kernel(&retval, sizeof(retval), ctx + 8*get_tramp_args_nr(ctx));
     args[cfg->fn_args.args_nr] = retval;
 
     /* fp of tracee caller */
-    fp = get_tracee_caller_fp(ctx, cfg->fn_args.args_nr,
-                              cfg->flags.both_entry_exit || cfg->fn_args.with_retval);
+    fp = get_tracee_caller_fp(ctx, cfg->flags.both_entry_exit || cfg->fn_args.with_retval);
 
     switch (mode) {
     case BPFSNOOP_MODE_SESSION_ENTRY:

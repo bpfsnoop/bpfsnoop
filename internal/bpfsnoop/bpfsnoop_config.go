@@ -18,6 +18,7 @@ const (
 	configFlagKmultiModeIdx
 	configFlagExitFilterIdx
 	configFlagPktRetvalIdx
+	configFlagHasFuncArgCntIdx
 )
 
 const (
@@ -41,7 +42,8 @@ type BpfsnoopConfig struct {
 	FilterCommLen    uint32
 	FnArgsNr         uint32
 	WithRet          bool
-	Pad              [3]uint8
+	TrampArgsNr      uint8
+	Pad              [2]uint8
 	FnArgsBuf        uint32
 	ArgDataSz        uint32
 	TraceeArgEntrySz uint32
@@ -125,4 +127,8 @@ func (cfg *BpfsnoopConfig) SetExitFilter(v bool) {
 
 func (cfg *BpfsnoopConfig) SetPktRetval(v bool) {
 	cfg.setFlags(v, configFlagPktRetvalIdx)
+}
+
+func (cfg *BpfsnoopConfig) SetHasFuncArgCnt(v bool) {
+	cfg.setFlags(v, configFlagHasFuncArgCntIdx)
 }

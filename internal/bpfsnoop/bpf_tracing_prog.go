@@ -4,18 +4,67 @@
 package bpfsnoop
 
 import (
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
 
 	"github.com/Asphaltt/mybtf"
 	"github.com/cilium/ebpf"
+	"github.com/cilium/ebpf/asm"
 	"github.com/cilium/ebpf/btf"
 	"github.com/cilium/ebpf/link"
 	"golang.org/x/sync/errgroup"
 
 	"github.com/bpfsnoop/bpfsnoop/internal/btfx"
 )
+
+// detectTrampArgsNr returns how many args the trampoline saves for funcName in
+// prog, when bpf_get_func_arg_cnt() isn't there to tell it, i.e. before 5.17.
+//
+// The trampoline saves either the btfArgsNr args from BTF or, when the
+// verifier can't trust that BTF, MAX_BPF_FUNC_REG_ARGS args. An fexit prog may
+// read ctx[0..nr_args], ctx[nr_args] being the retval, so an fexit prog reading
+// ctx[max(btfArgsNr, 5)] loads only if that slot is within the saved layout.
+func detectTrampArgsNr(prog *ebpf.Program, funcName string, btfArgsNr int) (nr int) {
+	const maxRegArgs = 5 // MAX_BPF_FUNC_REG_ARGS
+
+	if prog == nil || hasGetFuncArgCnt || btfArgsNr == maxRegArgs {
+		return btfArgsNr
+	}
+
+	idx := max(btfArgsNr, maxRegArgs)
+	p, err := ebpf.NewProgram(&ebpf.ProgramSpec{
+		Type:         ebpf.Tracing,
+		AttachType:   ebpf.AttachTraceFExit,
+		AttachTarget: prog,
+		AttachTo:     funcName,
+		License:      "GPL",
+		Instructions: asm.Instructions{
+			asm.LoadMem(asm.R0, asm.R1, int16(idx*8), asm.DWord),
+			asm.Mov.Imm(asm.R0, 0),
+			asm.Return(),
+		},
+	})
+	nr = idx
+	defer func() {
+		DebugLog("Detected %d trampoline args for %s (%d in BTF)", nr, funcName, btfArgsNr)
+	}()
+	if err == nil {
+		_ = p.Close()
+		return
+	}
+
+	var verr *ebpf.VerifierError
+	if !errors.As(err, &verr) || !slices.ContainsFunc(verr.Log, func(line string) bool {
+		return strings.Contains(line, "invalid bpf_context access")
+	}) {
+		VerboseLog("Failed to detect trampoline arg count of %s, using its %d BTF args: %v", funcName, btfArgsNr, err)
+		return btfArgsNr
+	}
+
+	return min(btfArgsNr, maxRegArgs)
+}
 
 type tracingProg struct {
 	l link.Link
@@ -123,6 +172,7 @@ func (t *bpfTracing) traceProg(spec *ebpf.CollectionSpec, reusedMaps map[string]
 	if err := setBpfsnoopConfig(spec, traceeConfig{
 		funcIP:        uint64(info.funcIP),
 		fnArgsNr:      len(info.params),
+		trampArgsNr:   detectTrampArgsNr(info.prog, info.funcName, len(info.params)),
 		fnArgsBufSz:   fnArgsBufSize,
 		argEntrySz:    argEntrySize,
 		argExitSz:     argExitSize,

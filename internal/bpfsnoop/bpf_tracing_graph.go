@@ -46,7 +46,9 @@ type bpfFgraphConfig struct {
 	MyPID     uint32
 	FnArgsNr  uint32
 	WithRet   uint8
-	Pad       [3]uint8
+	TrampNr   uint8 // trampoline arg count, see detectTrampArgsNr()
+	HasArgCnt uint8 // bpf_get_func_arg_cnt() is available
+	Pad       uint8
 	FnArgsBuf uint32
 }
 
@@ -82,6 +84,8 @@ func (t *bpfTracing) traceGraph(spec *ebpf.CollectionSpec,
 	cfg.TinBPF = uint8(b2i(tailcallInfo.supportTailcallInBpf2bpf))
 	cfg.FnArgsNr = uint32(len(params))
 	cfg.WithRet = uint8(b2i(!entry))
+	cfg.TrampNr = uint8(detectTrampArgsNr(bp, traceeName, len(params)))
+	cfg.HasArgCnt = uint8(b2i(hasGetFuncArgCnt))
 	cfg.FnArgsBuf = uint32(fnArgsBufSize)
 	cfg.MyPID = uint32(os.Getpid())
 

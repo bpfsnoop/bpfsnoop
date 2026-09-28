@@ -111,6 +111,7 @@ func (t *bpfTracing) traceFunc(spec *ebpf.CollectionSpec, reusedMaps map[string]
 	if err := setBpfsnoopConfig(spec, traceeConfig{
 		funcIP:        fn.Ksym.addr,
 		fnArgsNr:      len(fn.Prms),
+		trampArgsNr:   len(fn.Prms),
 		fnArgsBufSz:   fnArgsBufSize,
 		argEntrySz:    argEntrySize,
 		argExitSz:     argExitSize,

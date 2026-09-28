@@ -21,7 +21,9 @@ enum bpfsnoop_hook_mode {
 struct bpfsnoop_fn_args {
     __u32 args_nr;
     bool with_retval;
-    __u8 pad[3];
+    __u8 tramp_args_nr;
+    bool has_func_arg_cnt;
+    __u8 pad;
     __u32 buf_size;
 } __attribute__((packed));
 
@@ -172,9 +174,16 @@ int BPF_PROG(bpfsnoop_fgraph)
         is_entry = !bpfsnoop_session_is_return(ctx);
 
     (void) bpf_probe_read_kernel(args, 8*cfg->fn_args.args_nr, ctx);
-    if (cfg->fn_args.with_retval && !is_entry)
+    if (cfg->fn_args.with_retval && !is_entry) {
+        /* Index ctx by the trampoline's arg count, see get_tramp_args_nr()
+         * in bpfsnoop_stack.h, and keep the count u32 for the same reason.
+         */
+        __u32 nr = cfg->fn_args.has_func_arg_cnt ? bpf_get_func_arg_cnt(ctx)
+                                                 : cfg->fn_args.tramp_args_nr;
+
         /* typeof(ctx) is 'unsigned long long *', not 'void *'. */
-        (void) bpf_probe_read_kernel(&retval, sizeof(retval), (void *)ctx + 8*cfg->fn_args.args_nr);
+        (void) bpf_probe_read_kernel(&retval, sizeof(retval), (void *)ctx + 8*nr);
+    }
 
     evt = (typeof(evt)) buffer;
     evt->type = is_entry ? BPFSNOOP_EVENT_TYPE_GRAPH_ENTRY

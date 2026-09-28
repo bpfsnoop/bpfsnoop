@@ -7,6 +7,8 @@
 #include "vmlinux.h"
 #include "bpf_helpers.h"
 
+#include "bpfsnoop_cfg.h"
+
 /* Stack layout on x86:
  * +-----+ FP of tracee's caller
  * | ... |
@@ -47,6 +49,26 @@
  * |  ..  |
  * +------+ SP of current prog
  */
+
+/* Number of tracee args the trampoline saved in ctx. The retval slot and the
+ * saved frame pointer sit right after them, so locate those with this count.
+ *
+ * Don't use the tracee's BTF param count here. When the verifier can't trust a
+ * bpf function's BTF, e.g. a BPF_PROG() entry (whose one param is 'u64 *ctx')
+ * or a static subprog with a pointer param, the trampoline saves 5 args no
+ * matter what the BTF says. Before 5.17 there is no bpf_get_func_arg_cnt(), and
+ * userspace detects the count instead.
+ *
+ * It returns u32 on purpose: the helper returns u64, and the verifier rejects
+ * adding a value without a known lower bound to the ctx pointer.
+ */
+static __always_inline __u32
+get_tramp_args_nr(void *ctx)
+{
+	if (cfg->flags.has_func_arg_cnt)
+		return bpf_get_func_arg_cnt(ctx);
+	return cfg->fn_args.tramp_args_nr;
+}
 
 static __always_inline u64
 __get_ptr(void *ctx, __u32 args_nr, bool retval)

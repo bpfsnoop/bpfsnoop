@@ -29,6 +29,7 @@ type bpfTracing struct {
 type traceeConfig struct {
 	funcIP        uint64
 	fnArgsNr      int
+	trampArgsNr   int
 	fnArgsBufSz   int
 	argEntrySz    int
 	argExitSz     int
@@ -76,11 +77,13 @@ func setBpfsnoopConfig(spec *ebpf.CollectionSpec, c traceeConfig) error {
 	cfg.SetKmultiMode(c.kmultiMode)
 	cfg.SetExitFilter(c.exitFilter)
 	cfg.SetPktRetval(c.pktRetval)
+	cfg.SetHasFuncArgCnt(hasGetFuncArgCnt)
 	cfg.FilterPid = filterPid
 	copy(cfg.FilterComm[:], []uint8(filterComm))
 	cfg.FilterCommLen = uint32(len(filterComm))
 	cfg.FnArgsNr = uint32(c.fnArgsNr)
 	cfg.WithRet = c.withRet
+	cfg.TrampArgsNr = uint8(c.trampArgsNr)
 	cfg.FnArgsBuf = uint32(c.fnArgsBufSz)
 	cfg.ArgDataSz = uint32(c.argDataSz)
 	cfg.TraceeArgEntrySz = uint32(c.argEntrySz)

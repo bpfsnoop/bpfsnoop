@@ -19,6 +19,7 @@ var (
 	hasEndbr         bool
 	requiredLbr      bool
 	hasFsession      bool
+	hasGetFuncArgCnt bool
 	hasKprobeMulti   bool
 	hasKprobeSession bool
 	trampJmpMode     bool
@@ -85,6 +86,12 @@ func detectBPFFeatures() (KernelBPFFeatures, error) {
 	if err != nil {
 		return features, err
 	}
+
+	hasGetFuncArgCnt, err = btfEnumValue("bpf_func_id", "BPF_FUNC_get_func_arg_cnt")
+	if err != nil {
+		return features, err
+	}
+	debugLogIf(!hasGetFuncArgCnt, "bpf_get_func_arg_cnt() is not supported, detecting trampoline arg count in userspace")
 
 	hasFsession, err = btfEnumValue("bpf_attach_type", "BPF_TRACE_FSESSION")
 	if err != nil {

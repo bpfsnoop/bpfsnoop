@@ -12,7 +12,8 @@
 struct bpfsnoop_fn_args {
     __u32 args_nr;
     bool with_retval;
-    __u8 pad[3];
+    __u8 tramp_args_nr;
+    __u8 pad[2];
     __u32 buf_size;
     __u32 data_size;
 } __attribute__((packed));
