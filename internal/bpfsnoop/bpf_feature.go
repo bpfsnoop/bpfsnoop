@@ -8,6 +8,7 @@ import (
 	"fmt"
 
 	"github.com/cilium/ebpf"
+	"github.com/cilium/ebpf/asm"
 	"github.com/cilium/ebpf/btf"
 	"github.com/cilium/ebpf/link"
 
@@ -22,6 +23,7 @@ var (
 	hasGetFuncArgCnt bool
 	hasKprobeMulti   bool
 	hasKprobeSession bool
+	hasNestedTracing bool
 	trampJmpMode     bool
 )
 
@@ -36,7 +38,8 @@ type BPFFeatures struct {
 // detected from kernel BTF.
 type KernelBPFFeatures struct {
 	BPFFeatures
-	HasKprobeMulti bool
+	HasKprobeMulti   bool
+	HasNestedTracing bool
 }
 
 func detectBPFFeatures() (KernelBPFFeatures, error) {
@@ -56,6 +59,9 @@ func detectBPFFeatures() (KernelBPFFeatures, error) {
 	defer coll.Close()
 
 	prog := coll.Programs["detect"]
+	hasNestedTracing = probeTracingTarget(prog, "detect")
+	features.HasNestedTracing = hasNestedTracing
+	debugLogIf(hasNestedTracing, "nested tracing is supported")
 	l, err := link.AttachTracing(link.TracingOptions{
 		Program:    prog,
 		AttachType: ebpf.AttachTraceFEntry,
@@ -115,6 +121,30 @@ func detectBPFFeatures() (KernelBPFFeatures, error) {
 	}
 
 	return features, nil
+}
+
+// Loading is sufficient: bpf_check_attach_target checks the target's
+// aux->attach_tracing_prog during verification, before link creation.
+// See 19bfcdf9498a ("bpf: Relax tracing prog recursive attach rules")
+// kernel 6.8.
+func probeTracingTarget(target *ebpf.Program, name string) bool {
+	prog, err := ebpf.NewProgram(&ebpf.ProgramSpec{
+		Type:         ebpf.Tracing,
+		AttachType:   ebpf.AttachTraceFEntry,
+		AttachTarget: target,
+		AttachTo:     name,
+		License:      "GPL",
+		Instructions: asm.Instructions{
+			asm.Mov.Imm(asm.R0, 0),
+			asm.Return(),
+		},
+	})
+	if err != nil {
+		DebugLog("Tracing target probe for %s failed: %v", name, err)
+		return false
+	}
+	_ = prog.Close()
+	return true
 }
 
 var bpfFeaturesOnce = atomix.NewOnce(detectBPFFeatures)

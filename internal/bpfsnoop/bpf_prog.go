@@ -28,7 +28,7 @@ type bpfProgs struct {
 
 	tracings map[string]*bpfTracingInfo // id:func -> prog, func
 
-	links *bpfLinks
+	traceable sync.Map // program ID -> verifier probe result
 
 	disasm bool // disassemble BPF programs instead of tracing them
 }
@@ -48,11 +48,6 @@ func NewBPFProgs(pflags []ProgFlag, noParseProgs, disasm bool) (*bpfProgs, error
 			progs.Close()
 		}
 	}()
-
-	progs.links, err = newBPFLinks()
-	if err != nil {
-		return nil, fmt.Errorf("failed to prepare bpf links info: %w", err)
-	}
 
 	err = progs.prepareProgInfos(pflags)
 	if err != nil {

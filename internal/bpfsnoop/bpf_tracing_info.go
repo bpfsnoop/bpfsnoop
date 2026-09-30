@@ -5,7 +5,6 @@ package bpfsnoop
 
 import (
 	"fmt"
-	"slices"
 
 	"github.com/Asphaltt/mybtf"
 	"github.com/cilium/ebpf"
@@ -84,18 +83,33 @@ func (p *bpfProgs) canTrace(prog *ebpf.Program, id ebpf.ProgramID) bool {
 		return true
 	}
 
-	link, ok := p.links.links[id]
-	if !ok {
-		return true
+	if result, ok := p.traceable.Load(id); ok {
+		return result.(bool)
 	}
 
-	if slices.Contains([]ebpf.AttachType{ebpf.AttachTraceFEntry, ebpf.AttachTraceFExit}, link.attachType) {
-		// fentry/fexit can be traced if not attached to another prog since v6.8
-		// kernel.
-		return link.attachProg == 0
-	}
+	canTrace := func() bool {
+		if !hasNestedTracing {
+			return false
+		}
+		// The link's target ID cannot distinguish attachment to an ordinary
+		// BPF program from attachment to another tracing program. Ask the
+		// verifier, which checks aux->attach_tracing_prog, including after
+		// the original link has been closed.
+		info, err := prog.Info()
+		if err != nil {
+			DebugLog("Failed to get tracing program %d info: %v", id, err)
+			return false
+		}
+		funcName, err := getProgEntryFuncName(info)
+		if err != nil {
+			DebugLog("Failed to get entry func name of prog %d: %v", id, err)
+			return false
+		}
+		return probeTracingTarget(prog, funcName)
+	}()
 
-	return true
+	p.traceable.Store(id, canTrace)
+	return canTrace
 }
 
 func (p *bpfProgs) addTracing(id ebpf.ProgramID, funcName string, prog *ebpf.Program, flag progFlagImmInfo) error {
