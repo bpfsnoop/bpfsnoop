@@ -49,6 +49,57 @@ func TestCanRdonlyCast(t *testing.T) {
 		test.AssertEqual(t, id, skbID)
 		test.AssertNoErr(t, err)
 	})
+
+	t.Run("struct not in kernel btf *", func(t *testing.T) {
+		podPtr := &btf.Pointer{Target: getProgLocalStructBtf(t)}
+
+		ok, id, err := canRdonlyCast(testBtf, podPtr)
+		test.AssertFalse(t, ok)
+		test.AssertEqual(t, id, 0)
+		test.AssertNoErr(t, err)
+	})
+
+	t.Run("prog-local type with kernel name", func(t *testing.T) {
+		for _, target := range []btf.Type{
+			&btf.Struct{Name: "sk_buff"},
+			&btf.Union{Name: "bpf_attr"},
+		} {
+			ok, id, err := canRdonlyCast(testBtf, &btf.Pointer{Target: target})
+			test.AssertFalse(t, ok)
+			test.AssertEqual(t, id, 0)
+			test.AssertNoErr(t, err)
+		}
+	})
+
+	t.Run("qualified kernel union pointer", func(t *testing.T) {
+		attr, err := testBtf.AnyTypeByName("bpf_attr")
+		test.AssertNoErr(t, err)
+		wantID, err := testBtf.TypeID(attr)
+		test.AssertNoErr(t, err)
+		typ := &btf.Typedef{Type: &btf.Const{Type: &btf.Pointer{
+			Target: &btf.Volatile{Type: attr},
+		}}}
+		ok, id, err := canRdonlyCast(testBtf, typ)
+		test.AssertTrue(t, ok)
+		test.AssertEqual(t, id, wantID)
+		test.AssertNoErr(t, err)
+	})
+}
+
+// getProgLocalStructBtf returns a struct that only exists in a bpf prog's
+// BTF, not in the kernel BTF.
+func getProgLocalStructBtf(t *testing.T) *btf.Struct {
+	s64, err := testBtf.AnyTypeByName("s64")
+	test.AssertNoErr(t, err)
+
+	return &btf.Struct{
+		Name: "bpfsnoop_test_pod",
+		Size: 16,
+		Members: []btf.Member{
+			{Name: "id", Type: s64, Offset: 0},
+			{Name: "refs", Type: s64, Offset: 64},
+		},
+	}
 }
 
 func TestCanReadByRdonlyCast(t *testing.T) {
@@ -129,6 +180,7 @@ func TestEmitCoreRead(t *testing.T) {
 		test.AssertNoErr(t, err)
 		test.AssertEqualSlice(t, c.insns, asm.Instructions{
 			asm.Mov.Reg(r1, r8),
+			asm.Add.Imm(r1, 16),
 			asm.Mov.Reg(r3, r1),
 			asm.Mov.Imm(r2, 8),
 			asm.Mov.Reg(r1, rfp),
@@ -234,6 +286,7 @@ func TestEmitCoreRead(t *testing.T) {
 		test.AssertNoErr(t, err)
 		test.AssertEqualSlice(t, c.insns, asm.Instructions{
 			asm.Mov.Reg(r1, r8),
+			asm.Add.Imm(r1, 220),
 			asm.Mov.Reg(r3, r1),
 			asm.Mov.Imm(r2, 8),
 			asm.Mov.Reg(r1, rfp),
@@ -265,6 +318,32 @@ func TestEmitCoreRead(t *testing.T) {
 			asm.JEq.Imm(r1, 0, c.labelExit),
 			asm.Add.Imm(r1, 8),
 			asm.Mov.Reg(r8, r1),
+		})
+	})
+
+	t.Run("probe read fallback prog-local struct", func(t *testing.T) {
+		defer resetCompilerCoreRead(c)
+
+		pod := getProgLocalStructBtf(t)
+		podPtr := &btf.Pointer{Target: pod}
+		u64 := getU64Btf(t)
+
+		// pod->refs
+		offsets := []pendingOffset{
+			{prevBtf: podPtr, btf: u64, deref: true, offset: 8},
+		}
+
+		err := c.emitCoreRead(offsets, r8)
+		test.AssertNoErr(t, err)
+		test.AssertEqualSlice(t, c.insns, asm.Instructions{
+			asm.Mov.Reg(r1, r8),
+			asm.Add.Imm(r1, 8),
+			asm.Mov.Reg(r3, r1),
+			asm.Mov.Imm(r2, 8),
+			asm.Mov.Reg(r1, rfp),
+			asm.Add.Imm(r1, -8),
+			asm.FnProbeReadKernel.Call(),
+			asm.LoadMem(r8, rfp, -8, dword),
 		})
 	})
 

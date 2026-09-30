@@ -43,7 +43,7 @@ func (s *Spec) AnyTypeByName(name string) (btf.Type, error) {
 }
 
 func (s *Spec) getTypeIDErr(t btf.Type) (btf.TypeID, error) {
-	return 0, btf.ErrNotFound
+	return 0, errors.New("injected TypeID lookup failure")
 }
 
 func (s *Spec) TypeID(t btf.Type) (btf.TypeID, error) {
@@ -152,7 +152,9 @@ func TestNewCompiler(t *testing.T) {
 		test.AssertNoErr(t, err)
 
 		spec := newSpec(t, testBtf)
-		spec.typeID = spec.getTypeIDErr
+		spec.typeID = func(btf.Type) (btf.TypeID, error) {
+			return 0, btf.ErrNotFound
+		}
 
 		opts.Kernel = spec
 		defer func() { opts.Kernel = testBtf }()

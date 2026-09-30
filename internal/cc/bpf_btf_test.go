@@ -11,59 +11,6 @@ import (
 	"github.com/cilium/ebpf/btf"
 )
 
-func TestGetPointerTypeID(t *testing.T) {
-	t.Run("skb", func(t *testing.T) {
-		skb, err := testBtf.AnyTypeByName("sk_buff")
-		test.AssertNoErr(t, err)
-		skbID, err := testBtf.TypeID(skb)
-		test.AssertNoErr(t, err)
-
-		id, err := getPointerTypeID(testBtf, skb, false, false)
-		test.AssertNoErr(t, err)
-		test.AssertEqual(t, id, skbID)
-	})
-
-	t.Run("struct", func(t *testing.T) {
-		skb := &btf.Struct{
-			Name: "sk_buff",
-		}
-
-		__skb, err := testBtf.AnyTypeByName("sk_buff")
-		test.AssertNoErr(t, err)
-		skbID, err := testBtf.TypeID(__skb)
-		test.AssertNoErr(t, err)
-
-		id, err := getPointerTypeID(testBtf, skb, true, false)
-		test.AssertNoErr(t, err)
-		test.AssertEqual(t, id, skbID)
-	})
-
-	t.Run("union", func(t *testing.T) {
-		attr := &btf.Union{
-			Name: "bpf_attr",
-		}
-
-		__attr, err := testBtf.AnyTypeByName("bpf_attr")
-		test.AssertNoErr(t, err)
-		attrID, err := testBtf.TypeID(__attr)
-		test.AssertNoErr(t, err)
-
-		id, err := getPointerTypeID(testBtf, attr, false, true)
-		test.AssertNoErr(t, err)
-		test.AssertEqual(t, id, attrID)
-	})
-
-	t.Run("not found", func(t *testing.T) {
-		notFound := &btf.Struct{
-			Name: "not_found",
-		}
-
-		_, err := getPointerTypeID(testBtf, notFound, true, false)
-		test.AssertHaveErr(t, err)
-		test.AssertStrPrefix(t, err.Error(), "failed to find pointer type for")
-	})
-}
-
 func TestSizeof(t *testing.T) {
 	t.Run("failed to get size", func(t *testing.T) {
 		typ := &btf.FuncProto{}
