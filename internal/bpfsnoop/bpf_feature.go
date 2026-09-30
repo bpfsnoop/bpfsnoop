@@ -11,7 +11,9 @@ import (
 	"github.com/cilium/ebpf/asm"
 	"github.com/cilium/ebpf/btf"
 	"github.com/cilium/ebpf/link"
+	"github.com/cilium/ebpf/rlimit"
 
+	"github.com/bpfsnoop/bpfsnoop/internal/assert"
 	"github.com/bpfsnoop/bpfsnoop/internal/atomix"
 	"github.com/bpfsnoop/bpfsnoop/internal/bpf"
 )
@@ -202,4 +204,28 @@ func haveTrampolineJmpMode(insns []byte) {
 
 	trampJmpMode = insns[0] == 0xE9 /* jmp rel32 */
 	DebugLog("Trampoline jmp mode: %v", trampJmpMode)
+}
+
+func printFeatures() {
+	assert.NoErr(rlimit.RemoveMemlock(), "Failed to remove memlock limit: %v")
+	assert.NoErr(PrepareKernelBTF(), "Failed to prepare kernel BTF: %v")
+	features, err := GetBPFFeatures()
+	assert.NoVerifierErr(err, "Failed to detect BPF features: %v")
+
+	for _, feature := range []struct {
+		name  string
+		value bool
+	}{
+		{"Ringbuf map", features.HasRingbuf},
+		{"Branch Record", features.HasBranchSnapshot},
+		{"Get stackid", features.HasGetStackID},
+		{"Get arg_cnt", hasGetFuncArgCnt},
+		{"fsession", hasFsession},
+		{"kprobe.multi", features.HasKprobeMulti},
+		{"kprobe.session", hasKprobeSession},
+		{"Nested tracing", features.HasNestedTracing},
+		{"ENDBR insn", hasEndbr},
+	} {
+		fmt.Printf("%s:\t%t\n", feature.name, feature.value)
+	}
 }

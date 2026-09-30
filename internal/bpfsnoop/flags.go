@@ -96,6 +96,7 @@ func ParseFlags() (*Flags, error) {
 	var findVmlinux bool
 	var mcp bool
 	var mcpDaemon bool
+	var detectFeatures bool
 	var showTypes []string
 	var readDatum []string
 	var flags Flags
@@ -140,6 +141,7 @@ func ParseFlags() (*Flags, error) {
 	f.StringVar(&kernelVmlinuxDir, "kernel-vmlinux", "", "specific kernel vmlinux directory to search vmlinux and modules dbgsym files")
 	f.BoolVar(&skipTunnel, "skip-tunnel", false, "skip tunnel (vxlan) header when parsing packet, applied for both --filter-pkt and --output-pkt")
 	f.StringArrayVar(&readDatum, "read", nil, "read kernel memory using C expressions")
+	f.BoolVar(&detectFeatures, "detect-features", false, "print the detected features, then exit")
 
 	f.BoolVarP(&flags.listFuncParams, "show-func-proto-internal", "S", false, "show function prototype of -p,-k,-t")
 	f.UintVarP(&limitEvents, "limit-events-internal", "E", 0, "limited number events to output, 0 to output all events")
@@ -205,6 +207,11 @@ func ParseFlags() (*Flags, error) {
 		vmlinuxPath, err := FindVmlinux()
 		assert.NoErr(err, "Failed to find vmlinux file: %v")
 		fmt.Println(vmlinuxPath)
+		os.Exit(0)
+	}
+
+	if detectFeatures {
+		printFeatures()
 		os.Exit(0)
 	}
 
