@@ -4,6 +4,7 @@
 package cc
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/Asphaltt/mybtf"
@@ -11,22 +12,30 @@ import (
 	"github.com/cilium/ebpf/btf"
 )
 
+// canRdonlyCast checks membership in the supplied kernel or module BTF.
+// Program-local types must use probe read, even if their names match kernel
+// types.
 func canRdonlyCast(spec btfSpecer, t btf.Type) (bool, btf.TypeID, error) {
-	t = mybtf.UnderlyingType(t)
-	ptr, ok := t.(*btf.Pointer)
+	ptr, ok := btf.UnderlyingType(t).(*btf.Pointer)
 	if !ok {
 		return false, 0, nil
 	}
 
-	t = mybtf.UnderlyingType(ptr.Target)
-	_, isStruct := t.(*btf.Struct)
-	_, isUnion := t.(*btf.Union)
-	if !isStruct && !isUnion {
+	t = btf.UnderlyingType(ptr.Target)
+	switch t.(type) {
+	case *btf.Struct, *btf.Union:
+	default:
 		return false, 0, nil
 	}
 
-	typID, err := getPointerTypeID(spec, t, isStruct, isUnion)
-	return err == nil, typID, err
+	typeID, err := spec.TypeID(t)
+	if errors.Is(err, btf.ErrNotFound) {
+		// Program-local types are absent from the supplied kernel BTF and
+		// cannot be used with bpf_rdonly_cast. Treat this as a probe-read
+		// fallback rather than a compilation error; propagate other errors.
+		return false, 0, nil
+	}
+	return err == nil, typeID, err
 }
 
 func canReadByRdonlyCast(t btf.Type) bool {

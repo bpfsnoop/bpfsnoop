@@ -21,30 +21,6 @@ func canCalculate(t btf.Type) bool {
 	}
 }
 
-func getPointerTypeID(spec btfSpecer, t btf.Type, isStruct, isUnion bool) (btf.TypeID, error) {
-	if id, err := spec.TypeID(t); err == nil {
-		return id, nil
-	}
-
-	var typeName string
-	if isStruct {
-		typeName = t.(*btf.Struct).Name
-	} else if isUnion {
-		typeName = t.(*btf.Union).Name
-	}
-
-	for val := range spec.All() {
-		if s, ok := val.(*btf.Struct); ok && s.Name == typeName {
-			return spec.TypeID(val)
-		}
-		if u, ok := val.(*btf.Union); ok && u.Name == typeName {
-			return spec.TypeID(val)
-		}
-	}
-
-	return 0, fmt.Errorf("failed to find pointer type for %v: %w", t, ErrBtfNotFound)
-}
-
 func sizeof(t btf.Type) (asm.Size, error) {
 	size, err := btf.Sizeof(t)
 	if err != nil {
