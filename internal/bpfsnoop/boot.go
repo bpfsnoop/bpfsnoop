@@ -64,7 +64,7 @@ func Boot(ctx context.Context, flags *Flags, config BootConfig) error {
 	return bootTracing(ctx, flags, config)
 }
 
-func bootTracing(ctx context.Context, flags *Flags, config BootConfig) error {
+func bootTracing(ctx context.Context, flags *Flags, config BootConfig) (retErr error) {
 	var r syscall.Rlimit
 	if err := syscall.Getrlimit(syscall.RLIMIT_NOFILE, &r); err != nil {
 		return fmt.Errorf("failed to get nofile rlimit: %w", err)
@@ -177,6 +177,19 @@ func bootTracing(ctx context.Context, flags *Flags, config BootConfig) error {
 		if err != nil {
 			return fmt.Errorf("failed to create addr2line from vmlinux: %w", err)
 		}
+	}
+
+	for _, kfunc := range kfuncs {
+		if !kfunc.Insn {
+			continue
+		}
+		restore, err := disableKprobeOptimization(kprobeOptimizationPath)
+		if err != nil {
+			return err
+		}
+		// Restore only after all tracing attachments have been removed.
+		defer func() { retErr = errors.Join(retErr, restore()) }()
+		break
 	}
 
 	insns, err := NewFuncInsns(kfuncs, kallsyms)

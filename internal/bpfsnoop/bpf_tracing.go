@@ -103,9 +103,16 @@ func setBpfsnoopConfig(spec *ebpf.CollectionSpec, c traceeConfig) error {
 	return nil
 }
 
-func NewBPFTracing(spec *ebpf.CollectionSpec, reusedMaps map[string]*ebpf.Map, bprogs *bpfProgs, kfuncs KFuncs, insns FuncInsns, graphs FuncGraphs, kfuncsMulti []kfuncInfoMulti) (*bpfTracing, error) {
+func NewBPFTracing(spec *ebpf.CollectionSpec, reusedMaps map[string]*ebpf.Map, bprogs *bpfProgs, kfuncs KFuncs, insns FuncInsns, graphs FuncGraphs, kfuncsMulti []kfuncInfoMulti) (_ *bpfTracing, retErr error) {
 	var errg errgroup.Group
 	var t bpfTracing
+	defer func() {
+		if retErr != nil {
+			// Attach workers may still be running after a preparation error.
+			_ = errg.Wait()
+			t.Close()
+		}
+	}()
 
 	t.traceProgs(&errg, spec, reusedMaps, bprogs)
 	if err := t.traceFuncs(&errg, spec, reusedMaps, kfuncs); err != nil {
@@ -128,7 +135,6 @@ func NewBPFTracing(spec *ebpf.CollectionSpec, reusedMaps map[string]*ebpf.Map, b
 	})
 
 	if err := errg.Wait(); err != nil {
-		t.Close()
 		return nil, fmt.Errorf("failed to trace targets: %w", err)
 	}
 
