@@ -316,6 +316,9 @@ func (f *Flags) ParseProgs() ([]ProgFlag, error) {
 }
 
 func (f *Flags) multiModeOnly() bool {
+	if len(f.kfuncs) == 0 || len(f.progs) != 0 {
+		return false
+	}
 	for _, kf := range f.kfuncs {
 		if !strings.Contains(kf, "(m)") {
 			return false
