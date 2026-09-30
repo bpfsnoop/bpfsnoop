@@ -9,6 +9,7 @@ import (
 	"io"
 	"os/exec"
 	"strings"
+	"syscall"
 	"time"
 
 	"golang.org/x/sync/errgroup"
@@ -68,6 +69,7 @@ func testCLI(w io.Writer, t testCase) bool {
 	started := time.Now()
 
 	cmd := exec.Command("bash", "-c", t.test)
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
@@ -94,8 +96,10 @@ func testCLI(w io.Writer, t testCase) bool {
 	var errg errgroup.Group
 
 	errCh := make(chan error, 1)
+	done := make(chan struct{})
 
 	errg.Go(func() error {
+		defer close(done)
 		defer close(errCh)
 		errCh <- cmd.Wait()
 		return nil
@@ -108,11 +112,14 @@ func testCLI(w io.Writer, t testCase) bool {
 			fmt.Fprintln(w, line)
 
 			if strings.Contains(line, t.match) {
-				matched <- struct{}{}
+				select {
+				case matched <- struct{}{}:
+				default:
+				}
 			}
 		}
 
-		return nil
+		return scanner.Err()
 	})
 
 	errg.Go(func() error {
@@ -122,15 +129,42 @@ func testCLI(w io.Writer, t testCase) bool {
 			fmt.Fprintln(w, line)
 
 			if strings.Contains(line, t.match) {
-				matched <- struct{}{}
+				select {
+				case matched <- struct{}{}:
+				default:
+				}
 			}
 			if strings.Contains(line, "bpfsnoop is running..") {
 				close(ready)
 			}
 		}
 
-		return nil
+		return scanner.Err()
 	})
+
+	// SIGTERM lets bpfsnoop detach instruction probes and restore optprobes.
+	// cmd.Wait has a single owner above; do not call killCmd for this command.
+	stop := func() bool {
+		select {
+		case <-done:
+			return true
+		default:
+		}
+		_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGTERM)
+		select {
+		case <-done:
+			return true
+		case <-time.After(30 * time.Second):
+			prErr(w, red, "bpfsnoop did not stop gracefully; forcing exit. Kprobe optimization may need manual restoration.\n")
+			_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+			<-done
+			return false
+		}
+	}
+	defer func() {
+		stop()
+		_ = errg.Wait()
+	}()
 
 	select {
 	case err := <-errCh:
@@ -147,7 +181,6 @@ func testCLI(w io.Writer, t testCase) bool {
 		prErr(w, red, "Timeout after %s waiting for bpfsnoop to start\n", t.timeout)
 		prErr(w, red, "Test FAILED in %s (timeout of %s exceeded)\n",
 			time.Since(started), t.timeout)
-		killCmd(cmd)
 		return false
 	}
 
@@ -167,9 +200,5 @@ func testCLI(w io.Writer, t testCase) bool {
 		prErr(w, red, "Test FAILED in %s (not match)\n", time.Since(started))
 	}
 
-	killCmd(cmd)
-
-	_ = errg.Wait()
-
-	return passed
+	return stop() && passed
 }
