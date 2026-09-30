@@ -55,11 +55,14 @@ func bpfKfuncCall(id btf.TypeID) asm.Instruction {
 	}
 }
 
-func (c *compiler) coreReadByProbeRead(reg asm.Register, lastIdx bool) {
+func (c *compiler) coreReadByProbeRead(offset int64, reg asm.Register, lastIdx bool) {
 	immReg := asm.R1
 	resReg := immReg
 	if lastIdx && reg != immReg {
 		resReg = reg
+	}
+	if offset != 0 {
+		c.emit(asm.Add.Imm(immReg, int32(offset)))
 	}
 	c.emit(
 		asm.Mov.Reg(asm.R3, immReg),  // r3 = r1
@@ -103,7 +106,7 @@ func (c *compiler) emitCoreRead(offsets []pendingOffset, reg asm.Register) error
 			return fmt.Errorf("failed to check if %v can be bpf_rdonly_cast: %w", offset.prevBtf, err)
 		}
 		if !canCast {
-			c.coreReadByProbeRead(reg, i == lastIdx)
+			c.coreReadByProbeRead(offset.offset, reg, i == lastIdx)
 			continue
 		}
 
@@ -113,7 +116,7 @@ func (c *compiler) emitCoreRead(offsets []pendingOffset, reg asm.Register) error
 		}
 
 		if !canReadByRdonlyCast(offset.btf) {
-			c.coreReadByProbeRead(reg, i == lastIdx)
+			c.coreReadByProbeRead(offset.offset, reg, i == lastIdx)
 			continue
 		}
 
