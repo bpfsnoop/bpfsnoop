@@ -5,6 +5,7 @@ package main
 
 import (
 	"io"
+	"os"
 	"os/exec"
 	"time"
 )
@@ -25,9 +26,14 @@ func runCmd(w io.Writer, command string, wait time.Duration) *exec.Cmd {
 	return cmd
 }
 
-func killCmd(cmd *exec.Cmd) {
+func killCmd(cmd *exec.Cmd, signals ...os.Signal) {
+	sig := os.Kill
+	if len(signals) != 0 {
+		sig = signals[0]
+	}
+
 	if cmd.Process != nil {
-		_ = cmd.Process.Kill()
+		_ = cmd.Process.Signal(sig)
 		_ = cmd.Wait()
 	}
 }

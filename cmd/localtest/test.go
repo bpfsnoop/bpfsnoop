@@ -7,6 +7,7 @@ import (
 	"bufio"
 	"fmt"
 	"io"
+	"os"
 	"os/exec"
 	"strings"
 	"syscall"
@@ -48,8 +49,15 @@ func test(w io.Writer, t testCase) bool {
 	}
 
 	if t.requiredProcess != "" {
+		var signals []os.Signal
+		if strings.HasSuffix(strings.Split(t.requiredProcess, " ")[0], "bpfsnoop") {
+			signals = append(signals, os.Interrupt)
+		}
+
 		prInfo(w, yellow, "Required process: %s\n", t.requiredProcess)
-		defer killCmd(runCmd(w, t.requiredProcess, 200*time.Millisecond))
+		defer killCmd(runCmd(w, t.requiredProcess, 200*time.Millisecond), signals...)
+
+		time.Sleep(1 * time.Second) // wait sometime for the process readiness
 	}
 
 	prInfo(w, yellow, "Name: %s\n", t.name)
