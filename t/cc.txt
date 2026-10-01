@@ -112,6 +112,7 @@ tag: cc,struct
 test: -k 'bpf_check'
 match: is_kernel=0x0
 trigger: ./xdpcrc -d lo
+hint: May failed due to missing struct/union-arg tracing support
 
 ---
 

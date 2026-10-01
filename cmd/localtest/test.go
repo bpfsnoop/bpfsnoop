@@ -27,6 +27,8 @@ type testCase struct {
 	timeout         time.Duration
 	requiredProcess string
 	triggerProcess  string
+	feature         []string
+	hint            string
 }
 
 func (t *testCase) reset() {
@@ -42,9 +44,18 @@ func (t *testCase) valid() bool {
 	return t.tag != "" && target != "" && t.match != "" && t.timeout > 0
 }
 
+func (t *testCase) validateFeature() bool {
+	return haveAllFeatures(t.feature)
+}
+
 func test(w io.Writer, t testCase) bool {
 	if !t.valid() {
 		prErr(w, red, "Invalid test case: %+v\n", t)
+		return false
+	}
+
+	if !t.validateFeature() {
+		prInfo(w, yellow, "Missed required feature: %v\n", t.feature)
 		return false
 	}
 

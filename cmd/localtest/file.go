@@ -83,6 +83,13 @@ func parseTestCase(scanner *bufio.Scanner) (testCase, bool, error) {
 			t.triggerProcess = b
 			continue
 
+		case "feature":
+			t.feature = strings.Split(b, ",")
+			continue
+
+		case "hint":
+			t.hint = b
+
 		default:
 			if strings.HasPrefix(a, "match_") {
 				continue
@@ -124,12 +131,25 @@ func testFile(w io.Writer, file string) bool {
 		i++
 
 		if testName == "" || testName == t.name {
+			if !t.validateFeature() {
+				prInfo(w, yellow, "Skip test %s due to missing required feature %v\n",
+					t.name, t.feature)
+				skippedTests = append(skippedTests, failedTest{
+					file:     file,
+					testCase: t,
+				})
+				continue
+			}
+
 			if !test(w, t) {
 				failedTests = append(failedTests, failedTest{
 					file:     file,
 					testCase: t,
 				})
 				passed = false
+				if t.hint != "" {
+					prInfo(w, yellow, "%s\n", t.hint)
+				}
 			}
 		}
 	}

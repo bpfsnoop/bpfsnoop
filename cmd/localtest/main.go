@@ -20,9 +20,17 @@ type failedTest struct {
 	testCase
 }
 
-var failedTests []failedTest
+var (
+	failedTests  []failedTest
+	skippedTests []failedTest
+)
 
 func main() {
+	if err := detectFeatures(); err != nil {
+		prErr(os.Stderr, red, "Failed to detect features: %v", err)
+		os.Exit(1)
+	}
+
 	var passed bool
 	defer func() {
 		if !passed {
@@ -38,12 +46,17 @@ func main() {
 		defer func() {
 			elapsed := time.Since(started)
 			fmt.Fprintln(w)
-			prInfo(w, yellow, "Test file %s completed in %s\n", f.testFile, elapsed)
+			prInfo(w, yellow, "Test file %s completed in %s\n\n", f.testFile, elapsed)
 			if passed {
 				prInfo(w, green, "=== ALL TESTS PASSED ===\n")
 			} else {
 				prErr(w, red, "=== SOME TESTS FAILED ===\n")
 				printFailedTests(w)
+			}
+			if len(skippedTests) != 0 {
+				fmt.Fprintln(w)
+				prInfo(w, yellow, "=== SOME TESTS SKIPPED ===\n")
+				printSkippedTests(w)
 			}
 		}()
 
@@ -57,12 +70,17 @@ func main() {
 		defer func() {
 			elapsed := time.Since(started)
 			fmt.Fprintln(w)
-			prInfo(w, yellow, "Test dir %s completed in %s\n", f.testDir, elapsed)
+			prInfo(w, yellow, "Test dir %s completed in %s\n\n", f.testDir, elapsed)
 			if passed {
 				prInfo(w, green, "=== ALL TESTS PASSED ===\n")
 			} else {
 				prErr(w, red, "=== SOME TESTS FAILED ===\n")
 				printFailedTests(w)
+			}
+			if len(skippedTests) != 0 {
+				fmt.Fprintln(w)
+				prInfo(w, yellow, "=== SOME TESTS SKIPPED ===\n")
+				printSkippedTests(w)
 			}
 		}()
 
@@ -80,7 +98,6 @@ func main() {
 		passed = true
 		for i, file := range files {
 			prLongSeparatorIf(w, i > 0 && testName == "")
-			i++
 
 			file = filepath.Join(f.testDir, file)
 			passed = testFile(w, file) && passed
@@ -94,6 +111,40 @@ func main() {
 		failedTests = append(failedTests, failedTest{testCase: f.testCase})
 		printFailedTests(os.Stdout)
 	}
+	if len(skippedTests) != 0 {
+		fmt.Fprintln(os.Stdout)
+		prInfo(os.Stdout, yellow, "=== SOME TESTS SKIPPED ===\n")
+		printSkippedTests(os.Stdout)
+	}
+}
+
+func descFailedTest(t failedTest) string {
+	name := t.name
+	if name == "" {
+		name = "<unnamed>"
+	}
+	target := t.test
+	if mcpMode {
+		target = t.tool
+	}
+
+	var sb strings.Builder
+	if t.file != "" {
+		fmt.Fprintf(&sb, "- %s: ", t.file)
+	} else {
+		fmt.Fprintf(&sb, "- ")
+	}
+	fmt.Fprintf(&sb, "%s (%s)", name, target)
+
+	if t.feature != nil {
+		fmt.Fprintf(&sb, " (feat: %v)", t.feature)
+	}
+
+	if t.hint != "" {
+		fmt.Fprintf(&sb, " (hint: %s)", t.hint)
+	}
+
+	return sb.String()
 }
 
 func printFailedTests(w io.Writer) {
@@ -104,18 +155,17 @@ func printFailedTests(w io.Writer) {
 	fmt.Fprintln(w)
 	prErr(w, red, "Failed tests:\n")
 	for _, failed := range failedTests {
-		name := failed.name
-		if name == "" {
-			name = "<unnamed>"
-		}
-		target := failed.test
-		if mcpMode {
-			target = failed.tool
-		}
-		if failed.file != "" {
-			prErr(w, red, "- %s: %s (%s)\n", failed.file, name, target)
-		} else {
-			prErr(w, red, "- %s (%s)\n", name, target)
-		}
+		prErr(w, red, "%s\n", descFailedTest(failed))
+	}
+}
+
+func printSkippedTests(w io.Writer) {
+	if len(skippedTests) == 0 {
+		return
+	}
+
+	prInfo(w, yellow, "Skipped tests:\n")
+	for _, skip := range skippedTests {
+		prInfo(w, yellow, "%s\n", descFailedTest(skip))
 	}
 }
