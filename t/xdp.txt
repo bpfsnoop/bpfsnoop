@@ -49,3 +49,31 @@ test: -p 'n:crc' -m exit --output-fgraph --fgraph-max-depth 1 --limit-events 1
 match: (41)) retval=42
 prerequisite: ./xdpcrc -d lo
 trigger: ping -c 1 -s 64 127.0.0.1
+
+---
+
+# indexing an array member loads the element, not its address
+name: xdp::index:array
+tag: xdp,fnarg,index
+test: -k generic_xdp_install --output-arg 'dev->name[0]' --output-arg 'dev->name[1]'
+match: (char)'dev->name[0]'=0x6c/108, (char)'dev->name[1]'=0x6f/111
+trigger: ./xdpcrc -d lo
+
+---
+
+# indexing a pointer to struct, then a member of the element
+name: xdp::index:ptr_struct
+tag: xdp,fnarg,index
+test: -k generic_xdp_install --output-arg 'str(dev->_tx[0].dev->name)'
+match: 'str(dev->_tx[0].dev->name)'="lo"
+trigger: ./xdpcrc -d lo
+
+---
+
+# indexing a pointer arg of a bpf subprog
+name: xdp::index:subprog_ptr
+tag: xdp,fnarg,index
+test: -p 'n:crc:retval_probe' -m entry --output-arg 'v[0]' --limit-events 1
+match: (int)'v[0]'=41
+prerequisite: ./xdpcrc -d lo
+trigger: ping -c 1 -s 64 127.0.0.1
