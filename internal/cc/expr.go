@@ -181,6 +181,9 @@ func CompileEvalExpr(opts CompileExprOptions) (EvalResult, error) {
 		if e.Left.Op != cc.Name {
 			return res, fmt.Errorf("function call must have a constant name")
 		}
+		if isBuiltinFunc(e.Left.Text) {
+			break // Scalar builtins are evaluated with the full expression.
+		}
 
 		val, err := compileFuncCall(e)
 		if err != nil {

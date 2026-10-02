@@ -129,6 +129,10 @@ func (c *compiler) evaluate(expr *cc.Expr) (exprValue, error) {
 	case cc.Cond:
 		return c.evaluateCond(expr)
 
+	// === Function call ===
+	case cc.Call:
+		return c.evaluateCall(expr)
+
 	default:
 		return exprValue{}, fmt.Errorf("unsupported expression operator: %s", expr.Op)
 	}
