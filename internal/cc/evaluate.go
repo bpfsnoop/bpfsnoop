@@ -356,36 +356,47 @@ func (c *compiler) evaluateIndex(expr *cc.Expr) (exprValue, error) {
 	}
 
 	offset := index * int64(elemSize)
+	elemPtr := &btf.Pointer{Target: elemType}
 
+	var result exprValue
 	switch base.kind {
 	case exprValueKindPending:
-		base.addOffset(pendingOffset{
-			offset:  offset,
-			deref:   false,
-			btf:     elemType,
-			prevBtf: base.prevBtf(),
-			inArray: inArray,
-		})
-		base.btf = elemType
-		base.mem = nil
-		return base, nil
-
-	case exprValueKindMaterialized:
-		result := newPendingReg(base.reg, base.btf)
+		result = base
 		result.addOffset(pendingOffset{
 			offset:  offset,
 			deref:   false,
-			btf:     elemType,
+			btf:     elemPtr,
+			prevBtf: base.prevBtf(),
+			inArray: inArray,
+		})
+
+	case exprValueKindMaterialized:
+		result = newPendingReg(base.reg, base.btf)
+		result.addOffset(pendingOffset{
+			offset:  offset,
+			deref:   false,
+			btf:     elemPtr,
 			prevBtf: base.btf,
 			inArray: inArray,
 		})
-		result.btf = elemType
-		result.mem = nil
-		return result, nil
 
 	default:
 		return exprValue{}, fmt.Errorf("cannot index %s value", base.kind)
 	}
+
+	// p[i] is *(p + i): the offset above is the element address, so load
+	// the element like evaluateIndir does. An array element stays an
+	// address, the same as an array member.
+	_, elemIsArray := mybtf.UnderlyingType(elemType).(*btf.Array)
+	result.addOffset(pendingOffset{
+		offset:  0,
+		deref:   !elemIsArray,
+		btf:     elemType,
+		prevBtf: elemPtr,
+	})
+	result.btf = elemType
+	result.mem = nil
+	return result, nil
 }
 
 // evaluateIndir handles pointer dereference (*).
