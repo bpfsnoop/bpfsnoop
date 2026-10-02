@@ -1,0 +1,67 @@
+# Copyright 2026 Leon Hwang.
+# SPDX-License-Identifier: Apache-2.0
+
+# These tests cover scalar builtins in filters and output expressions.
+
+# h2ns() implicitly narrows the loopback interface's int ifindex to 16 bits.
+name: cc::h2ns
+tag: cc,builtin,int,pkt,tp
+test: -t netif_receive_skb --filter-pkt 'host 127.0.0.1 and icmp' --filter-arg 'h2ns(skb->dev->ifindex) == h2ns(1)' --output-arg 'h2ns(skb->dev->ifindex)' --limit-events 1
+match: 'h2ns(skb->dev->ifindex)'=0x100/256
+trigger: ping -c 1 -s 64 127.0.0.1
+
+---
+
+# n2hs() converts the packet's network-order IPv4 EtherType to host order.
+name: cc::n2hs
+tag: cc,builtin,int,pkt,tp
+test: -t netif_receive_skb --filter-pkt 'host 127.0.0.1 and icmp' --filter-arg 'n2hs(skb->protocol) == 0x0800' --output-arg 'n2hs(skb->protocol)' --limit-events 1
+match: 'n2hs(skb->protocol)'=0x800/2048
+trigger: ping -c 1 -s 64 127.0.0.1
+
+---
+
+# h2nl() converts the loopback interface's int ifindex to network order.
+name: cc::h2nl
+tag: cc,builtin,int,pkt,tp
+test: -t netif_receive_skb --filter-pkt 'host 127.0.0.1 and icmp' --filter-arg 'h2nl(skb->dev->ifindex) == h2nl(1)' --output-arg 'h2nl(skb->dev->ifindex)' --limit-events 1
+match: 'h2nl(skb->dev->ifindex)'=0x1000000/16777216
+trigger: ping -c 1 -s 64 127.0.0.1
+
+---
+
+# n2hl() converts the packet's network-order IPv4 source address to host order.
+name: cc::n2hl
+tag: cc,builtin,int,pkt,tp
+test: -t netif_receive_skb --filter-pkt 'host 127.0.0.1 and icmp' --filter-arg 'n2hl(((struct iphdr *)(skb->head + skb->network_header))->saddr) == 0x7f000001' --output-arg 'n2hl(((struct iphdr *)(skb->head + skb->network_header))->saddr)' --limit-events 1
+match: 'n2hl(((struct iphdr *)(skb->head + skb->network_header))->saddr)'=0x7f000001/2130706433
+trigger: ping -c 1 -s 64 127.0.0.1
+
+---
+
+# Nested 16-bit conversions discard high bits from an int arithmetic result.
+name: cc::byte-order:narrow16
+tag: cc,builtin,int,pkt,tp
+test: -t netif_receive_skb --filter-pkt 'host 127.0.0.1 and icmp' --filter-arg 'n2hs(h2ns(skb->dev->ifindex + 0x10000)) == 1' --output-arg 'n2hs(h2ns(skb->dev->ifindex + 0x10000))' --limit-events 1
+match: 'n2hs(h2ns(skb->dev->ifindex + 0x10000))'=0x1/1
+trigger: ping -c 1 -s 64 127.0.0.1
+
+---
+
+# Nested 32-bit conversions discard high bits from a 64-bit bitwise result.
+# Shift before casting so ifindex is read at its original four-byte width.
+name: cc::byte-order:narrow32
+tag: cc,builtin,int,pkt,tp
+test: -t netif_receive_skb --filter-pkt 'host 127.0.0.1 and icmp' --filter-arg 'n2hl(h2nl(((unsigned long)(skb->dev->ifindex << 1) << 31) | skb->dev->ifindex)) == 1' --output-arg 'n2hl(h2nl(((unsigned long)(skb->dev->ifindex << 1) << 31) | skb->dev->ifindex))' --limit-events 1
+match: 'n2hl(h2nl(((unsigned long)(skb->dev->ifindex << 1) << 31) | skb->dev->ifindex))'=0x1/1
+trigger: ping -c 1 -s 64 127.0.0.1
+
+---
+
+# Widening a signed short preserves its sign before conversion to uint32.
+# Compare the upper 16 bits to avoid sign extension of a 0xffffffff jump immediate.
+name: cc::byte-order:signed-widen32
+tag: cc,builtin,int,pkt,tp
+test: -t netif_receive_skb --filter-pkt 'host 127.0.0.1 and icmp' --filter-arg 'skb->dev->ifindex == 1 && (n2hl(h2nl((short)(skb->dev->ifindex - 2))) >> 16) == 0xffff' --output-arg 'n2hl(h2nl((short)(skb->dev->ifindex - 2)))' --limit-events 1
+match: 'n2hl(h2nl((short)(skb->dev->ifindex - 2)))'=0xffffffff/4294967295
+trigger: ping -c 1 -s 64 127.0.0.1

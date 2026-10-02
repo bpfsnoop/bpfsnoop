@@ -109,6 +109,7 @@ $(XDPCRC_OBJ): $(XDPCRC_SRC) $(VMLINUX_OBJ)
 testlocal: $(LOCALTEST_OBJ) $(XDPCRC_OBJ)
 	@$(CMD_IP) link set dev lo up
 	./$(LOCALTEST_OBJ) --test-dir ./t
+	./$(LOCALTEST_OBJ) --test-dir ./t/cc
 
 .PHONY: testcli
 testcli: testlocal
