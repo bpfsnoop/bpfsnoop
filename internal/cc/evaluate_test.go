@@ -525,6 +525,125 @@ func TestEvaluateIndex(t *testing.T) {
 	})
 }
 
+func TestEvaluateIndexLoadsElement(t *testing.T) {
+	charTyp, err := testBtf.AnyTypeByName("char")
+	test.AssertNoErr(t, err)
+	netDev, err := testBtf.AnyTypeByName("net_device")
+	test.AssertNoErr(t, err)
+	netDevSize, err := btf.Sizeof(netDev)
+	test.AssertNoErr(t, err)
+
+	// m->cell is a 2x4 array; pod is a program-local struct, absent from
+	// the kernel BTF, like the ones in a traced bpf prog.
+	matrix := &btf.Pointer{Target: &btf.Struct{
+		Name: "matrix",
+		Size: 8,
+		Members: []btf.Member{{
+			Name: "cell",
+			Type: &btf.Array{Type: &btf.Array{Type: getU8Btf(t), Nelems: 4}, Nelems: 2},
+		}},
+	}}
+	pod := &btf.Pointer{Target: &btf.Struct{
+		Name: "local_pod",
+		Size: 16,
+		Members: []btf.Member{{
+			Name: "id",
+			Type: &btf.Array{Type: charTyp, Nelems: 16},
+		}},
+	}}
+	addVars := func(c *compiler) *compiler {
+		c.vars = append(c.vars, "m", "pod")
+		c.btfs = append(c.btfs, matrix, pod)
+		return c
+	}
+
+	c := addVars(prepareCompilerDirectRead(t))
+
+	t.Run("array element", func(t *testing.T) {
+		defer resetCompilerDirectRead(c)
+
+		val, err := c.materialize(prepareExprVal(t, c, "skb->cb[2]"))
+		test.AssertNoErr(t, err)
+		test.AssertEqualSlice(t, c.insns, asm.Instructions{
+			asm.LoadMem(r8, argsReg, 0, dword), // skb
+			asm.Add.Imm(r8, 40),                // skb->cb
+			asm.Add.Imm(r8, 2),                 // &skb->cb[2]
+			asm.LoadMem(r8, r8, 0, dword),      // skb->cb[2]
+			asm.And.Imm(r8, 0xFF),              // kernel char is unsigned
+		})
+		test.AssertEqual(t, val.btf, charTyp)
+	})
+
+	t.Run("address of array element", func(t *testing.T) {
+		defer resetCompilerDirectRead(c)
+
+		_, err := c.materialize(prepareExprVal(t, c, "&skb->cb[2]"))
+		test.AssertNoErr(t, err)
+		test.AssertEqualSlice(t, c.insns, asm.Instructions{
+			asm.LoadMem(r8, argsReg, 0, dword),
+			asm.Add.Imm(r8, 40),
+			asm.Add.Imm(r8, 2),
+		})
+	})
+
+	t.Run("array of arrays", func(t *testing.T) {
+		defer resetCompilerDirectRead(c)
+
+		row := prepareExprVal(t, c, "m->cell[1]")
+		test.AssertFalse(t, row.lastOffset().deref)
+
+		_, err := c.materialize(prepareExprVal(t, c, "m->cell[1][2]"))
+		test.AssertNoErr(t, err)
+		test.AssertEqualSlice(t, c.insns, asm.Instructions{
+			asm.LoadMem(r8, argsReg, 48, dword), // m
+			asm.Add.Imm(r8, 4),                  // &m->cell[1]
+			asm.Add.Imm(r8, 2),                  // &m->cell[1][2]
+			asm.LoadMem(r8, r8, 0, dword),       // m->cell[1][2]
+			asm.And.Imm(r8, 0xFF),
+		})
+	})
+
+	cr := addVars(prepareCompilerCoreRead(t))
+
+	t.Run("struct element member by core read", func(t *testing.T) {
+		defer resetCompilerCoreRead(cr)
+
+		val := prepareExprVal(t, cr, "skb->dev[1].ifindex")
+		err := cr.emitCoreRead(val.offsets, r8)
+		test.AssertNoErr(t, err)
+		test.AssertEqualSlice(t, cr.insns, asm.Instructions{
+			asm.Mov.Reg(r1, r8),
+			asm.Mov.Imm(r2, 1875), // struct sk_buff
+			bpfKfuncCall(bpfRdonlyCastKfuncID),
+			asm.LoadMem(r1, r0, 16, dword), // skb->dev
+			asm.JEq.Imm(r1, 0, cr.labelExit),
+			asm.Add.Imm(r1, int32(netDevSize)), // &skb->dev[1]
+			asm.Mov.Imm(r2, 6973),              // struct net_device
+			bpfKfuncCall(bpfRdonlyCastKfuncID),
+			asm.LoadMem(r8, r0, 224, asm.Word), // skb->dev[1].ifindex
+		})
+	})
+
+	t.Run("program-local array element by probe read", func(t *testing.T) {
+		defer resetCompilerCoreRead(cr)
+
+		_, err := cr.materialize(prepareExprVal(t, cr, "pod->id[1]"))
+		test.AssertNoErr(t, err)
+		test.AssertEqualSlice(t, cr.insns, asm.Instructions{
+			asm.LoadMem(r8, argsReg, 56, dword), // pod
+			asm.Mov.Reg(r1, r8),
+			asm.Add.Imm(r1, 1), // &pod->id[1]
+			asm.Mov.Reg(r3, r1),
+			asm.Mov.Imm(r2, 8),
+			asm.Mov.Reg(r1, rfp),
+			asm.Add.Imm(r1, -8),
+			asm.FnProbeReadKernel.Call(),
+			asm.LoadMem(r8, rfp, -8, dword), // pod->id[1]
+			asm.And.Imm(r8, 0xFF),
+		})
+	})
+}
+
 func TestEvaluateIndir(t *testing.T) {
 	c := prepareCompiler(t)
 
