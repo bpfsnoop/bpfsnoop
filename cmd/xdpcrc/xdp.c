@@ -9,6 +9,22 @@
 
 #define ctx_ptr(ctx, mem) ((void *)(unsigned long)ctx->mem)
 
+/* Used by cc map lookup tests; the XDP program need not reference it. */
+struct cc_map_value {
+    __u32 count;
+    struct {
+        __u32 count;
+    } nest;
+    __u32 tail;
+};
+
+struct {
+    __uint(type, BPF_MAP_TYPE_HASH);
+    __uint(max_entries, 1);
+    __type(key, __u32);
+    __type(value, struct cc_map_value);
+} cc_lookup SEC(".maps");
+
 static const __u16 crc16tab[256] = {
     0x0000, 0x1021, 0x2042, 0x3063, 0x4084, 0x50a5, 0x60c6, 0x70e7,
     0x8108, 0x9129, 0xa14a, 0xb16b, 0xc18c, 0xd1ad, 0xe1ce, 0xf1ef,

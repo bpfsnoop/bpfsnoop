@@ -1,0 +1,104 @@
+# Copyright 2026 Leon Hwang.
+# SPDX-License-Identifier: Apache-2.0
+
+# Rebuild xdpcrc before running: ./localtest --test-file t/cc/bpf_map.txt
+# xdpcrc creates cc_lookup with BTF and key lo.ifindex, holding
+# {count: 42, nest: {count: 84}, tail: 7}. The prerequisite owns its lifetime.
+# Run these tests serially without another xdpcrc process.
+
+# Lookup by name with the key size inferred from the map key BTF.
+name: cc::map-lookup:name
+tag: cc,builtin,map,pkt,tp
+prerequisite: ./xdpcrc -d lo
+test: -t netif_receive_skb --filter-pkt 'host 127.0.0.1 and icmp' --filter-arg 'map_lookup("cc_lookup", &skb->dev->ifindex)->count == 42' --output-arg 'map_lookup("cc_lookup", &skb->dev->ifindex)->count' --limit-events 1
+match: 'map_lookup("cc_lookup", &skb->dev->ifindex)->count'=0x2a/42
+trigger: ping -c 1 -s 64 127.0.0.1
+timeout: 10s
+
+---
+
+# Infer the map key size even when the source is a void or byte pointer.
+name: cc::map-lookup:inferred-byte-key
+tag: cc,builtin,map,pkt,tp
+prerequisite: ./xdpcrc -d lo
+test: -t netif_receive_skb --filter-pkt 'host 127.0.0.1 and icmp' --filter-arg 'map_lookup("cc_lookup", (void *)(&skb->dev->ifindex))->count == 42' --output-arg 'map_lookup("cc_lookup", (unsigned char *)(&skb->dev->ifindex))->count' --limit-events 1
+match: 'map_lookup("cc_lookup", (unsigned char *)(&skb->dev->ifindex))->count'=0x2a/42
+trigger: ping -c 1 -s 64 127.0.0.1
+timeout: 10s
+
+---
+
+# The canonical helper name has the same two-argument behavior.
+name: cc::map-lookup:helper
+tag: cc,builtin,map,pkt,tp
+prerequisite: ./xdpcrc -d lo
+test: -t netif_receive_skb --filter-pkt 'host 127.0.0.1 and icmp' --filter-arg 'bpf_map_lookup_elem("cc_lookup", &skb->dev->ifindex)->count == 42' --output-arg 'bpf_map_lookup_elem("cc_lookup", &skb->dev->ifindex)->count' --limit-events 1
+match: 'bpf_map_lookup_elem("cc_lookup", &skb->dev->ifindex)->count'=0x2a/42
+trigger: ping -c 1 -s 64 127.0.0.1
+timeout: 10s
+
+---
+
+# Nested map-value fields use direct reads.
+name: cc::map-lookup:nested
+tag: cc,builtin,map,pkt,tp
+prerequisite: ./xdpcrc -d lo
+test: -t netif_receive_skb --filter-pkt 'host 127.0.0.1 and icmp' --filter-arg 'map_lookup("cc_lookup", &skb->dev->ifindex)->nest.count == 84' --output-arg 'map_lookup("cc_lookup", &skb->dev->ifindex)->nest.count' --limit-events 1
+match: 'map_lookup("cc_lookup", &skb->dev->ifindex)->nest.count'=0x54/84
+trigger: ping -c 1 -s 64 127.0.0.1
+timeout: 10s
+
+---
+
+# An explicit size permits a void pointer key.
+name: cc::map-lookup:void-key
+tag: cc,builtin,map,pkt,tp
+prerequisite: ./xdpcrc -d lo
+test: -t netif_receive_skb --filter-pkt 'host 127.0.0.1 and icmp' --filter-arg 'bpf_map_lookup_elem("cc_lookup", (void *)(&skb->dev->ifindex), 4)->count == 42' --output-arg 'bpf_map_lookup_elem("cc_lookup", (void *)(&skb->dev->ifindex), 4)->count' --limit-events 1
+match: 'bpf_map_lookup_elem("cc_lookup", (void *)(&skb->dev->ifindex), 4)->count'=0x2a/42
+trigger: ping -c 1 -s 64 127.0.0.1
+timeout: 10s
+
+---
+
+# The alias accepts an explicit size for a byte pointer; the final field is only four bytes.
+name: cc::map-lookup:alias-byte-key
+tag: cc,builtin,map,pkt,tp
+prerequisite: ./xdpcrc -d lo
+test: -t netif_receive_skb --filter-pkt 'host 127.0.0.1 and icmp' --filter-arg 'map_lookup("cc_lookup", (unsigned char *)(&skb->dev->ifindex), 4)->tail == 7' --output-arg 'map_lookup("cc_lookup", (unsigned char *)(&skb->dev->ifindex), 4)->tail' --limit-events 1
+match: 'map_lookup("cc_lookup", (unsigned char *)(&skb->dev->ifindex), 4)->tail'=0x7/7
+trigger: ping -c 1 -s 64 127.0.0.1
+timeout: 10s
+
+---
+
+# Packet length is not the loopback ifindex key; a miss returns NULL.
+name: cc::map-lookup:miss
+tag: cc,builtin,map,pkt,tp
+prerequisite: ./xdpcrc -d lo
+test: -t netif_receive_skb --filter-pkt 'host 127.0.0.1 and icmp' --filter-arg 'skb->len > 1 && map_lookup("cc_lookup", &skb->len) == NULL' --output-arg 'skb->dev->ifindex' --limit-events 1
+match: (int)'skb->dev->ifindex'=1
+trigger: ping -c 1 -s 64 127.0.0.1
+timeout: 10s
+
+---
+
+# A failed key copy returns NULL without calling the lookup helper.
+name: cc::map-lookup:bad-key
+tag: cc,builtin,map,pkt,tp
+prerequisite: ./xdpcrc -d lo
+test: -t netif_receive_skb --filter-pkt 'host 127.0.0.1 and icmp' --filter-arg 'bpf_map_lookup_elem("cc_lookup", (void *)0, 4) == NULL' --output-arg 'skb->dev->ifindex' --limit-events 1
+match: (int)'skb->dev->ifindex'=1
+trigger: ping -c 1 -s 64 127.0.0.1
+timeout: 10s
+
+---
+
+# Wait for the prerequisite map before resolving its ID; requires bpftool.
+name: cc::map-lookup:id
+tag: cc,builtin,map,pkt,tp
+prerequisite: ./xdpcrc -d lo
+test: -t netif_receive_skb --filter-pkt 'host 127.0.0.1 and icmp' --filter-arg "map_lookup($(for attempt in {1..50}; do map_id=$(bpftool map show name cc_lookup | head -n 1 | cut -d: -f1); if [ -n "$map_id" ]; then printf '%s' "$map_id"; break; fi; sleep 0.1; done), &skb->dev->ifindex)->count == 42" --output-arg 'skb->dev->ifindex' --limit-events 1
+match: (int)'skb->dev->ifindex'=1
+trigger: ping -c 1 -s 64 127.0.0.1
+timeout: 10s

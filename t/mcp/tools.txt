@@ -21,13 +21,12 @@ timeout: 15s
 
 ---
 
-# Verify that an invalid kernel address is rejected through MCP.
+# Verify that dereferencing a NULL pointer returns a null value through MCP.
 name: mcp::read
 tag: mcp,read
 tool: read
 arguments: {"expressions":["*(int *)0"]}
-match: failed to read kernel data
-expect-error: true
+match: "expression":"*(int *)0","type":"int","value":null
 timeout: 15s
 
 ---

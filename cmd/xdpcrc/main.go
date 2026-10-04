@@ -34,6 +34,9 @@ func main() {
 	assert.NoVerifierErr(loadXdpObjects(&obj, nil), "Failed to load xdp objects: %v")
 	defer obj.Close()
 
+	assert.NoErr(obj.CcLookup.Put(uint32(ifi.Index), [3]uint32{42, 84, 7}),
+		"Failed to populate map lookup fixture: %v")
+
 	xdp, err := link.AttachXDP(link.XDPOptions{
 		Program:   obj.Crc,
 		Interface: ifi.Index,
