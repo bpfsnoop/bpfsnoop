@@ -38,12 +38,7 @@ func (c *compiler) materializeConstant(val exprValue) (exprValue, error) {
 		return exprValue{}, fmt.Errorf("failed to allocate register for constant: %w", err)
 	}
 
-	// Use 64-bit immediate instruction for large constants
-	c.emit(asm.Instruction{
-		OpCode:   asm.Mov.Op(asm.ImmSource),
-		Dst:      reg,
-		Constant: val.num,
-	})
+	c.emit(movImm(reg, val.num))
 
 	return newMaterialized(reg, val.btf), nil
 }
@@ -61,11 +56,7 @@ func (c *compiler) materializePending(val exprValue) (exprValue, error) {
 		c.emitLoadArg(val.varIndex, reg)
 	} else if val.uptrSet || val.uptr != 0 {
 		// Load user pointer constant
-		c.emit(asm.Instruction{
-			OpCode:   asm.Mov.Op(asm.ImmSource),
-			Dst:      reg,
-			Constant: int64(val.uptr),
-		})
+		c.emit(movImm(reg, int64(val.uptr)))
 	} else {
 		// Consume the pending value's base register after reading its offsets.
 		c.emit(asm.Mov.Reg(reg, val.baseReg))

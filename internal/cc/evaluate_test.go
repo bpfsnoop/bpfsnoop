@@ -4298,3 +4298,103 @@ func TestExtractEnum(t *testing.T) {
 		test.AssertStrPrefix(t, err.Error(), "enum 'BPF_PROG_TYPE_INVALID' not found in type")
 	})
 }
+
+func TestImm32Helpers(t *testing.T) {
+	t.Run("fitsImm32", func(t *testing.T) {
+		test.AssertTrue(t, fitsImm32(0x7fffffff))
+		test.AssertTrue(t, fitsImm32(-0x80000000))
+		test.AssertTrue(t, fitsImm32(int64(-0x7cbf6640))) // e.g. 0xffffffff834099c0
+		test.AssertFalse(t, fitsImm32(0x80000000))
+		test.AssertFalse(t, fitsImm32(0x100000000))
+		test.AssertFalse(t, fitsImm32(-0x777f00000000)) // 0xffff888100000000
+	})
+
+	t.Run("movImm", func(t *testing.T) {
+		test.AssertEqual(t, movImm(r8, 42), asm.Instruction{
+			OpCode:   asm.Mov.Op(asm.ImmSource),
+			Dst:      r8,
+			Constant: 42,
+		})
+		test.AssertEqual(t, movImm(r8, 0x100000000), asm.LoadImm(r8, 0x100000000, asm.DWord))
+	})
+
+	t.Run("rawLen", func(t *testing.T) {
+		test.AssertEqual(t, rawLen(asm.Instructions{
+			asm.Mov.Imm(r8, 1),
+			asm.LoadImm(r8, 0x100000000, asm.DWord),
+			Ja(1),
+		}), 4)
+	})
+}
+
+func TestEvaluateLargeConstants(t *testing.T) {
+	const big = int64(0x100000000)
+	bigPtr := uint64(0xffff888100000000)
+
+	hasInsn := func(insns asm.Instructions, want asm.Instruction) bool {
+		return slices.ContainsFunc(insns, func(ins asm.Instruction) bool {
+			return ins.OpCode == want.OpCode && ins.Dst == want.Dst &&
+				ins.Src == want.Src && ins.Constant == want.Constant
+		})
+	}
+
+	t.Run("constant", func(t *testing.T) {
+		c := prepareCompiler(t)
+		_, err := c.materializeConstant(newConstant(big))
+		test.AssertNoErr(t, err)
+		test.AssertEqualSlice(t, c.insns, asm.Instructions{
+			asm.LoadImm(r8, big, asm.DWord),
+		})
+	})
+
+	t.Run("constant pointer", func(t *testing.T) {
+		c := prepareCompilerDirectRead(t)
+		val := prepareExprVal(t, c, "*(unsigned long long *)0xffff888100000000")
+		_, err := c.materialize(val)
+		test.AssertNoErr(t, err)
+		test.AssertEqualSlice(t, c.insns, asm.Instructions{
+			asm.LoadImm(r8, int64(bigPtr), asm.DWord),
+			asm.LoadMem(r8, r8, 0, dword),
+		})
+	})
+
+	t.Run("and", func(t *testing.T) {
+		c := prepareCompiler(t)
+		_, err := c.evaluate(prepareCcExpr(t, "skb->tstamp & 0xffff000000000000"))
+		test.AssertNoErr(t, err)
+		test.AssertTrue(t, hasInsn(c.insns, asm.LoadImm(r7, int64(-0x1000000000000), asm.DWord)))
+		test.AssertTrue(t, hasInsn(c.insns, asm.And.Reg(r8, r7)))
+	})
+
+	t.Run("eqeq", func(t *testing.T) {
+		c := prepareCompiler(t)
+		_, err := c.evaluate(prepareCcExpr(t, "skb->tstamp == 0x100000000"))
+		test.AssertNoErr(t, err)
+		test.AssertTrue(t, hasInsn(c.insns, asm.LoadImm(r7, big, asm.DWord)))
+		test.AssertTrue(t, hasInsn(c.insns, JmpReg(asm.JNE, r8, r7, 2)))
+	})
+
+	t.Run("cond", func(t *testing.T) {
+		for _, tt := range []struct {
+			expr    string
+			jeq, ja int16
+		}{
+			{"skb->len ? 0x100000000 : 1", 3, 1}, // then: ld_imm64 (2) + ja (1)
+			{"skb->len ? 1 : 0x100000000", 2, 2}, // else: ld_imm64 (2)
+		} {
+			c := prepareCompiler(t)
+			_, err := c.evaluate(prepareCcExpr(t, tt.expr))
+			test.AssertNoErr(t, err)
+
+			jeq := slices.IndexFunc(c.insns, func(ins asm.Instruction) bool {
+				return ins.OpCode == asm.JEq.Op(asm.ImmSource) && ins.Constant == 0
+			})
+			ja := slices.IndexFunc(c.insns, func(ins asm.Instruction) bool {
+				return ins.OpCode == asm.Ja.Op(asm.ImmSource)
+			})
+			test.AssertTrue(t, jeq >= 0 && ja > jeq)
+			test.AssertEqual(t, c.insns[jeq].Offset, tt.jeq)
+			test.AssertEqual(t, c.insns[ja].Offset, tt.ja)
+		}
+	})
+}
