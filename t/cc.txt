@@ -129,3 +129,21 @@ match: (short unsigned int *)'port(&((struct tcphdr *)(skb->head + skb->transpor
 prerequisite: python3 -u -m http.server 8081
 prerequisite-ready: Serving HTTP on
 trigger: curl -s http://127.0.0.1:8081 --output /dev/null
+
+---
+
+# a 64-bit constant mask, which doesn't fit in a 32-bit immediate
+name: cc::const64-and
+tag: cc,fnarg,xdp
+test: -k generic_xdp_install --filter-arg '((unsigned long long)dev & 0xffff000000000000) != 0' --output-arg 'dev->ifindex'
+match: 'dev->ifindex'=1
+trigger: ./xdpcrc -d lo
+
+---
+
+# a comparison with a constant that doesn't fit in a 32-bit immediate
+name: cc::const64-cmp
+tag: cc,fnarg,xdp
+test: -k generic_xdp_install --filter-arg '(unsigned long long)dev > 0xffffffff' --output-arg 'dev->ifindex'
+match: 'dev->ifindex'=1
+trigger: ./xdpcrc -d lo
