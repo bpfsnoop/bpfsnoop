@@ -64,6 +64,18 @@ func readKernelData(expr string, helpers *Helpers) (kernelReadOutput, error) {
 	}
 	krnl := getKernelBTF()
 
+	analysis, err := cc.AnalyzeExpr(arg.expr)
+	if err != nil {
+		return kernelReadOutput{}, fmt.Errorf("failed to analyze the expr: %w", err)
+	}
+
+	bpfMaps, err := openBPFMaps(analysis.Maps)
+	if err != nil {
+		return kernelReadOutput{}, fmt.Errorf("failed to open expression maps: %w", err)
+	}
+	defer bpfMaps.Close()
+	arg.maps = bpfMaps.maps
+
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
 

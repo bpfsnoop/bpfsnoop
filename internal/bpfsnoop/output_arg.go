@@ -39,7 +39,9 @@ type funcArgumentOutput struct {
 	size         int
 	trueDataSize int
 
-	vars []string
+	vars   []string
+	maps   map[cc.BPFMapID]cc.BPFMap
+	mapIDs []cc.BPFMapID
 
 	isNumPtr bool
 	isStr    bool
@@ -70,12 +72,14 @@ func prepareArgOutput(expr string) (funcArgumentOutput, error) {
 	var arg funcArgumentOutput
 	arg.expr = strings.TrimSpace(expr)
 
-	var err error
-	arg.vars, err = cc.ExtractVarNames(arg.expr)
+	analysis, err := cc.AnalyzeExpr(arg.expr)
 	if err != nil {
-		return arg, fmt.Errorf("failed to extract var names from '%s': %w", arg.expr, err)
+		return arg, fmt.Errorf("failed to analyze expr '%s': %w", arg.expr, err)
 	}
-	if len(arg.vars) == 0 {
+
+	arg.vars = analysis.Vars
+	arg.mapIDs = analysis.Maps
+	if len(arg.vars) == 0 && len(analysis.Maps) == 0 {
 		return arg, fmt.Errorf("'%s' has no var names", arg.expr)
 	}
 
@@ -267,6 +271,7 @@ func (arg *funcArgumentOutput) compile(params []btf.FuncParam, ret btf.Type, krn
 		LabelExit:     labelExit,
 		ReservedStack: argOutputStackOff,
 		UsedRegisters: []asm.Register{outputArgRegBuff, outputArgRegArgs},
+		Maps:          arg.maps,
 
 		MemoryReadMode: mode,
 		MemoryReadFlag: cc.MemoryReadFlag(flags),

@@ -20,6 +20,7 @@ import (
 	"golang.org/x/sys/unix"
 
 	"github.com/bpfsnoop/bpfsnoop/internal/bpf"
+	"github.com/bpfsnoop/bpfsnoop/internal/cc"
 	"github.com/bpfsnoop/bpfsnoop/internal/mathx"
 )
 
@@ -80,6 +81,27 @@ func bootTracing(ctx context.Context, flags *Flags, config BootConfig) (retErr e
 	progs, err := flags.ParseProgs()
 	if err != nil {
 		return fmt.Errorf("failed to parse BPF program info: %w", err)
+	}
+
+	var bpfMapIDs []cc.BPFMapID
+	for _, arg := range argFilter.args {
+		bpfMapIDs = append(bpfMapIDs, arg.mapIDs...)
+	}
+	for _, arg := range argOutput.args {
+		bpfMapIDs = append(bpfMapIDs, arg.mapIDs...)
+	}
+
+	bpfMaps, err := openBPFMaps(bpfMapIDs)
+	if err != nil {
+		return fmt.Errorf("failed to open expression maps: %w", err)
+	}
+	defer bpfMaps.Close()
+
+	for i := range argFilter.args {
+		argFilter.args[i].maps = bpfMaps.maps
+	}
+	for i := range argOutput.args {
+		argOutput.args[i].maps = bpfMaps.maps
 	}
 
 	var lbrPerfEvents *LbrPerfEvent

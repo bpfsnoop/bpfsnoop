@@ -130,7 +130,7 @@ func ParseFlags() (*Flags, error) {
 	f.BoolVar(&outputPkt, "output-pkt", false, "output packet tuple; append '(r)' to select a packet-typed return value")
 	f.Uint32Var(&filterPid, "filter-pid", 0, "filter pid for tracing")
 	f.StringVar(&filterComm, "filter-comm", "", "filter command for tracing")
-	f.StringSliceVar(&filterArg, "filter-arg", nil, "filter function arguments with a C expression; typed $retval is available in exit modes")
+	f.StringArrayVar /* accept commas in builtin calls */ (&filterArg, "filter-arg", nil, "filter function arguments with a C expression; typed $retval is available in exit modes")
 	f.StringArrayVar /* use StringArray to accept comma in value */ (&outputArg, "output-arg", nil, "output a C expression over function arguments; e.g. 'prog->type' or '(int)$retval'")
 	f.StringVar(&filterPkt, "filter-pkt", "", "filter skb/xdp argument with a pcap-filter(7) expression; prefix with '(r)' for a packet-typed return value")
 	f.StringSliceVar(&filterBr, "filter-br", []string{"any"}, "filter branch types: any, any_call, any_return, ind_call, abort_tx, in_tx, no_tx, cond, call_stack, ind_jump, call")

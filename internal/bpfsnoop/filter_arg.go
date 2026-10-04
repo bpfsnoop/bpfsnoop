@@ -29,6 +29,8 @@ type funcArgument struct {
 	expr   string
 	vars   []string
 	retval bool
+	mapIDs []cc.BPFMapID
+	maps   map[cc.BPFMapID]cc.BPFMap
 }
 
 func getTypeDescFrom(s string) (string, error) {
@@ -53,12 +55,13 @@ func prepareFuncArgument(expr string) (funcArgument, error) {
 	var arg funcArgument
 	arg.expr = expr
 
-	var err error
-	arg.vars, err = cc.ExtractVarNames(expr)
+	analysis, err := cc.AnalyzeExpr(expr)
 	if err != nil {
 		return arg, fmt.Errorf("failed to extract var names from %s: %w", expr, err)
 	}
-	if len(arg.vars) == 0 {
+	arg.vars = analysis.Vars
+	arg.mapIDs = analysis.Maps
+	if len(arg.vars) == 0 && len(analysis.Maps) == 0 {
 		return arg, fmt.Errorf("'%s' has no var names", expr)
 	}
 	arg.retval = slices.Contains(arg.vars, cc.RetvalName)
@@ -128,6 +131,7 @@ func (arg *funcArgument) inject(prog *ebpf.ProgramSpec, krnl, spec *btf.Spec, pa
 		Spec:       spec,
 		Kernel:     krnl,
 		LabelExit:  "__label_cc_exit",
+		Maps:       arg.maps,
 
 		MemoryReadMode: mode,
 	})
