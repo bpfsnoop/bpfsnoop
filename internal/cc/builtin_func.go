@@ -18,11 +18,24 @@ const (
 	byteOrderN2hs = "n2hs"
 	byteOrderH2nl = "h2nl"
 	byteOrderN2hl = "n2hl"
+
+	mapLookupFn            = "map_lookup"
+	bpfMapLookupElemHelper = "bpf_map_lookup_elem"
 )
 
 func isBuiltinFunc(name string) bool {
 	switch name {
-	case byteOrderH2ns, byteOrderN2hs, byteOrderH2nl, byteOrderN2hl:
+	case byteOrderH2ns, byteOrderN2hs, byteOrderH2nl, byteOrderN2hl,
+		mapLookupFn, bpfMapLookupElemHelper:
+		return true
+	default:
+		return false
+	}
+}
+
+func isMapFunc(name string) bool {
+	switch name {
+	case mapLookupFn, bpfMapLookupElemHelper:
 		return true
 	default:
 		return false
@@ -47,6 +60,9 @@ func (c *compiler) evaluateCall(expr *cc.Expr) (exprValue, error) {
 	switch name {
 	case byteOrderH2ns, byteOrderN2hs, byteOrderH2nl, byteOrderN2hl:
 		return c.evaluateByteOrderCall(expr)
+
+	case mapLookupFn, bpfMapLookupElemHelper:
+		return c.evaluateMapCall(expr)
 
 	default:
 		return exprValue{}, fmt.Errorf("unsupported function call in expression: %s", name)

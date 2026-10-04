@@ -39,6 +39,7 @@ type CompileExprOptions struct {
 	LabelExit     string
 	ReservedStack int
 	UsedRegisters []asm.Register
+	Maps          map[BPFMapID]BPFMap
 
 	MemoryReadMode MemoryReadMode
 	MemoryReadFlag MemoryReadFlag
@@ -100,7 +101,10 @@ func (c *compiler) compile(expr string) error {
 	// above ops must be one of [Constant, Materialized].
 
 	if c.labelExitUsed {
-		c.insns[len(c.insns)-1] = c.insns[len(c.insns)-1].WithSymbol(c.labelExit)
+		// A failed read can jump here before the result register is initialized.
+		// Give that path its own write-only initialization instead of entering
+		// the final expression instruction (which may read the register).
+		c.emit(Ja(1), asm.Mov.Imm(val.reg, 0).WithSymbol(c.labelExit))
 	}
 
 	if val.reg != asm.R0 {

@@ -42,12 +42,13 @@ func (k exprValueKind) String() string {
 
 // pendingOffset represents a single offset in a pending address computation chain.
 type pendingOffset struct {
-	offset   int64    // byte offset to add
-	deref    bool     // if true, dereference pointer after adding offset
-	btf      btf.Type // type after this offset is applied
-	prevBtf  btf.Type // type before this offset (used for CO-RE)
-	inArray  bool     // if true, this offset is within an array
-	bitfield bool     // if true, this offset is a bitfield access
+	directRead bool     // source address is within a map value
+	offset     int64    // byte offset to add
+	deref      bool     // if true, dereference pointer after adding offset
+	btf        btf.Type // type after this offset is applied
+	prevBtf    btf.Type // type before this offset (used for CO-RE)
+	inArray    bool     // if true, this offset is within an array
+	bitfield   bool     // if true, this offset is a bitfield access
 }
 
 // exprValue represents the result of evaluating an expression.
@@ -67,6 +68,7 @@ type exprValue struct {
 	offsets  []pendingOffset // accumulated offsets
 	addrOnly bool            // if true, want address not value (for & operator)
 	uptr     uint64          // user pointer value (for cast from constant)
+	uptrSet  bool            // distinguishes a literal NULL pointer from baseReg R0
 
 	// For Materialized: value in register
 	reg asm.Register
@@ -74,6 +76,9 @@ type exprValue struct {
 	// Common: type information
 	btf btf.Type
 	mem *btf.Member // if accessing a struct member (for bitfield info)
+
+	mapValue  bool // address within a map value, or an embedded aggregate
+	mapLookup bool // materialized pointer returned by bpf_map_lookup_elem, possibly NULL
 }
 
 // String returns a string representation of the exprValue for debugging.
@@ -85,7 +90,7 @@ func (v exprValue) String() string {
 		if v.varIndex >= 0 {
 			return fmt.Sprintf("Pending(var[%d], offsets=%d, btf=%v)", v.varIndex, len(v.offsets), v.btf)
 		}
-		if v.uptr != 0 {
+		if v.uptrSet || v.uptr != 0 {
 			return fmt.Sprintf("Pending(uptr=0x%x, offsets=%d, btf=%v)", v.uptr, len(v.offsets), v.btf)
 		}
 		return fmt.Sprintf("Pending(reg=R%d, offsets=%d, btf=%v)", v.baseReg, len(v.offsets), v.btf)
@@ -156,7 +161,8 @@ func newPendingVar(varIndex int, typ btf.Type) exprValue {
 	}
 }
 
-// newPendingReg creates a new pending exprValue from a register.
+// newPendingReg transfers ownership of an allocated register to a pending
+// exprValue. Materialization releases it after loading the result.
 func newPendingReg(reg asm.Register, typ btf.Type) exprValue {
 	return exprValue{
 		kind:     exprValueKindPending,
@@ -172,6 +178,7 @@ func newPendingUptr(uptr uint64, typ btf.Type) exprValue {
 		kind:     exprValueKindPending,
 		varIndex: -1,
 		uptr:     uptr,
+		uptrSet:  true,
 		btf:      typ,
 	}
 }

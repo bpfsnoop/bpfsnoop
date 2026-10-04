@@ -6,6 +6,7 @@ package cc
 import (
 	"fmt"
 	"slices"
+	"strings"
 
 	c2go "rsc.io/c2go/cc"
 )
@@ -27,6 +28,7 @@ func isBuiltinVar(name string) bool {
 type ExprAnalysis struct {
 	CompilerExpr string
 	Vars         []string
+	Maps         []BPFMapID
 	RetvalCast   string
 	retvalExpr   *c2go.Expr
 }
@@ -45,19 +47,33 @@ func AnalyzeExpr(expr string) (ExprAnalysis, error) {
 
 	// A top-level helper call's name is not a variable.
 	varsExpr := e
-	if e.Op == c2go.Call && len(e.List) != 0 {
+	if e.Op == c2go.Call && len(e.List) != 0 && (e.Left.Op != c2go.Name || !isBuiltinFunc(e.Left.Text)) {
 		varsExpr = e.List[0]
 	}
 
 	var stack []*c2go.Expr
 	uses, castUses := 0, 0
 	var castErr error
+	var mapErr error
+	seen := make(map[*c2go.Expr]bool)
+
 	c2go.Walk(e, func(node c2go.Syntax) {
 		v, ok := node.(*c2go.Expr)
 		if !ok {
 			return
 		}
 		stack = append(stack, v)
+
+		if v.Op == c2go.Call && v.Left.Op == c2go.Name && isMapFunc(v.Left.Text) {
+			mapID, err := expr2mapID(v)
+			if err != nil {
+				mapErr = err
+			} else {
+				analysis.Maps = append(analysis.Maps, mapID)
+				seen[v.List[0]] = true
+			}
+		}
+
 		if v.Op != c2go.Name || v.Text != retvalCompilerName {
 			return
 		}
@@ -91,6 +107,13 @@ func AnalyzeExpr(expr string) (ExprAnalysis, error) {
 		}
 	})
 
+	if mapErr != nil {
+		return analysis, mapErr
+	}
+
+	slices.SortFunc(analysis.Maps, func(a, b BPFMapID) int { return strings.Compare(a.String(), b.String()) })
+	analysis.Maps = slices.Compact(analysis.Maps)
+
 	if hasRetval {
 		if castErr != nil {
 			return analysis, castErr
@@ -108,7 +131,7 @@ func AnalyzeExpr(expr string) (ExprAnalysis, error) {
 		}
 
 		if v, ok := node.(*c2go.Expr); ok && v.Op == c2go.Name {
-			if callees[v] {
+			if callees[v] || seen[v] {
 				return
 			}
 

@@ -212,10 +212,13 @@ func TestMaterializePending(t *testing.T) {
 		defer resetCompilerDirectRead(c)
 
 		val := newPendingReg(asm.R1, getSkbBtf(t))
+		c.regalloc.MarkUsed(asm.R1)
 		val, err := c.materializePending(val)
 		test.AssertNoErr(t, err)
 		test.AssertTrue(t, val.isMaterialized())
 		test.AssertEqual(t, val.reg, r8)
+		test.AssertTrue(t, !c.regalloc.IsUsed(asm.R1))
+		test.AssertTrue(t, c.regalloc.IsUsed(val.reg))
 		test.AssertEqualSlice(t, c.insns, asm.Instructions{
 			asm.Mov.Reg(r8, asm.R1),
 		})

@@ -2362,7 +2362,7 @@ func TestEvaluateEqEq(t *testing.T) {
 			JmpOff(asm.JNE, r8, 0x42, 2),
 			asm.Mov.Imm(r8, 1),
 			Ja(1),
-			asm.Xor.Reg(r8, r8),
+			asm.Mov.Imm(r8, 0),
 		}))
 	})
 
@@ -2398,7 +2398,7 @@ func TestEvaluateEqEq(t *testing.T) {
 				JmpReg(asm.JNE, r8, r7, 2),
 				asm.Mov.Imm(r8, 1),
 				Ja(1),
-				asm.Xor.Reg(r8, r8),
+				asm.Mov.Imm(r8, 0),
 			},
 		))
 	})
@@ -2484,7 +2484,7 @@ func TestEvaluateNotEq(t *testing.T) {
 			JmpOff(asm.JEq, r8, 0x42, 2),
 			asm.Mov.Imm(r8, 1),
 			Ja(1),
-			asm.Xor.Reg(r8, r8),
+			asm.Mov.Imm(r8, 0),
 		}))
 	})
 
@@ -2520,7 +2520,7 @@ func TestEvaluateNotEq(t *testing.T) {
 				JmpReg(asm.JEq, r8, r7, 2),
 				asm.Mov.Imm(r8, 1),
 				Ja(1),
-				asm.Xor.Reg(r8, r8),
+				asm.Mov.Imm(r8, 0),
 			},
 		))
 	})
@@ -2606,7 +2606,7 @@ func TestEvaluateLt(t *testing.T) {
 			JmpOff(asm.JGE, r8, 0x42, 2),
 			asm.Mov.Imm(r8, 1),
 			Ja(1),
-			asm.Xor.Reg(r8, r8),
+			asm.Mov.Imm(r8, 0),
 		}))
 	})
 
@@ -2642,7 +2642,7 @@ func TestEvaluateLt(t *testing.T) {
 				JmpReg(asm.JGE, r8, r7, 2),
 				asm.Mov.Imm(r8, 1),
 				Ja(1),
-				asm.Xor.Reg(r8, r8),
+				asm.Mov.Imm(r8, 0),
 			},
 		))
 	})
@@ -2728,7 +2728,7 @@ func TestEvaluateLtEq(t *testing.T) {
 			JmpOff(asm.JGT, r8, 0x42, 2),
 			asm.Mov.Imm(r8, 1),
 			Ja(1),
-			asm.Xor.Reg(r8, r8),
+			asm.Mov.Imm(r8, 0),
 		}))
 	})
 
@@ -2764,7 +2764,7 @@ func TestEvaluateLtEq(t *testing.T) {
 				JmpReg(asm.JGT, r8, r7, 2),
 				asm.Mov.Imm(r8, 1),
 				Ja(1),
-				asm.Xor.Reg(r8, r8),
+				asm.Mov.Imm(r8, 0),
 			},
 		))
 	})
@@ -2850,7 +2850,7 @@ func TestEvaluateGt(t *testing.T) {
 			JmpOff(asm.JLE, r8, 0x42, 2),
 			asm.Mov.Imm(r8, 1),
 			Ja(1),
-			asm.Xor.Reg(r8, r8),
+			asm.Mov.Imm(r8, 0),
 		}))
 	})
 
@@ -2886,7 +2886,7 @@ func TestEvaluateGt(t *testing.T) {
 				JmpReg(asm.JLE, r8, r7, 2),
 				asm.Mov.Imm(r8, 1),
 				Ja(1),
-				asm.Xor.Reg(r8, r8),
+				asm.Mov.Imm(r8, 0),
 			},
 		))
 	})
@@ -2972,7 +2972,7 @@ func TestEvaluateGtEq(t *testing.T) {
 			JmpOff(asm.JLT, r8, 0x42, 2),
 			asm.Mov.Imm(r8, 1),
 			Ja(1),
-			asm.Xor.Reg(r8, r8),
+			asm.Mov.Imm(r8, 0),
 		}))
 	})
 
@@ -3008,7 +3008,7 @@ func TestEvaluateGtEq(t *testing.T) {
 				JmpReg(asm.JLT, r8, r7, 2),
 				asm.Mov.Imm(r8, 1),
 				Ja(1),
-				asm.Xor.Reg(r8, r8),
+				asm.Mov.Imm(r8, 0),
 			},
 		))
 	})
@@ -3149,7 +3149,7 @@ func TestEvaluateAndAnd(t *testing.T) {
 			JmpOff(asm.JEq, r8, 0, 2),
 			asm.Mov.Imm(r8, 1),
 			Ja(1),
-			asm.Xor.Reg(r8, r8),
+			asm.Mov.Imm(r8, 0),
 		}))
 	})
 
@@ -3188,7 +3188,7 @@ func TestEvaluateAndAnd(t *testing.T) {
 			JmpOff(asm.JEq, r8, 0, 2),
 			asm.Mov.Imm(r8, 1),
 			Ja(1),
-			asm.Xor.Reg(r8, r8),
+			asm.Mov.Imm(r8, 0),
 		}))
 	})
 
@@ -3237,7 +3237,7 @@ func TestEvaluateAndAnd(t *testing.T) {
 				JmpOff(asm.JEq, r7, 0, 2),
 				asm.Mov.Imm(r8, 1),
 				Ja(1),
-				asm.Xor.Reg(r8, r8),
+				asm.Mov.Imm(r8, 0),
 			},
 		))
 	})
@@ -3335,7 +3335,7 @@ func TestEvaluateOrOr(t *testing.T) {
 			JmpOff(asm.JEq, r8, 0, 2),
 			asm.Mov.Imm(r8, 1),
 			Ja(1),
-			asm.Xor.Reg(r8, r8),
+			asm.Mov.Imm(r8, 0),
 		}))
 	})
 
@@ -3374,7 +3374,7 @@ func TestEvaluateOrOr(t *testing.T) {
 			JmpOff(asm.JEq, r8, 0, 2),
 			asm.Mov.Imm(r8, 1),
 			Ja(1),
-			asm.Xor.Reg(r8, r8),
+			asm.Mov.Imm(r8, 0),
 		}))
 	})
 
@@ -3421,7 +3421,7 @@ func TestEvaluateOrOr(t *testing.T) {
 			asm.Instructions{
 				JmpOff(asm.JNE, r8, 0, 3),
 				JmpOff(asm.JNE, r7, 0, 2),
-				asm.Xor.Reg(r8, r8),
+				asm.Mov.Imm(r8, 0),
 				Ja(1),
 				asm.Mov.Imm(r8, 1),
 			},
@@ -3476,7 +3476,7 @@ func TestEvaluateNot(t *testing.T) {
 			JmpOff(asm.JNE, r8, 0, 2),
 			asm.Mov.Imm(r8, 1),
 			Ja(1),
-			asm.Xor.Reg(r8, r8),
+			asm.Mov.Imm(r8, 0),
 		}))
 	})
 }

@@ -252,7 +252,7 @@ func TestCompileFilterExpr(t *testing.T) {
 			JmpOff(asm.JNE, asm.R8, 0, 2),
 			asm.Mov.Imm(asm.R8, 1),
 			Ja(1),
-			asm.Xor.Reg(asm.R8, asm.R8),
+			asm.Mov.Imm(asm.R8, 0),
 			asm.Mov.Reg(asm.R0, asm.R8),
 			asm.Return(),
 		})
@@ -312,7 +312,9 @@ func TestCompile(t *testing.T) {
 			JmpOff(asm.JNE, asm.R8, 11, 2),
 			asm.Mov.Imm(asm.R8, 1),
 			Ja(1),
-			asm.Xor.Reg(asm.R8, asm.R8).WithSymbol(c.labelExit),
+			asm.Mov.Imm(asm.R8, 0),
+			Ja(1),
+			asm.Mov.Imm(asm.R8, 0).WithSymbol(c.labelExit),
 			asm.Mov.Reg(asm.R0, asm.R8),
 		})
 	})

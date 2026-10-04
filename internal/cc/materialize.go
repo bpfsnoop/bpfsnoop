@@ -59,7 +59,7 @@ func (c *compiler) materializePending(val exprValue) (exprValue, error) {
 	if val.varIndex >= 0 {
 		// Load from args array
 		c.emitLoadArg(val.varIndex, reg)
-	} else if val.uptr != 0 {
+	} else if val.uptrSet || val.uptr != 0 {
 		// Load user pointer constant
 		c.emit(asm.Instruction{
 			OpCode:   asm.Mov.Op(asm.ImmSource),
@@ -67,8 +67,9 @@ func (c *compiler) materializePending(val exprValue) (exprValue, error) {
 			Constant: int64(val.uptr),
 		})
 	} else {
-		// Copy from base register
+		// Consume the pending value's base register after reading its offsets.
 		c.emit(asm.Mov.Reg(reg, val.baseReg))
+		defer c.regalloc.Free(val.baseReg)
 	}
 
 	// Process offset chain
@@ -81,6 +82,7 @@ func (c *compiler) materializePending(val exprValue) (exprValue, error) {
 
 	result := newMaterialized(reg, val.btf)
 	result.mem = val.mem
+	result.mapValue = val.mapValue
 
 	// Handle bitfield extraction or register size adjustment
 	if isMemberBitfield(val.mem) {
@@ -96,6 +98,22 @@ func (c *compiler) materializePending(val exprValue) (exprValue, error) {
 // emitOffsetChain emits instructions for a chain of offsets.
 // Uses the appropriate memory read mode (probe/core/direct).
 func (c *compiler) emitOffsetChain(offsets []pendingOffset, reg asm.Register) error {
+	// Map reads form a prefix until a loaded pointer or cast leaves the map.
+	if len(offsets) > 0 && offsets[0].directRead {
+		end := 1
+		for end < len(offsets) && offsets[end].directRead {
+			end++
+		}
+		opts := directReadOptions{
+			useBTFSize: true,
+			checkLast:  end < len(offsets) && offsets[end].deref,
+		}
+		if err := c.emitDirectRead(offsets[:end], reg, opts); err != nil {
+			return err
+		}
+		return c.emitOffsetChain(offsets[end:], reg)
+	}
+
 	// Check if all offsets are address-only (no derefs needed)
 	allAddress := true
 	for _, off := range offsets {
@@ -120,8 +138,9 @@ func (c *compiler) emitOffsetChain(offsets []pendingOffset, reg asm.Register) er
 	case MemoryReadModeCoreRead:
 		return c.emitCoreRead(offsets, reg)
 	case MemoryReadModeDirectRead:
-		c.emitDirectRead(offsets, reg)
-		return nil
+		return c.emitDirectRead(offsets, reg, directReadOptions{
+			checkImm: true,
+		})
 	default:
 		c.emitProbeRead(offsets, reg)
 		return nil

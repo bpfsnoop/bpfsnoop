@@ -41,6 +41,9 @@ type compiler struct {
 
 	memMode MemoryReadMode
 
+	maps           map[BPFMapID]BPFMap
+	mapLookupLabel int
+
 	rdonlyCastTypeID   btf.TypeID
 	rdonlyCastFastcall bool
 }
@@ -59,6 +62,7 @@ func newCompiler(opts CompileExprOptions) (*compiler, error) {
 		labelExit:     opts.LabelExit,
 		reservedStack: opts.ReservedStack,
 		memMode:       opts.MemoryReadMode,
+		maps:          opts.Maps,
 	}
 
 	c.vars = make([]string, len(opts.Params))
@@ -119,6 +123,6 @@ func (c *compiler) emitReg2bool(reg asm.Register) {
 	c.emit(
 		asm.Mov.Imm(reg, 1),
 		Ja(1),
-		asm.Xor.Reg(reg, reg),
+		asm.Mov.Imm(reg, 0),
 	)
 }

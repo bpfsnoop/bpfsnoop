@@ -19,6 +19,7 @@ require (
 	github.com/modelcontextprotocol/go-sdk v1.7.0
 	github.com/spf13/pflag v1.0.10
 	github.com/ulikunitz/xz v0.5.12
+	golang.org/x/exp v0.0.0-20231110203233-9a3e6036ecaa
 	golang.org/x/sync v0.20.0
 	rsc.io/c2go v0.0.0-20170620140410-520c22818a08
 )

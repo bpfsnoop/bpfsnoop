@@ -257,19 +257,25 @@ func (c *compiler) accessMemberPending(base exprValue, member *btf.Member, offse
 			base.offsets[len(base.offsets)-1].offset += int64(offset)
 			base.offsets[len(base.offsets)-1].btf = member.Type
 			base.offsets[len(base.offsets)-1].bitfield = isMemberBitfield(member)
+			if base.mapValue {
+				base.offsets[len(base.offsets)-1].deref = true
+			}
 		} else {
 			return exprValue{}, fmt.Errorf("disallow accessing member via dot on base variable")
 		}
 	} else {
 		// Arrow access - add new offset entry with deref
 		base.addOffset(pendingOffset{
-			offset:   int64(offset),
-			deref:    true,
-			btf:      member.Type,
-			prevBtf:  base.btf,
-			bitfield: isMemberBitfield(member),
+			offset:     int64(offset),
+			deref:      true,
+			btf:        member.Type,
+			prevBtf:    base.btf,
+			bitfield:   isMemberBitfield(member),
+			directRead: base.mapValue,
 		})
 	}
+
+	base.mapValue = base.mapValue && isMapAggregate(member.Type)
 
 	// Check if result is an array (becomes address)
 	t := mybtf.UnderlyingType(member.Type)
@@ -292,16 +298,20 @@ func (c *compiler) accessMemberMaterialized(base exprValue, member *btf.Member, 
 	if !useArrow {
 		return exprValue{}, fmt.Errorf("disallow dot access on materialized value")
 	}
+	c.checkMapLookupPointer(&base)
 
 	// Create pending with the register as base and add the member offset
 	result := newPendingReg(base.reg, base.btf)
 	result.addOffset(pendingOffset{
-		offset:   int64(offset),
-		deref:    true,
-		btf:      member.Type,
-		prevBtf:  base.btf,
-		bitfield: isMemberBitfield(member),
+		offset:     int64(offset),
+		deref:      true,
+		btf:        member.Type,
+		prevBtf:    base.btf,
+		bitfield:   isMemberBitfield(member),
+		directRead: base.mapValue,
 	})
+
+	result.mapValue = base.mapValue && isMapAggregate(member.Type)
 
 	// Check if result is an array
 	t := mybtf.UnderlyingType(member.Type)
@@ -367,21 +377,24 @@ func (c *compiler) evaluateIndex(expr *cc.Expr) (exprValue, error) {
 	case exprValueKindPending:
 		result = base
 		result.addOffset(pendingOffset{
-			offset:  offset,
-			deref:   false,
-			btf:     elemPtr,
-			prevBtf: base.prevBtf(),
-			inArray: inArray,
+			offset:     offset,
+			deref:      false,
+			btf:        elemPtr,
+			prevBtf:    base.prevBtf(),
+			inArray:    inArray,
+			directRead: base.mapValue,
 		})
 
 	case exprValueKindMaterialized:
+		c.checkMapLookupPointer(&base)
 		result = newPendingReg(base.reg, base.btf)
 		result.addOffset(pendingOffset{
-			offset:  offset,
-			deref:   false,
-			btf:     elemPtr,
-			prevBtf: base.btf,
-			inArray: inArray,
+			offset:     offset,
+			deref:      false,
+			btf:        elemPtr,
+			prevBtf:    base.btf,
+			inArray:    inArray,
+			directRead: base.mapValue,
 		})
 
 	default:
@@ -392,12 +405,16 @@ func (c *compiler) evaluateIndex(expr *cc.Expr) (exprValue, error) {
 	// the element like evaluateIndir does. An array element stays an
 	// address, the same as an array member.
 	_, elemIsArray := mybtf.UnderlyingType(elemType).(*btf.Array)
+	// Embedded map aggregates remain addresses within the map allocation.
+	mapAggregate := base.mapValue && isMapAggregate(elemType)
 	result.addOffset(pendingOffset{
-		offset:  0,
-		deref:   !elemIsArray,
-		btf:     elemType,
-		prevBtf: elemPtr,
+		offset:     0,
+		deref:      !elemIsArray && !mapAggregate,
+		btf:        elemType,
+		prevBtf:    elemPtr,
+		directRead: base.mapValue,
 	})
+	result.mapValue = mapAggregate
 	result.btf = elemType
 	result.mem = nil
 	return result, nil
@@ -423,23 +440,28 @@ func (c *compiler) evaluateIndir(expr *cc.Expr) (exprValue, error) {
 	switch base.kind {
 	case exprValueKindPending:
 		base.addOffset(pendingOffset{
-			offset:  0,
-			deref:   true,
-			btf:     ptr.Target,
-			prevBtf: base.btf,
+			offset:     0,
+			deref:      true,
+			btf:        ptr.Target,
+			directRead: base.mapValue,
+			prevBtf:    base.btf,
 		})
+		base.mapValue = base.mapValue && isMapAggregate(ptr.Target)
 		base.btf = ptr.Target
 		base.mem = nil
 		return base, nil
 
 	case exprValueKindMaterialized:
+		c.checkMapLookupPointer(&base)
 		result := newPendingReg(base.reg, base.btf)
 		result.addOffset(pendingOffset{
-			offset:  0,
-			deref:   true,
-			btf:     ptr.Target,
-			prevBtf: base.btf,
+			offset:     0,
+			deref:      true,
+			btf:        ptr.Target,
+			directRead: base.mapValue,
+			prevBtf:    base.btf,
 		})
+		result.mapValue = base.mapValue && isMapAggregate(ptr.Target)
 		result.btf = ptr.Target
 		result.mem = nil
 		return result, nil
@@ -463,6 +485,8 @@ func (c *compiler) evaluateAddr(expr *cc.Expr) (exprValue, error) {
 	if len(base.offsets) == 0 {
 		return exprValue{}, fmt.Errorf("cannot take address of variable directly")
 	}
+
+	base.mapValue = base.offsets[len(base.offsets)-1].directRead
 
 	// Mark last offset as address-only (no deref)
 	base.offsets[len(base.offsets)-1].deref = false
@@ -496,6 +520,15 @@ func (c *compiler) evaluateCast(expr *cc.Expr) (exprValue, error) {
 	targetType, err := c.cc2btf(expr)
 	if err != nil {
 		return exprValue{}, fmt.Errorf("failed to get cast target type: %w", err)
+	}
+
+	// Finish map reads at their original width before crossing the cast boundary.
+	if inner.mapValue || slices.ContainsFunc(inner.offsets, func(off pendingOffset) bool { return off.directRead }) {
+		inner, err = c.materialize(inner)
+		if err != nil {
+			return exprValue{}, err
+		}
+		inner.mapValue = false
 	}
 
 	// Cast just changes the type annotation
@@ -567,6 +600,7 @@ func (c *compiler) addValues(left, right exprValue) (exprValue, error) {
 	// Handle pointer arithmetic: scale right by element size
 	t := mybtf.UnderlyingType(left.btf)
 	if ptr, ok := t.(*btf.Pointer); ok {
+		c.checkMapLookupPointer(&left)
 		size, _ := btf.Sizeof(ptr.Target)
 		if size > 1 {
 			c.emit(asm.Mul.Imm(right.reg, int32(size)))
@@ -581,7 +615,9 @@ func (c *compiler) addValues(left, right exprValue) (exprValue, error) {
 	c.emit(asm.Add.Reg(left.reg, right.reg))
 	c.regalloc.Free(right.reg)
 
-	return newMaterialized(left.reg, left.btf), nil
+	result := newMaterialized(left.reg, left.btf)
+	result.mapValue = left.mapValue
+	return result, nil
 }
 
 // addConstantToPending adds a constant offset to a pending value.
@@ -619,10 +655,11 @@ func (c *compiler) addConstantToPending(pending exprValue, num int64) (exprValue
 	}
 
 	pending.addOffset(pendingOffset{
-		offset:  offset,
-		deref:   false, // address arithmetic, no deref
-		btf:     resultType,
-		prevBtf: pending.prevBtf(),
+		offset:     offset,
+		deref:      false, // address arithmetic, no deref
+		btf:        resultType,
+		prevBtf:    pending.prevBtf(),
+		directRead: pending.mapValue,
 	})
 	pending.mem = nil
 
@@ -683,6 +720,7 @@ func (c *compiler) subValues(left, right exprValue) (exprValue, error) {
 	// Handle pointer arithmetic
 	t := mybtf.UnderlyingType(left.btf)
 	if ptr, ok := t.(*btf.Pointer); ok {
+		c.checkMapLookupPointer(&left)
 		size, _ := btf.Sizeof(ptr.Target)
 		if size > 1 {
 			c.emit(asm.Mul.Imm(right.reg, int32(size)))
@@ -697,7 +735,9 @@ func (c *compiler) subValues(left, right exprValue) (exprValue, error) {
 	c.emit(asm.Sub.Reg(left.reg, right.reg))
 	c.regalloc.Free(right.reg)
 
-	return newMaterialized(left.reg, left.btf), nil
+	result := newMaterialized(left.reg, left.btf)
+	result.mapValue = left.mapValue
+	return result, nil
 }
 
 // evaluateMul handles multiplication.
@@ -1641,7 +1681,7 @@ func (c *compiler) evaluateOrOr(expr *cc.Expr) (exprValue, error) {
 
 	c.emit(JmpOff(asm.JNE, left.reg, 0, 3))
 	c.emit(JmpOff(asm.JNE, right.reg, 0, 2))
-	c.emit(asm.Xor.Reg(left.reg, left.reg))
+	c.emit(asm.Mov.Imm(left.reg, 0))
 	c.emit(Ja(1))
 	c.emit(asm.Mov.Imm(left.reg, 1))
 	c.regalloc.Free(right.reg)
@@ -1997,4 +2037,14 @@ func (c *compiler) extractEnum(typ btf.Type, enum string) (int, error) {
 	}
 
 	return 0, fmt.Errorf("enum '%s' not found in type %v", enum, typ)
+}
+
+// isMapAggregate reports types whose members remain inside the map allocation.
+func isMapAggregate(typ btf.Type) bool {
+	switch btf.UnderlyingType(typ).(type) {
+	case *btf.Struct, *btf.Union, *btf.Array:
+		return true
+	default:
+		return false
+	}
 }
