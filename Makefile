@@ -115,5 +115,9 @@ testlocal: $(LOCALTEST_OBJ) $(XDPCRC_OBJ)
 testcli: testlocal
 
 .PHONY: testmcp
-testmcp: $(BPFSNOOP_OBJ) $(LOCALTEST_OBJ)
+testmcp: $(BPFSNOOP_OBJ) $(LOCALTEST_OBJ) $(XDPCRC_OBJ)
 	./$(LOCALTEST_OBJ) --mcp --test-dir ./t/mcp
+
+.PHONY: sudo
+sudo: $(BPFSNOOP_OBJ) $(LOCALTEST_OBJ) $(XDPCRC_OBJ)
+	@sh scripts/sudo.sh "$(abspath $(BPFSNOOP_OBJ))" "$(abspath $(XDPCRC_OBJ))" "$(abspath $(LOCALTEST_OBJ))"
