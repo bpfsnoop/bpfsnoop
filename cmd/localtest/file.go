@@ -78,6 +78,9 @@ func parseTestCase(scanner *bufio.Scanner) (testCase, bool, error) {
 		case "prerequisite":
 			t.requiredProcess = b
 			continue
+		case "prerequisite-ready":
+			t.requiredReady = b
+			continue
 
 		case "trigger":
 			t.triggerProcess = b

@@ -45,10 +45,9 @@ func testMCP(w io.Writer, t testCase) bool {
 
 	if t.triggerProcess != "" {
 		prInfo(w, yellow, "Triggering: %s\n", t.triggerProcess)
-		trigger := exec.Command("bash", "-c", "sleep 0.5; "+t.triggerProcess)
-		trigger.Stdout = w
-		trigger.Stderr = w
-		if err := trigger.Start(); err != nil {
+		// MCP trace tools attach during CallTool, after the connection is ready.
+		trigger, err := runCmd(w, "sleep 0.5; "+t.triggerProcess)
+		if err != nil {
 			prErr(w, red, "Test FAILED in %s (failed to start trigger: %v)\n", time.Since(started), err)
 			return false
 		}

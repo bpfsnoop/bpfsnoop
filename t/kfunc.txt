@@ -58,4 +58,5 @@ feature: nested-tracing
 test: -p n:bpfsnoop_fn
 match: ← bpfsnoop_fn[bpf] args
 prerequisite: ./bpfsnoop -k icmp_rcv
+prerequisite-ready: bpfsnoop is running..
 trigger: ping -c 1 -s 64 127.0.0.1

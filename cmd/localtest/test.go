@@ -26,6 +26,7 @@ type testCase struct {
 	expectError     bool
 	timeout         time.Duration
 	requiredProcess string
+	requiredReady   string
 	triggerProcess  string
 	feature         []string
 	hint            string
@@ -66,9 +67,12 @@ func test(w io.Writer, t testCase) bool {
 		}
 
 		prInfo(w, yellow, "Required process: %s\n", t.requiredProcess)
-		defer killCmd(runCmd(w, t.requiredProcess, 200*time.Millisecond), signals...)
-
-		time.Sleep(1 * time.Second) // wait sometime for the process readiness
+		process, err := runPrerequisite(w, t.requiredProcess, t.requiredReady, t.timeout)
+		if err != nil {
+			prErr(w, red, "Failed to start prerequisite: %v\n", err)
+			return false
+		}
+		defer killCmd(process, signals...)
 	}
 
 	prInfo(w, yellow, "Name: %s\n", t.name)
@@ -205,7 +209,12 @@ func testCLI(w io.Writer, t testCase) bool {
 
 	if t.triggerProcess != "" {
 		prInfo(w, yellow, "Triggering: %s\n", t.triggerProcess)
-		defer killCmd(runCmd(w, t.triggerProcess, 500*time.Millisecond))
+		trigger, err := runCmd(w, t.triggerProcess)
+		if err != nil {
+			prErr(w, red, "Failed to start trigger: %v\n", err)
+			return false
+		}
+		defer killCmd(trigger)
 	}
 
 	var passed bool

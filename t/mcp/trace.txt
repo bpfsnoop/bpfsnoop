@@ -97,6 +97,7 @@ arguments: {"targets":[{"kind":"bpf_program","program_name":"crc","name":"crc"}]
 match: "kind":"bpf_program"
 timeout: 30s
 prerequisite: ./xdpcrc -d lo
+prerequisite-ready: Attached xdp to lo
 trigger: while true; do ping -c 1 -s 64 127.0.0.1 >/dev/null 2>&1; done
 
 ---
