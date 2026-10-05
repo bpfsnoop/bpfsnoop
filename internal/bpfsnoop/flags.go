@@ -93,17 +93,28 @@ type Flags struct {
 }
 
 func ParseFlags() (*Flags, error) {
+	return parseFlags(os.Args, flag.ExitOnError)
+}
+
+// ParseFlagsArgs parses a fresh CLI configuration for a worker request.
+func ParseFlagsArgs(args []string) (*Flags, error) {
+	return parseFlags(args, flag.ContinueOnError)
+}
+
+func parseFlags(argv []string, handling flag.ErrorHandling) (*Flags, error) {
 	var findVmlinux bool
 	var mcp bool
 	var mcpDaemon bool
+	var cliWorker bool
 	var detectFeatures bool
 	var showTypes []string
 	var readDatum []string
 	var flags Flags
 
-	f := flag.NewFlagSet("bpfsnoop", flag.ExitOnError)
+	f := flag.NewFlagSet("bpfsnoop", handling)
 	f.BoolVar(&mcp, "mcp", false, "serve bpfsnoop as an MCP server over stdin/stdout")
 	f.BoolVar(&mcpDaemon, "mcp-daemon", false, "run the privileged bpfsnoop MCP daemon")
+	f.BoolVar(&cliWorker, "cli-worker", false, "serve CLI requests over stdin/stdout")
 	f.StringSliceVarP(&flags.progs, "prog", "p", nil, "bpf prog info for bpfsnoop in format PROG[,PROG,..], PROG: PROGID[:<prog function name>], PROGID: <prog ID> or 'i/id:<prog ID>' or 'p/pinned:<pinned file>' or 't/tag:<prog tag>' or 'n/name:<prog full name>' or 'pid:<pid>'; all bpf progs will be traced if '*' is specified")
 	f.StringSliceVarP(&flags.kfuncs, "kfunc", "k", nil, "filter kernel functions, '(i)' prefix means insn tracing, '(m)' prefix means kprobe.multi tracing (requires typed arg), '<kfunc>[:<arg>][:<type>]' format")
 	f.StringSliceVarP(&flags.ktps, "tracepoint", "t", nil, "filter kernel tracepoints")
@@ -162,8 +173,9 @@ func ParseFlags() (*Flags, error) {
 	f.MarkHidden("find-vmlinux")
 	f.MarkHidden("mcp")
 	f.MarkHidden("mcp-daemon")
+	f.MarkHidden("cli-worker")
 
-	args, retvalOutput := normalizePacketOutputArgs(os.Args)
+	args, retvalOutput := normalizePacketOutputArgs(argv)
 	outputPktRetval = retvalOutput
 
 	err := f.Parse(args)
@@ -174,6 +186,9 @@ func ParseFlags() (*Flags, error) {
 
 	if mcp && mcpDaemon {
 		return nil, fmt.Errorf("--mcp and --mcp-daemon cannot be used together")
+	}
+	if cliWorker && (mcp || mcpDaemon) {
+		return nil, fmt.Errorf("--cli-worker cannot be used with MCP modes")
 	}
 	if mcp || mcpDaemon {
 		if runMCP == nil {
@@ -187,11 +202,23 @@ func ParseFlags() (*Flags, error) {
 		os.Exit(0)
 	}
 
+	if cliWorker {
+		err := runCLI()
+		assert.NoErr(err, "Failed to serve CLI worker: %v")
+		os.Exit(0)
+	}
+
 	outputFuncStack = outputFuncStack || outputFlameGraph != ""
 	noColorOutput = flags.outputFile != "" || !isatty(os.Stdout.Fd())
 	colorfulOutput = !noColorOutput
-	argFilter = prepareFuncArguments(filterArg)
-	argOutput = prepareFuncArgOutput(outputArg)
+	argFilter, err = prepareFuncArgumentsE(filterArg)
+	if err != nil {
+		return nil, err
+	}
+	argOutput, err = prepareFuncArgOutputE(outputArg)
+	if err != nil {
+		return nil, err
+	}
 	pktFilter = preparePacketFilter(filterPkt)
 	flags.showFuncProto = flags.showFuncProto || flags.listFuncParams
 

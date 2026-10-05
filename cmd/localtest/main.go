@@ -39,6 +39,15 @@ func main() {
 	}()
 
 	f := parseFlags()
+	if !mcpMode {
+		var err error
+		cliBackend, err = startCLIWorker(os.Stdout)
+		if err != nil {
+			prErr(os.Stderr, red, "Failed to start CLI worker: %v\n", err)
+			return
+		}
+		defer cliBackend.Close(os.Stdout)
+	}
 
 	if f.testFile != "" {
 		w := os.Stdout

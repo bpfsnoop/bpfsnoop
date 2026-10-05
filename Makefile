@@ -97,7 +97,7 @@ fixup: $(BPF_GO_SRC) $(XDPCRC_OBJ)
 	@echo "gofumpt -w .go files..."
 	@gofumpt -w $(GO_SRC)
 
-$(LOCALTEST_OBJ): $(LOCALTEST_SRC)
+$(LOCALTEST_OBJ): $(LOCALTEST_SRC) $(CLIWORKER_SRC)
 	$(GOBUILD) -o $(LOCALTEST_OBJ) ./cmd/localtest
 
 $(XDPCRC_OBJ): $(XDPCRC_SRC) $(VMLINUX_OBJ)
@@ -106,7 +106,7 @@ $(XDPCRC_OBJ): $(XDPCRC_SRC) $(VMLINUX_OBJ)
 	$(GOBUILD) -o $(XDPCRC_OBJ) $(XDPCRC_DIR)
 
 .PHONY: testlocal
-testlocal: $(LOCALTEST_OBJ) $(XDPCRC_OBJ)
+testlocal: $(BPFSNOOP_OBJ) $(LOCALTEST_OBJ) $(XDPCRC_OBJ)
 	@$(CMD_IP) link set dev lo up
 	./$(LOCALTEST_OBJ) --test-dir ./t
 	./$(LOCALTEST_OBJ) --test-dir ./t/cc

@@ -120,3 +120,5 @@ XDPCRC_BPF_OBJ := $(XDPCRC_DIR)/xdp_bpfel.o $(XDPCRC_DIR)/xdp_bpfeb.o
 XDPCRC_BPF_OBJ += $(XDPCRC_BPF_OBJ:%.o=%.go)
 XDPCRC_OBJ := xdpcrc
 XDPCRC_SRC := $(wildcard $(XDPCRC_DIR)/*.go $(XDPCRC_DIR)/*.c)
+
+CLIWORKER_SRC := $(wildcard internal/cliworker/*.go)

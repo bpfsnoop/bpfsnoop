@@ -14,6 +14,8 @@ import (
 	"time"
 
 	"golang.org/x/sync/errgroup"
+
+	"github.com/bpfsnoop/bpfsnoop/internal/cliworker"
 )
 
 type testCase struct {
@@ -85,6 +87,17 @@ func test(w io.Writer, t testCase) bool {
 
 	prInfo(w, yellow, "Running: %s (match: %s, timeout: %s)\n",
 		t.test, t.match, t.timeout)
+	if cliBackend != nil && cliworker.CanForward(strings.Fields(t.test)) {
+		args, err := expandCLIArgs(t.test)
+		if err != nil {
+			prErr(w, red, "Failed to prepare CLI request: %v\n", err)
+			return false
+		}
+
+		if len(args) != 0 && cliworker.CanForward(args[1:]) {
+			return cliBackend.Test(w, t, args)
+		}
+	}
 	return testCLI(w, t)
 }
 
