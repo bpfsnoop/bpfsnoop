@@ -58,6 +58,7 @@ tag: xdp,fnarg,index
 test: -k generic_xdp_install --output-arg 'dev->name[0]' --output-arg 'dev->name[1]'
 match: (char)'dev->name[0]'=0x6c/108, (char)'dev->name[1]'=0x6f/111
 trigger: ./xdpcrc -d lo
+hint: the 'char' is signed on some kernels
 
 ---
 
