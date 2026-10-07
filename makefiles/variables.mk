@@ -122,3 +122,5 @@ XDPCRC_OBJ := xdpcrc
 XDPCRC_SRC := $(wildcard $(XDPCRC_DIR)/*.go $(XDPCRC_DIR)/*.c)
 
 CLIWORKER_SRC := $(wildcard internal/cliworker/*.go)
+
+ALL_OBJS :=  $(BPFSNOOP_OBJ) $(LOCALTEST_OBJ) $(XDPCRC_OBJ)

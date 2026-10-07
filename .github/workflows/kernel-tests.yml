@@ -1,0 +1,75 @@
+name: Kernel e2e tests
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Linux ${{ matrix.kernel }}
+    runs-on: ubuntu-26.04
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        kernel: ["5.10", "5.15", "6.1", "6.6", "6.12", "stable", "mainline"]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: ./.github/actions/setup-build-environment
+
+      # Download dependencies for the host build.
+      - name: Download Go dependencies
+        run: go mod download
+
+      - name: Install VM and trigger dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes make qemu-system-x86 iproute2 iputils-ping curl python3
+          CGO_ENABLED=0 go install lmb.io/vimto@latest
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+          sudo chmod 0666 /dev/kvm
+
+      - name: Build test binaries on host
+        run: make -j"$(nproc)" all
+
+      # Fail early on image/boot problems instead of consuming the entire job.
+      # SIGINT lets vimto stop QEMU and print its buffered boot console.
+      - name: Check kernel VM boots
+        env:
+          KERNEL_IMAGE: ghcr.io/cilium/ci-kernels:${{ matrix.kernel }}
+        shell: bash
+        run: |
+          set -o pipefail
+          timeout --signal=INT --kill-after=30s 5m \
+            vimto -kernel "$KERNEL_IMAGE" exec -- /bin/uname -a < /dev/null 2>&1 | tee kernel-boot.log
+
+      - name: Run e2e tests in VM
+        timeout-minutes: 31
+        env:
+          KERNEL_IMAGE: ghcr.io/cilium/ci-kernels:${{ matrix.kernel }}
+        shell: bash
+        run: |
+          set -o pipefail
+          timeout --signal=INT --kill-after=30s 30m \
+            vimto -kernel "$KERNEL_IMAGE" exec -- /bin/bash scripts/test-kernel.sh < /dev/null 2>&1 | tee kernel-e2e.log
+
+      - name: Upload guest logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: kernel-e2e-${{ matrix.kernel }}
+          path: |
+            kernel-boot.log
+            kernel-e2e.log
+          if-no-files-found: ignore
+          retention-days: 14

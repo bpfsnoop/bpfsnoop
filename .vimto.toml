@@ -1,0 +1,12 @@
+# Use the same prebuilt kernel images as cilium/ebpf's CI.
+kernel = "ghcr.io/cilium/ci-kernels:stable"
+smp = "cpus=2"
+memory = "2G"
+user = "root"
+setup = [
+  "mount -t cgroup2 -o nosuid,noexec,nodev cgroup2 /sys/fs/cgroup",
+  "dmesg --clear",
+]
+teardown = [
+  "dmesg --read-clear",
+]

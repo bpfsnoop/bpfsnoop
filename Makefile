@@ -105,8 +105,15 @@ $(XDPCRC_OBJ): $(XDPCRC_SRC) $(VMLINUX_OBJ)
 		$(GO_RUN_BPF2GO) -go-package main xdp ./xdp.c -- $(BPF2GO_EXTRA_FLAGS)
 	$(GOBUILD) -o $(XDPCRC_OBJ) $(XDPCRC_DIR)
 
+.PHONY: all
+all: $(ALL_OBJS)
+
 .PHONY: testlocal
-testlocal: $(BPFSNOOP_OBJ) $(LOCALTEST_OBJ) $(XDPCRC_OBJ)
+testlocal: $(ALL_OBJS)
+	$(MAKE) testlocal-run
+
+.PHONY: testlocal-run
+testlocal-run:
 	@$(CMD_IP) link set dev lo up
 	./$(LOCALTEST_OBJ) --test-dir ./t
 	./$(LOCALTEST_OBJ) --test-dir ./t/cc
@@ -115,9 +122,13 @@ testlocal: $(BPFSNOOP_OBJ) $(LOCALTEST_OBJ) $(XDPCRC_OBJ)
 testcli: testlocal
 
 .PHONY: testmcp
-testmcp: $(BPFSNOOP_OBJ) $(LOCALTEST_OBJ) $(XDPCRC_OBJ)
+testmcp: $(ALL_OBJS)
+	$(MAKE) testmcp-run
+
+.PHONY: testmcp-run
+testmcp-run:
 	./$(LOCALTEST_OBJ) --mcp --test-dir ./t/mcp
 
 .PHONY: sudo
-sudo: $(BPFSNOOP_OBJ) $(LOCALTEST_OBJ) $(XDPCRC_OBJ)
+sudo: $(ALL_OBJS)
 	@sh scripts/sudo.sh "$(abspath $(BPFSNOOP_OBJ))" "$(abspath $(XDPCRC_OBJ))" "$(abspath $(LOCALTEST_OBJ))"

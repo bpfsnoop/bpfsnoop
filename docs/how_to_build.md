@@ -114,3 +114,31 @@ Usage of bpfsnoop:
   -t, --tracepoint strings          filter kernel tracepoints
   -v, --verbose                     output verbose log
 ```
+
+## Test across kernels
+
+The `Kernel e2e tests` GitHub Actions workflow runs on GitHub-hosted Ubuntu
+runners. It builds `bpfsnoop`, `localtest`, and `xdpcrc` on the host, then uses
+QEMU/KVM and [vimto](https://github.com/lmb/vimto) to run the CLI and MCP suites in
+separate guests for Linux 5.10, 5.15, 6.1, 6.6, 6.12, stable, and mainline.
+The kernel images come from `ghcr.io/cilium/ci-kernels`, as in cilium/ebpf CI.
+These tags track the image publisher's builds; the guest log records `uname -a`.
+Feature-gated cases may be skipped on older kernels; test failures fail the job.
+Each job uploads its test output and guest kernel messages.
+
+To run locally on an amd64 Linux host with KVM, install the build dependencies
+and QEMU, make, bash, iproute2, ping, curl, Python 3, and bpftool. Download Go
+dependencies on the host before starting the guest:
+
+```sh
+CGO_ENABLED=0 go install lmb.io/vimto@latest
+go mod download
+make -j"$(nproc)" all
+vimto -kernel :5.15 exec -- /bin/bash scripts/test-kernel.sh < /dev/null
+```
+
+The `.vimto.toml` configuration runs the guest command as root. Only loopback
+networking is used by these tests. The guest uses `make testlocal-run` and
+`make testmcp-run` to run the host-built binaries without rebuilding them.
+BTF headers and BPF objects are generated on the host. The existing
+`Pull Request` workflow continues to run separately.
