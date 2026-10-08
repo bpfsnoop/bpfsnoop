@@ -10,6 +10,7 @@ import (
 	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/asm"
 	"github.com/cilium/ebpf/btf"
+	"github.com/cilium/ebpf/features"
 	"github.com/cilium/ebpf/link"
 	"github.com/cilium/ebpf/rlimit"
 
@@ -19,6 +20,7 @@ import (
 )
 
 var (
+	hasArena         bool
 	hasEndbr         bool
 	requiredLbr      bool
 	hasFsession      bool
@@ -105,6 +107,10 @@ func detectBPFFeatures() (KernelBPFFeatures, error) {
 	if err != nil {
 		return features, err
 	}
+	hasArena, err = haveArena()
+	if err != nil {
+		return features, fmt.Errorf("failed to probe arena map: %w", err)
+	}
 	hasKprobeMulti, err = btfEnumValue("bpf_attach_type", "BPF_TRACE_KPROBE_MULTI")
 	if err != nil {
 		return features, err
@@ -123,30 +129,6 @@ func detectBPFFeatures() (KernelBPFFeatures, error) {
 	}
 
 	return features, nil
-}
-
-// Loading is sufficient: bpf_check_attach_target checks the target's
-// aux->attach_tracing_prog during verification, before link creation.
-// See 19bfcdf9498a ("bpf: Relax tracing prog recursive attach rules")
-// kernel 6.8.
-func probeTracingTarget(target *ebpf.Program, name string) bool {
-	prog, err := ebpf.NewProgram(&ebpf.ProgramSpec{
-		Type:         ebpf.Tracing,
-		AttachType:   ebpf.AttachTraceFEntry,
-		AttachTarget: target,
-		AttachTo:     name,
-		License:      "GPL",
-		Instructions: asm.Instructions{
-			asm.Mov.Imm(asm.R0, 0),
-			asm.Return(),
-		},
-	})
-	if err != nil {
-		DebugLog("Tracing target probe for %s failed: %v", name, err)
-		return false
-	}
-	_ = prog.Close()
-	return true
 }
 
 var bpfFeaturesOnce = atomix.NewOnce(detectBPFFeatures)
@@ -169,6 +151,32 @@ func DetectBPFFeatures() error {
 		return errors.New("bpf_get_stackid() helper not supported for --output-stack")
 	}
 	return nil
+}
+
+func printFeatures() {
+	assert.NoErr(rlimit.RemoveMemlock(), "Failed to remove memlock limit: %v")
+	assert.NoErr(PrepareKernelBTF(), "Failed to prepare kernel BTF: %v")
+	features, err := GetBPFFeatures()
+	assert.NoVerifierErr(err, "Failed to detect BPF features: %v")
+
+	for _, feature := range []struct {
+		name  string
+		value bool
+	}{
+		{"Ringbuf map", features.HasRingbuf},
+		{"Branch Record", features.HasBranchSnapshot},
+		{"Get stackid", features.HasGetStackID},
+		{"Get arg_cnt", hasGetFuncArgCnt},
+		{"tracing union arg", haveTracingUnionArg()},
+		{"fsession", hasFsession},
+		{"kprobe.multi", features.HasKprobeMulti},
+		{"kprobe.session", hasKprobeSession},
+		{"Nested tracing", features.HasNestedTracing},
+		{"ENDBR insn", hasEndbr},
+		{"arena", hasArena},
+	} {
+		fmt.Printf("%s:\t%t\n", feature.name, feature.value)
+	}
 }
 
 func btfEnumValue(enum, value string) (bool, error) {
@@ -206,29 +214,28 @@ func haveTrampolineJmpMode(insns []byte) {
 	DebugLog("Trampoline jmp mode: %v", trampJmpMode)
 }
 
-func printFeatures() {
-	assert.NoErr(rlimit.RemoveMemlock(), "Failed to remove memlock limit: %v")
-	assert.NoErr(PrepareKernelBTF(), "Failed to prepare kernel BTF: %v")
-	features, err := GetBPFFeatures()
-	assert.NoVerifierErr(err, "Failed to detect BPF features: %v")
-
-	for _, feature := range []struct {
-		name  string
-		value bool
-	}{
-		{"Ringbuf map", features.HasRingbuf},
-		{"Branch Record", features.HasBranchSnapshot},
-		{"Get stackid", features.HasGetStackID},
-		{"Get arg_cnt", hasGetFuncArgCnt},
-		{"tracing union arg", haveTracingUnionArg()},
-		{"fsession", hasFsession},
-		{"kprobe.multi", features.HasKprobeMulti},
-		{"kprobe.session", hasKprobeSession},
-		{"Nested tracing", features.HasNestedTracing},
-		{"ENDBR insn", hasEndbr},
-	} {
-		fmt.Printf("%s:\t%t\n", feature.name, feature.value)
+// Loading is sufficient: bpf_check_attach_target checks the target's
+// aux->attach_tracing_prog during verification, before link creation.
+// See 19bfcdf9498a ("bpf: Relax tracing prog recursive attach rules")
+// kernel 6.8.
+func probeTracingTarget(target *ebpf.Program, name string) bool {
+	prog, err := ebpf.NewProgram(&ebpf.ProgramSpec{
+		Type:         ebpf.Tracing,
+		AttachType:   ebpf.AttachTraceFEntry,
+		AttachTarget: target,
+		AttachTo:     name,
+		License:      "GPL",
+		Instructions: asm.Instructions{
+			asm.Mov.Imm(asm.R0, 0),
+			asm.Return(),
+		},
+	})
+	if err != nil {
+		DebugLog("Tracing target probe for %s failed: %v", name, err)
+		return false
 	}
+	_ = prog.Close()
+	return true
 }
 
 // bpf_check gained a by-value bpfptr_t argument after older kernels used a
@@ -269,4 +276,14 @@ func haveTracingUnionArg() bool {
 	}
 	_ = l.Close()
 	return true
+}
+
+// haveArena reports whether an arena map can be created. A kernel with
+// BPF_MAP_TYPE_ARENA refuses to create one if its JIT doesn't support arenas.
+func haveArena() (bool, error) {
+	err := features.HaveMapType(ebpf.Arena)
+	if errors.Is(err, ebpf.ErrNotSupported) {
+		return false, nil
+	}
+	return err == nil, err
 }

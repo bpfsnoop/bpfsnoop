@@ -48,10 +48,11 @@ func openBPFMaps(ids []cc.BPFMapID) (*bpfMaps, error) {
 	maps.maps = make(map[cc.BPFMapID]cc.BPFMap, len(ids))
 
 	byID := make(map[ebpf.MapID]cc.BPFMap)
+	var arenaID ebpf.MapID
 	for _, id := range ids {
 		handle, info, err := openBPFMap(id)
 		if err != nil {
-			return fail(fmt.Errorf("map_lookup(%s): %w", id, err))
+			return fail(err)
 		}
 		mapID, _ := info.ID()
 		if metadata, ok := byID[mapID]; ok {
@@ -64,6 +65,21 @@ func openBPFMaps(ids []cc.BPFMapID) (*bpfMaps, error) {
 		}
 
 		maps.handles = append(maps.handles, handle)
+
+		// An arena map has no keys or values, but memory, for arena(). The
+		// expressions go into one bpf prog, which can use only one arena.
+		if info.Type == ebpf.Arena {
+			if arenaID != 0 {
+				return fail(fmt.Errorf("arena(%s): a bpf prog can use only one arena, but arena map %d is used too", id, arenaID))
+			}
+			arenaID = mapID
+
+			metadata := cc.BPFMap{FD: handle.FD(), Type: info.Type, MaxEntries: info.MaxEntries}
+			maps.maps[id] = metadata
+			byID[mapID] = metadata
+			continue
+		}
+
 		key, value, err := bpfMapTypes(handle)
 		if err != nil {
 			return fail(fmt.Errorf("map_lookup(%s) failed to resolve map BTF: %w", id, err))
@@ -81,7 +97,14 @@ func openBPFMaps(ids []cc.BPFMapID) (*bpfMaps, error) {
 			}
 		}
 
-		metadata := cc.BPFMap{FD: handle.FD(), KeySize: info.KeySize, Key: key, Value: value}
+		metadata := cc.BPFMap{
+			FD:         handle.FD(),
+			Type:       info.Type,
+			MaxEntries: info.MaxEntries,
+			KeySize:    info.KeySize,
+			Key:        key,
+			Value:      value,
+		}
 		maps.maps[id] = metadata
 		byID[mapID] = metadata
 	}

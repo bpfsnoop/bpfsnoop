@@ -42,6 +42,7 @@ type ReadKernelResult struct {
 	BufferValue    bool
 	Slice          bool
 	Hex            bool
+	Arena          bool
 	IntegerType    string
 	AddressType    string
 	PortType       string
@@ -169,6 +170,7 @@ func readKernelData(expr string, helpers *Helpers) (kernelReadOutput, error) {
 			BufferValue:    arg.isBuf,
 			Slice:          arg.isSlice,
 			Hex:            arg.isHex,
+			Arena:          arg.isArena,
 			IntegerType:    arg.intType,
 			AddressType:    arg.addrType,
 			PortType:       arg.portType,

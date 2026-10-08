@@ -5,6 +5,7 @@ package mcp
 
 import (
 	"encoding/binary"
+	"encoding/hex"
 	"fmt"
 	"net"
 	"strconv"
@@ -52,6 +53,8 @@ func kernelReadValue(result *bpfsnoop.ReadKernelResult) (any, error) {
 		return values, nil
 	case result.Hex:
 		return fmt.Sprintf("%x", data), nil
+	case result.Arena:
+		return hex.Dump(data), nil
 	case result.IntegerType != "":
 		return decodeExplicitInteger(result.IntegerType, data)
 	case result.AddressType != "":

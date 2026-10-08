@@ -176,6 +176,10 @@ func __outputFuncArgAttrs(sb *strings.Builder, args []funcArgumentOutput, data [
 			s = fmt.Sprintf("(%s)'%s'=%s", btfx.Repr(arg.t), arg.expr,
 				hex.EncodeToString(data[:arg.trueDataSize]))
 
+		case arg.isArena:
+			s = fmt.Sprintf("(%s)'%s'=\n%s\n", btfx.Repr(arg.t), arg.expr,
+				strings.TrimSuffix(hex.Dump(data[:arg.trueDataSize]), "\n"))
+
 		case arg.isInt:
 			le, be := binary.LittleEndian, binary.BigEndian
 
