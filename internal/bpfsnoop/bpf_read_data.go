@@ -15,6 +15,7 @@ import (
 	"github.com/cilium/ebpf/asm"
 	"github.com/cilium/ebpf/btf"
 	"github.com/cilium/ebpf/link"
+	"github.com/cilium/ebpf/rlimit"
 	"github.com/fatih/color"
 	"golang.org/x/sys/unix"
 
@@ -240,6 +241,7 @@ func printKernelReadResult(expr, output string) {
 }
 
 func readKernelDatum(exprs []string, flags *Flags) {
+	assert.NoErr(rlimit.RemoveMemlock(), "Failed to remove memlock limit: %v")
 	helpers, err := newKernelReadHelpers(flags)
 	assert.NoErr(err, "Failed to prepare kernel read helpers: %v")
 	defer helpers.Progs.Close()

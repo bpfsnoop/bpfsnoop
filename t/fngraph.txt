@@ -6,7 +6,7 @@
 # icmp_rcv
 name: fngraph::icmp_rcv
 tag: fngraph,pkt
-test: -k '(g)icmp_rcv' --filter-pkt 'host 127.0.0.1' --fgraph-max-depth 3
+test: -k '(g)icmp_rcv' --filter-pkt 'host 127.0.0.1' --fgraph-extra ping_rcv --fgraph-max-depth 3
 match: ← ping_rcv args
 timeout: 10s
 trigger: ping -c 1 -s 64 127.0.0.1

@@ -147,7 +147,7 @@ emit_bpfsnoop_event(void *ctx)
     }
 
     if (cfg->flags.graph_mode) {
-        struct task_struct *tsk = bpf_get_current_task_btf();
+        struct task_struct *tsk = (typeof(tsk))bpf_get_current_task();
 
         if (event_type == BPFSNOOP_EVENT_TYPE_FUNC_ENTRY)
             mark_fgraph_active(tsk);

@@ -102,7 +102,7 @@ try_get_session(void *ctx, int *depth, __u64 pid_tgid)
     int nr_bytes, nr_ips;
     __u32 max_stack;
 
-    if (!is_fgraph_active(bpf_get_current_task_btf()))
+    if (!is_fgraph_active((struct task_struct *)bpf_get_current_task()))
         return 0;
 
     stack = get_fgraph_stack_buf();

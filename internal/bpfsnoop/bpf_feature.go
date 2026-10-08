@@ -220,6 +220,7 @@ func printFeatures() {
 		{"Branch Record", features.HasBranchSnapshot},
 		{"Get stackid", features.HasGetStackID},
 		{"Get arg_cnt", hasGetFuncArgCnt},
+		{"tracing union arg", haveTracingUnionArg()},
 		{"fsession", hasFsession},
 		{"kprobe.multi", features.HasKprobeMulti},
 		{"kprobe.session", hasKprobeSession},
@@ -228,4 +229,44 @@ func printFeatures() {
 	} {
 		fmt.Printf("%s:\t%t\n", feature.name, feature.value)
 	}
+}
+
+// bpf_check gained a by-value bpfptr_t argument after older kernels used a
+// pointer. Probe the actual prototype and trampoline instead of a version.
+func haveTracingUnionArg() bool {
+	var fn *btf.Func
+	if err := getKernelBTF().TypeByName("bpf_check", &fn); err != nil {
+		return false
+	}
+
+	proto, ok := fn.Type.(*btf.FuncProto)
+	if !ok || len(proto.Params) < 3 {
+		return false
+	}
+
+	if _, ok := btf.UnderlyingType(proto.Params[2].Type).(*btf.Struct); !ok {
+		return false
+	}
+
+	prog, err := ebpf.NewProgram(&ebpf.ProgramSpec{
+		Type:       ebpf.Tracing,
+		AttachType: ebpf.AttachTraceFEntry,
+		AttachTo:   "bpf_check",
+		License:    "GPL",
+		Instructions: asm.Instructions{
+			asm.Mov.Imm(asm.R0, 0),
+			asm.Return(),
+		},
+	})
+	if err != nil {
+		return false
+	}
+	defer prog.Close()
+
+	l, err := link.AttachTracing(link.TracingOptions{Program: prog})
+	if err != nil {
+		return false
+	}
+	_ = l.Close()
+	return true
 }

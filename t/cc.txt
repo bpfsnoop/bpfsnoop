@@ -112,6 +112,7 @@ trigger: ping -c 1 -s 64 127.0.0.1
 
 # output bitfield in struct
 name: cc::output-struct
+feature: tracing-union-arg
 tag: cc,struct
 test: -k 'bpf_check'
 match: is_kernel=0x0
