@@ -129,6 +129,7 @@ const (
 	EvalResultTypeInt
 	EvalResultTypeHist
 	EvalResultTypeTDigest
+	EvalResultTypeArena
 )
 
 type EvalResult struct {
@@ -186,6 +187,9 @@ func CompileEvalExpr(opts CompileExprOptions) (EvalResult, error) {
 			return res, fmt.Errorf("function call must have a constant name")
 		}
 		if isBuiltinFunc(e.Left.Text) {
+			if e.Left.Text == arenaFn {
+				res.Type = EvalResultTypeArena // dumped as a whole
+			}
 			break // Scalar builtins are evaluated with the full expression.
 		}
 

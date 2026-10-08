@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strconv"
 
+	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/asm"
 	"github.com/cilium/ebpf/btf"
 	"rsc.io/c2go/cc"
@@ -22,10 +23,12 @@ const (
 // BPFMap describes an open map used by an expression. The caller must keep
 // FD open until the compiled BPF program has been loaded.
 type BPFMap struct {
-	FD      int
-	KeySize uint32
-	Key     btf.Type
-	Value   btf.Type
+	FD         int
+	Type       ebpf.MapType
+	MaxEntries uint32
+	KeySize    uint32
+	Key        btf.Type
+	Value      btf.Type
 }
 
 // BPFMapID selects a map by either a positive ID or a literal name.
@@ -47,6 +50,12 @@ func validateMapExpr(expr *cc.Expr) error {
 	case mapLookupFn, bpfMapLookupElemHelper:
 		if !slices.Contains([]int{2, 3}, len(expr.List)) {
 			return fmt.Errorf("bpf_map_lookup_elem() must have 2 or 3 arguments")
+		}
+		return nil
+
+	case arenaFn:
+		if len(expr.List) < 1 || len(expr.List) > 3 {
+			return fmt.Errorf("%s() must have 1, 2 or 3 arguments", arenaFn)
 		}
 		return nil
 
@@ -98,6 +107,10 @@ func (c *compiler) evaluateMapCall(expr *cc.Expr) (exprValue, error) {
 	m, ok := c.maps[mapID]
 	if !ok {
 		return exprValue{}, fmt.Errorf("%s(%s): map has not been opened", fnName, mapID)
+	}
+
+	if m.Type == ebpf.Arena {
+		return exprValue{}, fmt.Errorf("%s(%s): use %s() for an arena map", fnName, mapID, arenaFn)
 	}
 
 	if m.FD < 0 || m.Value == nil || m.KeySize == 0 {

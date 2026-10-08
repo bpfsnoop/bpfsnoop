@@ -432,6 +432,11 @@ func postCheckFuncCall(res *EvalResult, val exprValue, dataOffset, dataSize int6
 		res.Size = int(dataSize)
 		res.Int = fnName
 
+	case EvalResultTypeArena:
+		// A whole arena(), its u8 array
+		res.Btf = val.btf
+		res.Size, _ = btf.Sizeof(val.btf)
+
 	case EvalResultTypeHist, EvalResultTypeTDigest:
 		// hist() function
 		t := mybtf.UnderlyingType(val.btf)

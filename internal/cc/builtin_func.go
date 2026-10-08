@@ -21,21 +21,24 @@ const (
 
 	mapLookupFn            = "map_lookup"
 	bpfMapLookupElemHelper = "bpf_map_lookup_elem"
+
+	arenaFn = "arena"
 )
 
 func isBuiltinFunc(name string) bool {
 	switch name {
 	case byteOrderH2ns, byteOrderN2hs, byteOrderH2nl, byteOrderN2hl,
-		mapLookupFn, bpfMapLookupElemHelper:
+		mapLookupFn, bpfMapLookupElemHelper, arenaFn:
 		return true
 	default:
 		return false
 	}
 }
 
+// isMapFunc reports whether a func takes a map as its first argument.
 func isMapFunc(name string) bool {
 	switch name {
-	case mapLookupFn, bpfMapLookupElemHelper:
+	case mapLookupFn, bpfMapLookupElemHelper, arenaFn:
 		return true
 	default:
 		return false
@@ -63,6 +66,9 @@ func (c *compiler) evaluateCall(expr *cc.Expr) (exprValue, error) {
 
 	case mapLookupFn, bpfMapLookupElemHelper:
 		return c.evaluateMapCall(expr)
+
+	case arenaFn:
+		return c.evaluateArenaCall(expr)
 
 	default:
 		return exprValue{}, fmt.Errorf("unsupported function call in expression: %s", name)
