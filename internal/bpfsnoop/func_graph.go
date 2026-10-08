@@ -11,6 +11,7 @@ import (
 var fgraphDenyList = []string{
 	"*htab_map_lookup_elem",
 	"bpf_ringbuf_reserve",
+	"__bpf_ringbuf_reserve",
 	"bpf_ringbuf_submit",
 	"bpf_ktime_get_ns",
 	"bpf_get_smp_processor_id",
