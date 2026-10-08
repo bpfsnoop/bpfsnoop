@@ -19,6 +19,7 @@ const (
 	featKprobeSession = "kprobe.session"
 	featNestedTracing = "nested-tracing"
 	featUnionArg      = "tracing-union-arg"
+	featArena         = "arena"
 )
 
 func haveAllFeatures(feats []string) bool {
@@ -33,6 +34,7 @@ func haveAllFeatures(feats []string) bool {
 		featKprobeSession: &features.kprobeSession,
 		featNestedTracing: &features.nestedTracing,
 		featUnionArg:      &features.tracingUnionArg,
+		featArena:         &features.arena,
 	}
 
 	cnt := 0
@@ -58,6 +60,7 @@ var features struct {
 	nestedTracing       int8 // kernel 6.8
 	endbr               int8
 	tracingUnionArg     int8 // kernel 6.18
+	arena               int8 // kernel 6.9
 }
 
 func init() {
@@ -93,6 +96,7 @@ func detectFeatures() error {
 		"Nested tracing":    &features.nestedTracing,
 		"ENDBR insn":        &features.endbr,
 		"tracing union arg": &features.tracingUnionArg,
+		"arena":             &features.arena,
 	}
 
 	scanner := bufio.NewScanner(bytes.NewReader(output))

@@ -1,0 +1,109 @@
+# Copyright 2026 Liang Tang.
+# SPDX-License-Identifier: Apache-2.0
+
+# These tests are for dumping BPF arena memory with arena(). arenaprobe
+# builds a two-node list in its arena map named arenaprobe:
+#
+#   struct arena_node {
+#       int val;
+#       char name[12];
+#       struct arena_node __arena *next;
+#   };
+#
+#   {1, "first", next} -> {2, "second", NULL}
+
+# dump the start of the arena
+name: arena::read:dump
+tag: arena,read
+feature: arena
+test: --read 'arena("arenaprobe", 32)'
+match: 00000000  01 00 00 00 66 69 72 73  74 00 00 00 00 00 00 00  |....first.......|
+prerequisite: ./arenaprobe
+prerequisite-ready: Mapped arenaprobe
+timeout: 10s
+
+---
+
+# dump the whole arena, one page, by default
+name: arena::read:default-size
+tag: arena,read
+feature: arena
+test: --read 'arena("arenaprobe")'
+match: (array(u8[4096]))'arena("arenaprobe")'=
+prerequisite: ./arenaprobe
+prerequisite-ready: Mapped arenaprobe
+timeout: 10s
+
+---
+
+# dump the second node, at an offset
+name: arena::read:offset
+tag: arena,read
+feature: arena
+test: --read 'arena("arenaprobe", 16, 24)'
+match: 00000000  02 00 00 00 73 65 63 6f  6e 64 00 00 00 00 00 00  |....second......|
+prerequisite: ./arenaprobe
+prerequisite-ready: Mapped arenaprobe
+timeout: 10s
+
+---
+
+# select the arena by map ID
+name: arena::read:map-id
+tag: arena,read
+feature: arena
+test: --read "arena($(bpftool map show name arenaprobe | head -n 1 | cut -d: -f1), 16)"
+match: 00000000  01 00 00 00 66 69 72 73  74 00 00 00 00 00 00 00  |....first.......|
+prerequisite: ./arenaprobe
+prerequisite-ready: Mapped arenaprobe
+timeout: 10s
+
+---
+
+# arena() is a u8 array in an expression: read a string in it
+name: arena::read:str
+tag: arena,read
+feature: arena
+test: --read 'str(arena("arenaprobe", 12, 28))'
+match: 'str(arena("arenaprobe", 12, 28))'="second"
+prerequisite: ./arenaprobe
+prerequisite-ready: Mapped arenaprobe
+timeout: 10s
+
+---
+
+# arena() is a u8 array in an expression: cast it
+name: arena::read:cast
+tag: arena,read
+feature: arena
+test: --read '*(int *)arena("arenaprobe", 4, 24)'
+match: (int)'*(int *)arena("arenaprobe", 4, 24)'=2
+prerequisite: ./arenaprobe
+prerequisite-ready: Mapped arenaprobe
+timeout: 10s
+
+---
+
+# dump the arena in --output-arg
+name: arena::output-arg:dump
+tag: arena,pkt,tp
+feature: arena
+test: -t netif_receive_skb --filter-pkt 'host 127.0.0.1 and icmp' --output-arg 'arena("arenaprobe", 16)' --output-arg 'str(arena("arenaprobe", 12, 4))' --limit-events 1
+match: 'str(arena("arenaprobe", 12, 4))'="first"
+prerequisite: ./arenaprobe
+prerequisite-ready: Mapped arenaprobe
+trigger: ping -c 1 -s 64 127.0.0.1
+timeout: 10s
+
+---
+
+# filter by a byte in the arena, val of the second node
+name: arena::filter-arg:index
+tag: arena,pkt,tp
+feature: arena
+test: -t netif_receive_skb --filter-pkt 'host 127.0.0.1 and icmp' --filter-arg 'arena("arenaprobe", 32)[24] == 2' --output-arg 'arena("arenaprobe", 32)[24]' --limit-events 1
+match: (u8)'arena("arenaprobe", 32)[24]'=0x2/2
+prerequisite: ./arenaprobe
+prerequisite-ready: Mapped arenaprobe
+trigger: ping -c 1 -s 64 127.0.0.1
+timeout: 10s

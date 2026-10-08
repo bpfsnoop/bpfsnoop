@@ -15,7 +15,7 @@ if [ "$user_id" -eq 0 ]; then
 fi
 
 if [ "$#" -eq 0 ]; then
-	echo "Usage: $0 /absolute/path/to/binary ..." >&2
+	echo "Usage: $0 path/to/binary ..." >&2
 	exit 1
 fi
 
@@ -24,15 +24,14 @@ newline='
 '
 for binary do
 	case "$binary" in
-		/*) ;;
-		*) echo "Expected an absolute binary path: $binary" >&2; exit 1 ;;
-	esac
-	case "$binary" in
 		*[\*\?\[\]]* | *"$newline"*)
 			echo "Unsupported wildcard or newline in binary path: $binary" >&2
 			exit 1
 			;;
 	esac
+	binary=$(realpath -ms -- "$binary")
+	shift
+	set -- "$@" "$binary"
 done
 
 # Listing a particular command omits its authentication options. Inspect the

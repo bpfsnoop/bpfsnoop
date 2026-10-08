@@ -67,7 +67,7 @@ local_release: $(BPFSNOOP_OBJ)
 clean:
 	rm -f $(BPF_OBJ) $(XDPCRC_BPF_OBJ) $(VMLINUX_OBJ)
 	rm -f $(BPF_GO_SRC) $(BPF_GO_DEP)
-	rm -f $(BPFSNOOP_OBJ) $(XDPCRC_OBJ) $(LOCALTEST_OBJ)
+	rm -f $(BPFSNOOP_OBJ) $(XDPCRC_OBJ) $(ARENAPROBE_OBJ) $(LOCALTEST_OBJ)
 	rm -rf $(DIR_BIN)/*
 	@touch $(DIR_BIN)/.gitkeep
 
@@ -105,6 +105,9 @@ $(XDPCRC_OBJ): $(XDPCRC_SRC) $(VMLINUX_OBJ)
 		$(GO_RUN_BPF2GO) -go-package main xdp ./xdp.c -- $(BPF2GO_EXTRA_FLAGS)
 	$(GOBUILD) -o $(XDPCRC_OBJ) $(XDPCRC_DIR)
 
+$(ARENAPROBE_OBJ): $(ARENAPROBE_SRC)
+	$(GOBUILD) -o $(ARENAPROBE_OBJ) $(ARENAPROBE_DIR)
+
 .PHONY: all
 all: $(ALL_OBJS)
 
@@ -131,4 +134,4 @@ testmcp-run:
 
 .PHONY: sudo
 sudo: $(ALL_OBJS)
-	@sh scripts/sudo.sh "$(abspath $(BPFSNOOP_OBJ))" "$(abspath $(XDPCRC_OBJ))" "$(abspath $(LOCALTEST_OBJ))"
+	@sh scripts/sudo.sh $(ALL_OBJS)

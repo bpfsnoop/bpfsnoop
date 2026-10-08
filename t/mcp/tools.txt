@@ -31,6 +31,19 @@ timeout: 15s
 
 ---
 
+# Verify that BPF arena memory is dumped through MCP.
+name: mcp::read:arena
+tag: mcp,read,arena
+feature: arena
+tool: read
+arguments: {"expressions":["arena(\"arenaprobe\", 16)"]}
+match: |....first.......|
+prerequisite: ./arenaprobe
+prerequisite-ready: Mapped arenaprobe
+timeout: 15s
+
+---
+
 # Disassemble a bounded portion of a stable kernel function.
 name: mcp::disasm
 tag: mcp,disasm

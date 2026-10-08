@@ -123,4 +123,8 @@ XDPCRC_SRC := $(wildcard $(XDPCRC_DIR)/*.go $(XDPCRC_DIR)/*.c)
 
 CLIWORKER_SRC := $(wildcard internal/cliworker/*.go)
 
-ALL_OBJS :=  $(BPFSNOOP_OBJ) $(LOCALTEST_OBJ) $(XDPCRC_OBJ)
+ARENAPROBE_DIR := ./cmd/arenaprobe
+ARENAPROBE_OBJ := arenaprobe
+ARENAPROBE_SRC := $(wildcard $(ARENAPROBE_DIR)/*.go)
+
+ALL_OBJS :=  $(BPFSNOOP_OBJ) $(LOCALTEST_OBJ) $(XDPCRC_OBJ) $(ARENAPROBE_OBJ)
