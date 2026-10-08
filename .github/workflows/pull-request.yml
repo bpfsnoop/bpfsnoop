@@ -8,7 +8,17 @@ permissions:
 
 jobs:
   fixup-and-testlocal:
-    runs-on: ubuntu-26.04
+    name: fixup-and-testlocal (${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-26.04
+          - arch: arm64
+            runner: ubuntu-26.04-arm
+
     steps:
       - uses: actions/checkout@v4
         with:

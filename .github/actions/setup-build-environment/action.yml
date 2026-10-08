@@ -13,9 +13,9 @@ runs:
         path: |
           ~/.cache/go-build
           ~/go/pkg/mod
-        key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+        key: ${{ runner.os }}-${{ runner.arch }}-go-${{ hashFiles('**/go.sum') }}
         restore-keys: |
-          ${{ runner.os }}-go-
+          ${{ runner.os }}-${{ runner.arch }}-go-
 
     - name: Install build dependencies
       shell: bash
@@ -36,8 +36,9 @@ runs:
     - name: Install static bpftool
       shell: bash
       run: |
-        bpftool_archive="$RUNNER_TEMP/bpftool-v7.7.0-amd64.tar.gz"
-        curl -sL -o "$bpftool_archive" https://github.com/libbpf/bpftool/releases/download/v7.7.0/bpftool-v7.7.0-amd64.tar.gz
+        bpftool_arch="$(dpkg --print-architecture)"
+        bpftool_archive="$RUNNER_TEMP/bpftool-v7.7.0-${bpftool_arch}.tar.gz"
+        curl -fsSL -o "$bpftool_archive" "https://github.com/libbpf/bpftool/releases/download/v7.7.0/bpftool-v7.7.0-${bpftool_arch}.tar.gz"
         tar -xzf "$bpftool_archive" -C "$RUNNER_TEMP"
         chmod +x "$RUNNER_TEMP/bpftool"
         sudo mv "$RUNNER_TEMP/bpftool" /usr/sbin/bpftool
