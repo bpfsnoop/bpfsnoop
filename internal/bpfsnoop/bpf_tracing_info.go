@@ -95,7 +95,7 @@ func (p *bpfProgs) canTrace(prog *ebpf.Program, id ebpf.ProgramID) bool {
 		// BPF program from attachment to another tracing program. Ask the
 		// verifier, which checks aux->attach_tracing_prog, including after
 		// the original link has been closed.
-		info, err := prog.Info()
+		info, err := fetchBPFProgInfo(prog)
 		if err != nil {
 			DebugLog("Failed to get tracing program %d info: %v", id, err)
 			return false
@@ -124,7 +124,7 @@ func (p *bpfProgs) addTracing(id ebpf.ProgramID, funcName string, prog *ebpf.Pro
 
 	info, ok := p.infos[id]
 	if !ok {
-		i, err := prog.Info()
+		i, err := fetchBPFProgInfo(prog)
 		if err != nil {
 			return fmt.Errorf("failed to get info for %d: %w", id, err)
 		}
@@ -157,9 +157,10 @@ func (p *bpfProgs) addTracing(id ebpf.ProgramID, funcName string, prog *ebpf.Pro
 		// https://lore.kernel.org/all/20230912150442.2009-3-hffilwlqm@gmail.com/
 		// for more details.
 
-		jitedInsns, ok := info.JitedInsns()
-		if !ok {
-			return fmt.Errorf("failed to get jited insns for %d", id)
+		// Only the entry prologue is needed, even for very large programs.
+		jitedInsns, err := readKernel(uint64(jitedKsymAddrs[0]), min(jitedLens[0], 16))
+		if err != nil {
+			return fmt.Errorf("failed to read entry prologue for %d: %w", id, err)
 		}
 
 		// It's unable to check whether the subprog is tail_call_reachable, so

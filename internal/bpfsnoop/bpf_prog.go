@@ -14,8 +14,8 @@ import (
 )
 
 type bpfProgs struct {
-	progs map[ebpf.ProgramID]*ebpf.Program     // ID -> prog
-	infos map[ebpf.ProgramID]*ebpf.ProgramInfo // ID -> prog info
+	progs map[ebpf.ProgramID]*ebpf.Program // ID -> prog
+	infos map[ebpf.ProgramID]*progInfo     // ID -> prog info
 
 	flock sync.Mutex
 	funcs map[uintptr]*bpfProgFuncInfo // func IP -> prog func info
@@ -30,7 +30,7 @@ type bpfProgs struct {
 func NewBPFProgs(pflags []ProgFlag, noParseProgs, disasm bool) (*bpfProgs, error) {
 	var progs bpfProgs
 	progs.progs = make(map[ebpf.ProgramID]*ebpf.Program, len(pflags))
-	progs.infos = make(map[ebpf.ProgramID]*ebpf.ProgramInfo, len(pflags))
+	progs.infos = make(map[ebpf.ProgramID]*progInfo, len(pflags))
 	progs.funcs = make(map[uintptr]*bpfProgFuncInfo, len(pflags))
 	progs.tracings = make(map[string]*bpfTracingInfo, len(pflags))
 	progs.disasm = disasm
@@ -76,7 +76,7 @@ func (b *bpfProgs) parseProgs() error {
 	return nil
 }
 
-func (b *bpfProgs) addProg(prog *ebpf.Program, id ebpf.ProgramID, info *ebpf.ProgramInfo, isBpfsnoop bool) error {
+func (b *bpfProgs) addProg(prog *ebpf.Program, id ebpf.ProgramID, info *progInfo, isBpfsnoop bool) error {
 	progInfo, err := b.newBPFProgInfo(prog, id, info)
 	if err != nil {
 		return fmt.Errorf("failed to create BPF program info for ID(%d): %w", id, err)
@@ -94,7 +94,7 @@ func (b *bpfProgs) addProg(prog *ebpf.Program, id ebpf.ProgramID, info *ebpf.Pro
 
 func (b *bpfProgs) AddProgs(progs []*ebpf.Program, isBpfsnoop bool) error {
 	for _, prog := range progs {
-		info, err := prog.Info()
+		info, err := fetchBPFProgInfo(prog)
 		if err != nil {
 			return fmt.Errorf("failed to get prog info: %w", err)
 		}

@@ -14,6 +14,7 @@ import (
 	"strings"
 
 	"github.com/cilium/ebpf"
+	"github.com/cilium/ebpf/btf"
 )
 
 type progFlagImmInfo struct {
@@ -102,7 +103,7 @@ func (p *bpfProgs) prepareProgInfoByID(id ebpf.ProgramID, flag progFlagImmInfo) 
 
 	funcName := flag.funcName
 	if funcName == "" {
-		info, err := prog.Info()
+		info, err := fetchBPFProgInfo(prog)
 		if err != nil {
 			return fmt.Errorf("failed to get prog info: %w", err)
 		}
@@ -134,7 +135,7 @@ func (p *bpfProgs) prepareProgInfoByPinnedPath(pflag ProgFlag) error {
 	}
 	defer prog.Close()
 
-	info, err := prog.Info()
+	info, err := fetchBPFProgInfo(prog)
 	if err != nil {
 		return fmt.Errorf("failed to get prog info of prog %s: %w", pflag.pinned, err)
 	}
@@ -159,7 +160,7 @@ func (p *bpfProgs) addProgByID(id ebpf.ProgramID, pflag ProgFlag) error {
 	}
 	defer prog.Close()
 
-	info, err := prog.Info()
+	info, err := fetchBPFProgInfo(prog)
 	if err != nil {
 		return fmt.Errorf("failed to get prog info: %w", err)
 	}
@@ -232,7 +233,7 @@ func (p *bpfProgs) prepareProgInfo(progID ebpf.ProgramID, pflags progFlags) erro
 	}
 	defer prog.Close()
 
-	info, err := prog.Info()
+	info, err := fetchBPFProgInfo(prog)
 	if err != nil {
 		return fmt.Errorf("failed to get prog info: %w", err)
 	}
@@ -315,7 +316,7 @@ func (p *bpfProgs) prepareProgInfos(pflags []ProgFlag) error {
 	return nil
 }
 
-func getProgFuncName(funcName string, info *ebpf.ProgramInfo) (string, error) {
+func getProgFuncName(funcName string, info *progInfo) (string, error) {
 	if funcName != "" {
 		return funcName, nil
 	}
@@ -323,19 +324,26 @@ func getProgFuncName(funcName string, info *ebpf.ProgramInfo) (string, error) {
 	return getProgEntryFuncName(info)
 }
 
+type progFuncInfoReader interface {
+	BTFID() (btf.ID, bool)
+	FuncInfos() (btf.FuncOffsets, error)
+}
+
 // getProgEntryFuncName returns the name of the entry function in the program.
-func getProgEntryFuncName(info *ebpf.ProgramInfo) (string, error) {
+func getProgEntryFuncName(info progFuncInfoReader) (string, error) {
 	if _, ok := info.BTFID(); !ok {
 		return "", errors.New("program does not have BTF ID")
 	}
 
-	insns, err := info.Instructions()
+	funcs, err := info.FuncInfos()
 	if err != nil {
-		return "", fmt.Errorf("failed to get program instructions: %w", err)
+		return "", fmt.Errorf("failed to get program function infos: %w", err)
 	}
 
-	if sym := insns[0].Symbol(); sym != "" {
-		return sym, nil
+	for _, fn := range funcs {
+		if fn.Offset == 0 && fn.Func.Name != "" {
+			return fn.Func.Name, nil
+		}
 	}
 
 	return "", errors.New("no entry func name found in program")

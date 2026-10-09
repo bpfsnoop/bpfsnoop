@@ -88,13 +88,13 @@ type bpfProgInfo struct {
 	isBpfsnoopProg bool
 }
 
-func (b *bpfProgs) newBPFProgInfo(prog *ebpf.Program, id ebpf.ProgramID, pinfo *ebpf.ProgramInfo) (*bpfProgInfo, error) {
+func (b *bpfProgs) newBPFProgInfo(prog *ebpf.Program, id ebpf.ProgramID, pinfo *progInfo) (*bpfProgInfo, error) {
 	if pinfo == nil {
 		var ok bool
 		pinfo, ok = b.infos[id]
 		if !ok {
 			var err error
-			pinfo, err = prog.Info()
+			pinfo, err = fetchBPFProgInfo(prog)
 			if err != nil {
 				return nil, fmt.Errorf("failed to get prog info: %w", err)
 			}
@@ -107,7 +107,6 @@ func (b *bpfProgs) newBPFProgInfo(prog *ebpf.Program, id ebpf.ProgramID, pinfo *
 	}
 
 	lines, _ := pinfo.LineInfos()
-	jitedInsns, _ := pinfo.JitedInsns()
 	jitedKsyms, _ := pinfo.JitedKsymAddrs()
 	jitedFuncLens, _ := pinfo.JitedFuncLens()
 	jitedLineInfos, _ := pinfo.JitedLineInfos()
@@ -127,7 +126,6 @@ func (b *bpfProgs) newBPFProgInfo(prog *ebpf.Program, id ebpf.ProgramID, pinfo *
 	var progInfo bpfProgInfo
 	progInfo.progs = make([]*bpfProgFuncInfo, 0, len(jitedFuncLens))
 
-	insns := jitedInsns
 	for i, funcLen := range jitedFuncLens {
 		var info bpfProgFuncInfo
 		info.prog = prog
@@ -149,7 +147,6 @@ func (b *bpfProgs) newBPFProgInfo(prog *ebpf.Program, id ebpf.ProgramID, pinfo *
 
 		progInfo.progs = append(progInfo.progs, &info)
 
-		insns = insns[funcLen:]
 	}
 
 	return &progInfo, nil
