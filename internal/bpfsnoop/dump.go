@@ -82,9 +82,6 @@ func DumpProg(pf []ProgFlag) {
 	assert.NoErr(err, "Failed to get bpf progs: %v")
 	defer bpfProgs.Close()
 
-	<-bpfProgs.done
-	assert.NoErr(bpfProgs.err, "Failed to parse bpf progs: %v")
-
 	prog := progInfo.prog
 	info, err := prog.Info()
 	assert.NoErr(err, "Failed to get prog info: %v")

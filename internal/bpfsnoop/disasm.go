@@ -179,9 +179,6 @@ func dumpKfunc(kfunc string, kmods []string, bytes uint) {
 	assert.NoErr(err, "Failed to get bpf progs: %v")
 	defer bpfProgs.Close()
 
-	<-bpfProgs.done
-	assert.NoErr(bpfProgs.err, "Failed to parse bpf progs: %v")
-
 	var sb strings.Builder
 
 	printLineInfo := func(li *branchEndpoint) {

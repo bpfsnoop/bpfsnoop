@@ -192,10 +192,6 @@ func newKernelReadHelpers(flags *Flags) (*Helpers, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to prepare BPF programs: %w", err)
 	}
-	if err := progs.wait(); err != nil {
-		progs.Close()
-		return nil, fmt.Errorf("failed to parse BPF programs: %w", err)
-	}
 
 	return &Helpers{
 		Flags: flags,
