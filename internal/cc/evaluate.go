@@ -496,6 +496,23 @@ func (c *compiler) evaluateAddr(expr *cc.Expr) (exprValue, error) {
 	return base, nil
 }
 
+// shouldWiden reports whether a cast widens an integer or enum value.
+func shouldWiden(source, target btf.Type) bool {
+	switch btf.UnderlyingType(source).(type) {
+	case *btf.Int, *btf.Enum:
+	default:
+		return false
+	}
+
+	sourceSize, err := btf.Sizeof(source)
+	if err != nil {
+		return false
+	}
+
+	targetSize, err := btf.Sizeof(target)
+	return err == nil && targetSize > sourceSize
+}
+
 // evaluateCast handles type casting.
 func (c *compiler) evaluateCast(expr *cc.Expr) (exprValue, error) {
 	// Handle cast of literal number
@@ -522,8 +539,10 @@ func (c *compiler) evaluateCast(expr *cc.Expr) (exprValue, error) {
 		return exprValue{}, fmt.Errorf("failed to get cast target type: %w", err)
 	}
 
-	// Finish map reads at their original width before crossing the cast boundary.
-	if inner.mapValue || slices.ContainsFunc(inner.offsets, func(off pendingOffset) bool { return off.directRead }) {
+	// Load scalar values at their original width before changing their type.
+	// Otherwise a widening cast can also widen the pending memory read.
+	if inner.isPending() && shouldWiden(inner.btf, targetType) || inner.mapValue ||
+		slices.ContainsFunc(inner.offsets, func(off pendingOffset) bool { return off.directRead }) {
 		inner, err = c.materialize(inner)
 		if err != nil {
 			return exprValue{}, err

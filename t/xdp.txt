@@ -59,8 +59,8 @@ trigger: ping -c 1 -s 64 127.0.0.1
 # indexing an array member loads the element, not its address
 name: xdp::index:array
 tag: xdp,fnarg,index
-test: -k generic_xdp_install --output-arg '(unsigned char)dev->name[0]' --output-arg '(unsigned char)dev->name[1]'
-match: (unsigned char)'(unsigned char)dev->name[0]'=0x6c/108, (unsigned char)'(unsigned char)dev->name[1]'=0x6f/111
+test: -k generic_xdp_install --output-arg '(unsigned int)dev->name[0]' --output-arg '(unsigned int)dev->name[1]'
+match: (uint)'(unsigned int)dev->name[0]'=0x6c/108, (uint)'(unsigned int)dev->name[1]'=0x6f/111
 trigger: ./xdpcrc -d lo
 
 ---

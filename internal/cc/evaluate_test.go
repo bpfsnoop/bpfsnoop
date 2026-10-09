@@ -830,6 +830,37 @@ func TestEvaluateCast(t *testing.T) {
 	})
 }
 
+func TestShouldWiden(t *testing.T) {
+	byteType := &btf.Int{Name: "u8", Size: 1}
+	intType := &btf.Int{Name: "u32", Size: 4}
+	longType := &btf.Int{Name: "u64", Size: 8}
+	for _, tt := range []struct {
+		name   string
+		source btf.Type
+		target btf.Type
+		want   bool
+	}{
+		{"byte to int", byteType, intType, true},
+		{"int to long", intType, longType, true},
+		{"signed byte to int", &btf.Int{Size: 1, Encoding: btf.Signed}, intType, true},
+		{"same width", intType, &btf.Int{Size: 4, Encoding: btf.Signed}, false},
+		{"narrowing", intType, byteType, false},
+		{"enum widening", &btf.Enum{Size: 4}, longType, true},
+		{"enum same width", &btf.Enum{Size: 4}, intType, false},
+		{"typedef source", &btf.Typedef{Name: "byte", Type: byteType}, intType, true},
+		{"qualified target", byteType, &btf.Const{Type: intType}, true},
+		{"pointer source", &btf.Pointer{Target: byteType}, longType, false},
+		{"array source", &btf.Array{Type: byteType, Nelems: 1}, intType, false},
+		{"struct source", &btf.Struct{Size: 1}, intType, false},
+		{"void source", &btf.Void{}, intType, false},
+		{"unsized target", byteType, &btf.Fwd{Name: "unknown"}, false},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			test.AssertEqual(t, shouldWiden(tt.source, tt.target), tt.want)
+		})
+	}
+}
+
 func TestEvaluateAdd(t *testing.T) {
 	c := prepareCompiler(t)
 
