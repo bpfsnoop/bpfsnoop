@@ -36,6 +36,8 @@ int bpfsnoop_insn(struct pt_regs *ctx)
 {
     struct bpfsnoop_insn_event *evt;
     __u64 session_id;
+    void *ringbuf;
+    __u32 cpu;
 
     if (!ready)
         return BPF_OK;
@@ -44,7 +46,12 @@ int bpfsnoop_insn(struct pt_regs *ctx)
     if (!session_id)
         return BPF_OK;
 
-    evt = bpf_ringbuf_reserve(&bpfsnoop_events, sizeof(*evt), 0);
+    cpu = bpf_get_smp_processor_id();
+    ringbuf = bpfsnoop_event_ringbuf(cpu);
+    if (!ringbuf)
+        return BPF_OK;
+
+    evt = bpf_ringbuf_reserve(ringbuf, sizeof(*evt), 0);
     if (!evt)
         return BPF_OK;
 
@@ -53,7 +60,7 @@ int bpfsnoop_insn(struct pt_regs *ctx)
     evt->kernel_ts = (__u32) bpf_ktime_get_ns();
     evt->session_id = session_id;
     evt->insn_ip = INSN_IP;
-    evt->cpu = bpf_get_smp_processor_id();
+    evt->cpu = cpu;
 
     bpf_ringbuf_submit(evt, 0);
 

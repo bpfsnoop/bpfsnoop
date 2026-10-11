@@ -84,6 +84,10 @@ func (t *bpfTracing) traceInsns(errg *errgroup.Group, reusedMaps map[string]*ebp
 		return fmt.Errorf("failed to load insn bpf spec: %w", err)
 	}
 
+	if err := updateEventsMapSpec(insnSpec); err != nil {
+		return err
+	}
+
 	for _, insn := range insns {
 		errg.Go(func() error {
 			return t.traceInsn(insnSpec, reusedMaps, insn)

@@ -42,7 +42,9 @@ func (s *fnStack) get(event *Event, helpers *Helpers, stacks *ebpf.Map, symbolOn
 		}
 		return fmt.Errorf("failed to lookup func stack map: %w", err)
 	}
-	_ = stacks.Delete(id)
+	// FIXME: delete the stack entry.
+	// Other queued events, including on other CPUs, may share this stack ID.
+	// The trace owns the map and releases its entries when it closes.
 
 	ips := s.ips[:]
 	skipEntries := true

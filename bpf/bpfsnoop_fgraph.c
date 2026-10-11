@@ -149,9 +149,11 @@ int BPF_PROG(bpfsnoop_fgraph)
     __u64 retval = 0;
     size_t buffer_sz;
     __u64 pid_tgid;
+    void *ringbuf;
     bool is_entry;
     int depth = 0;
     void *buffer;
+    __u32 cpu;
 
     if (!ready)
         return BPF_OK;
@@ -164,8 +166,13 @@ int BPF_PROG(bpfsnoop_fgraph)
     if (!session_id)
         return BPF_OK;
 
+    cpu = bpf_get_smp_processor_id();
+    ringbuf = bpfsnoop_event_ringbuf(cpu);
+    if (!ringbuf)
+        return BPF_OK;
+
     buffer_sz = sizeof(*evt) + cfg->fn_args.buf_size;
-    buffer = bpf_ringbuf_reserve(&bpfsnoop_events, buffer_sz, 0);
+    buffer = bpf_ringbuf_reserve(ringbuf, buffer_sz, 0);
     if (!buffer)
         return BPF_OK;
 
@@ -192,7 +199,7 @@ int BPF_PROG(bpfsnoop_fgraph)
     evt->kernel_ts = (__u32) bpf_ktime_get_ns();
     evt->session_id = session_id;
     evt->func_ip = cfg->func_ip;
-    evt->cpu = bpf_get_smp_processor_id();
+    evt->cpu = cpu;
     evt->depth = depth;
 
     buffer += sizeof(*evt);

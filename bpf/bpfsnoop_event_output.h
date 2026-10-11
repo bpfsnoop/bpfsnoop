@@ -33,10 +33,15 @@ output_event(void *ctx, __u16 event_type, __u64 session_id, __u64 func_ip,
     void *buffer, *ptr;
     struct event *evt;
     size_t buffer_sz;
+    void *ringbuf;
+
+    ringbuf = bpfsnoop_event_ringbuf(cpu);
+    if (!ringbuf)
+        return BPF_OK;
 
     buffer_sz = sizeof(*evt) + cfg->fn_args.buf_size + cfg->fn_args.data_size;
     buffer_sz += cfg->flags.output_pkt ? sizeof(struct bpfsnoop_pkt_data) : 0;
-    buffer = bpf_ringbuf_reserve(&bpfsnoop_events, buffer_sz, 0);
+    buffer = bpf_ringbuf_reserve(ringbuf, buffer_sz, 0);
     if (!buffer)
         return BPF_OK;
 

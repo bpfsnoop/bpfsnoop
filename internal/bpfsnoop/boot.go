@@ -14,9 +14,7 @@ import (
 	"time"
 
 	"github.com/cilium/ebpf"
-	"github.com/cilium/ebpf/ringbuf"
 	"github.com/cilium/ebpf/rlimit"
-	"golang.org/x/sync/errgroup"
 	"golang.org/x/sys/unix"
 
 	"github.com/bpfsnoop/bpfsnoop/internal/bpf"
@@ -24,16 +22,14 @@ import (
 	"github.com/bpfsnoop/bpfsnoop/internal/mathx"
 )
 
-type EventHandlerFactory func(maps map[string]*ebpf.Map, output io.Writer, helpers *Helpers) (EventHandler, func(), error)
-
 type BootConfig struct {
-	Output          io.Writer
-	NewEventHandler EventHandlerFactory
-	MaxEvents       uint
-	MaxKernelFuncs  int
-	Ready           func()
-	Warning         func(string)
-	isEventStream   bool
+	Output         io.Writer
+	EventReader    *eventReader
+	MaxEvents      uint
+	MaxKernelFuncs int
+	Ready          func()
+	Warning        func(string)
+	isEventStream  bool
 }
 
 // Boot initializes bpfsnoop and runs the operation selected by flags. Tracing
@@ -288,11 +284,13 @@ func bootTracing(ctx context.Context, flags *Flags, config BootConfig) (retErr e
 	}
 	FlushReadObjs()
 
-	reader, err := ringbuf.NewReader(reusedMaps["bpfsnoop_events"])
+	readersStarted := time.Now()
+	readers, err := newEventReaders(reusedMaps["bpfsnoop_events"], bpfSpec.Maps["bpfsnoop_events"].InnerMap)
 	if err != nil {
 		return fmt.Errorf("failed to create ring-buffer reader: %w", err)
 	}
-	defer reader.Close()
+	defer closeEventReaders(readers)
+	DebugLog("Creating %d ring-buffer readers costs %s", len(readers), time.Since(readersStarted))
 
 	if flags.OutputFile() != "" {
 		file, err := os.OpenFile(flags.OutputFile(), os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
@@ -313,23 +311,14 @@ func bootTracing(ctx context.Context, flags *Flags, config BootConfig) (retErr e
 		Graphs:    graphs,
 		KfnsMulti: kfuncsMulti,
 	}
-	newHandler := config.NewEventHandler
-	if newHandler == nil {
-		newHandler = func(maps map[string]*ebpf.Map, output io.Writer, helpers *Helpers) (EventHandler, func(), error) {
-			if output == nil {
-				return nil, nil, errors.New("trace output writer is nil")
-			}
-			handler, cleanup := NewOutputEventHandler(maps, output, helpers)
-			return handler, cleanup, nil
-		}
+	reader := config.EventReader
+	if reader == nil {
+		reader = &eventReader{}
 	}
-	handler, cleanupHandler, err := newHandler(reusedMaps, config.Output, helpers)
-	if err != nil {
-		return fmt.Errorf("failed to create event handler: %w", err)
+	if err := reader.init(reusedMaps, config.Output, helpers); err != nil {
+		return fmt.Errorf("failed to initialize event reader: %w", err)
 	}
-	if cleanupHandler != nil {
-		defer cleanupHandler()
-	}
+	defer reader.cleanup()
 
 	readyData := reusedMaps[".data.ready"]
 	if err := readyData.Put(uint32(0), uint32(1)); err != nil {
@@ -346,22 +335,11 @@ func bootTracing(ctx context.Context, flags *Flags, config BootConfig) (retErr e
 		defer log.Print("bpfsnoop is exiting..")
 	}
 
-	errgroup, runCtx := errgroup.WithContext(ctx)
-	errgroup.Go(func() error {
-		<-runCtx.Done()
-		_ = reader.Close()
-		return nil
-	})
-
-	errgroup.Go(func() error {
-		maxEvents := config.MaxEvents
-		if maxEvents == 0 {
-			maxEvents = limitEvents
-		}
-		return Run(reader, handler, maxEvents)
-	})
-
-	if err := errgroup.Wait(); err != nil && !errors.Is(err, ErrFinished) {
+	maxEvents := config.MaxEvents
+	if maxEvents == 0 {
+		maxEvents = limitEvents
+	}
+	if err := reader.run(ctx, readers, maxEvents); err != nil && !errors.Is(err, ErrFinished) {
 		return fmt.Errorf("bpfsnoop run failed: %w", err)
 	}
 	return nil

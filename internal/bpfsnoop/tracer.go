@@ -6,12 +6,9 @@ package bpfsnoop
 import (
 	"context"
 	"errors"
-	"io"
 	"slices"
 	"strconv"
 	"sync/atomic"
-
-	"github.com/cilium/ebpf"
 
 	"github.com/bpfsnoop/bpfsnoop/internal/cc"
 )
@@ -190,15 +187,12 @@ func Trace(ctx context.Context, options TraceOptions) error {
 		functionGraph:     options.Capture.FunctionGraph,
 		instructions:      options.Capture.Instructions,
 	}
-	factory := func(maps map[string]*ebpf.Map, _ io.Writer, helpers *Helpers) (EventHandler, func(), error) {
-		return NewTraceEventHandler(maps, helpers, capture, options.Event), nil, nil
-	}
 	return Boot(ctx, flags, BootConfig{
-		NewEventHandler: factory,
-		MaxEvents:       options.MaxEvents,
-		MaxKernelFuncs:  options.MaxKernelFunctions,
-		Ready:           options.Ready,
-		Warning:         options.Warning,
-		isEventStream:   true,
+		EventReader:    &eventReader{trace: NewTraceEventHandler(capture, &options)},
+		MaxEvents:      options.MaxEvents,
+		MaxKernelFuncs: options.MaxKernelFunctions,
+		Ready:          options.Ready,
+		Warning:        options.Warning,
+		isEventStream:  true,
 	})
 }

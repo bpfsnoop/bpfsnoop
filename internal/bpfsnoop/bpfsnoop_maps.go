@@ -62,7 +62,25 @@ func updateStacksMapSpec(spec *ebpf.CollectionSpec) error {
 	return nil
 }
 
+func updateEventsMapSpec(spec *ebpf.CollectionSpec) error {
+	numCPU, err := ebpf.PossibleCPU()
+	if err != nil {
+		return fmt.Errorf("failed to get possible CPU count: %w", err)
+	}
+
+	m, ok := spec.Maps["bpfsnoop_events"]
+	if !ok || m.Type != ebpf.ArrayOfMaps || m.InnerMap == nil {
+		return fmt.Errorf("missing or invalid bpfsnoop_events map spec")
+	}
+
+	m.MaxEntries = uint32(numCPU)
+	return nil
+}
+
 func updateMapsSpec(spec *ebpf.CollectionSpec) error {
+	if err := updateEventsMapSpec(spec); err != nil {
+		return err
+	}
 	if err := updateLbrsDataMapSpec(spec); err != nil {
 		return fmt.Errorf("failed to update .data.lbrs map spec: %w", err)
 	}

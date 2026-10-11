@@ -35,9 +35,22 @@ struct event {
     __s64 lbr_retval;
 };
 
-struct {
+struct bpfsnoop_ringbuf {
     __uint(type, BPF_MAP_TYPE_RINGBUF);
-    __uint(max_entries, 64 * 1024 * 1024); /* 64MiB */
+    __uint(max_entries, 8 * 1024 * 1024); /* 8MiB per CPU */
+};
+
+struct {
+    __uint(type, BPF_MAP_TYPE_ARRAY_OF_MAPS);
+    __uint(max_entries, 1); /* Set to the possible CPU count by userspace. */
+    __type(key, __u32);
+    __array(values, struct bpfsnoop_ringbuf);
 } bpfsnoop_events SEC(".maps");
+
+static __always_inline void *
+bpfsnoop_event_ringbuf(__u32 cpu)
+{
+    return bpf_map_lookup_elem(&bpfsnoop_events, &cpu);
+}
 
 #endif // __BPFSNOOP_EVENT_H_

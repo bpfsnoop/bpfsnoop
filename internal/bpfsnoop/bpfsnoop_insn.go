@@ -7,8 +7,13 @@ import (
 	"fmt"
 	"strings"
 	"time"
+	"unsafe"
 
 	"github.com/fatih/color"
+)
+
+const (
+	sizeOfInsnEvent = int(unsafe.Sizeof(InsnEvent{}))
 )
 
 type InsnEvent struct {

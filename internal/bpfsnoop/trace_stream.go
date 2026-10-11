@@ -128,6 +128,7 @@ func decodeTraceParam(typ btf.Type, flags FuncParamFlags, data []byte) (any, int
 		if len(data) < maxOutputStrLen {
 			return nil, 0, fmt.Errorf("string argument is truncated: got %d bytes", len(data))
 		}
+		// NullTerminated aliases the sample; the queued argument must own it.
 		return strings.Clone(strx.NullTerminated(data[:maxOutputStrLen])), maxOutputStrLen, nil
 	}
 
@@ -250,7 +251,9 @@ func traceStackFrames(event *Event, helpers *Helpers, stacks *ebpf.Map) ([]Trace
 		}
 		return nil, fmt.Errorf("failed to read kernel stack: %w", err)
 	}
-	_ = stacks.Delete(id)
+	// FIXME: delete the stack entry.
+	// Stack IDs are shared by events across CPU rings. Keep the entry alive
+	// until the trace's map is closed, including while other readers resolve it.
 
 	frames := make([]TraceStackFrame, 0, len(ips))
 	for _, ip := range ips {
@@ -340,9 +343,10 @@ func decodeTraceSelectedArguments(info *funcInfo, data []byte) ([]TraceSelectedA
 		}
 		selected = append(selected, TraceSelectedArgument{
 			Raw: ReadKernelResult{
-				Expression:     arg.expr,
-				Type:           btfx.Repr(arg.t),
-				BTFType:        arg.t,
+				Expression: arg.expr,
+				Type:       btfx.Repr(arg.t),
+				BTFType:    arg.t,
+				// Selected arguments are decoded downstream, after the sample is released.
 				Buffer:         slices.Clone(data[offset : offset+arg.size]),
 				Size:           arg.size,
 				DataSize:       arg.trueDataSize,
@@ -391,158 +395,222 @@ func makeTraceEvent(raw *Event, info *funcInfo, capture traceStreamCapture, argu
 	return event
 }
 
-func NewTraceEventHandler(maps map[string]*ebpf.Map, helpers *Helpers, capture traceStreamCapture, output func(TraceEvent) error) EventHandler {
-	pending := make(map[uint64]pendingTraceEvent)
-	stacks := maps["bpfsnoop_stacks"]
-	return func(data []byte) (bool, error) {
-		if len(data) < 2 {
-			return false, nil
-		}
-		typ := *(*uint16)(unsafe.Pointer(&data[0]))
-		if typ == eventTypeInsn {
-			if !capture.instructions || len(data) < int(unsafe.Sizeof(InsnEvent{})) {
-				return false, nil
-			}
-			raw := (*InsnEvent)(unsafe.Pointer(&data[0]))
-			entry, ok := pending[raw.SessID]
-			insn, found := helpers.Insns[raw.InsnIP]
-			if !ok || !found {
-				return false, nil
-			}
-			entry.instructions = append(entry.instructions, TraceInstructionEvent{
-				Function: insn.Func, Address: fmt.Sprintf("%#x", insn.IP), OffsetBytes: insn.Off,
-				Bytes: hex.EncodeToString(insn.Insn.Bytes), Mnemonic: insn.Insn.Mnemonic,
-				Operands: insn.Insn.OpStr, CPU: raw.CPU, DurationNS: uint64(uint32(raw.KernNs - entry.kernNS)),
-			})
-			pending[raw.SessID] = entry
-			return false, nil
-		}
-		if typ == eventTypeGraphEntry || typ == eventTypeGraphExit {
-			if !capture.functionGraph || len(data) < sizeOfGraphEvent {
-				return false, nil
-			}
-			raw := (*GraphEvent)(unsafe.Pointer(&data[0]))
-			entry, ok := pending[raw.SessID]
-			graph, found := helpers.Graphs[raw.FuncIP]
-			if !ok || !found {
-				return false, nil
-			}
-			info := getFuncInfo(uintptr(raw.FuncIP), helpers, graph, 0)
-			isExit := typ == eventTypeGraphExit
-			argSize := graph.ArgsEnSz
-			if isExit {
-				argSize = graph.ArgsExSz
-			}
-			payload := data[sizeOfGraphEvent:]
-			if argSize > len(payload) {
-				return false, fmt.Errorf("function graph event for %s is truncated", info.name)
-			}
-			arguments, retval, err := decodeTraceFunctionValues(info, payload[:argSize], isExit)
-			if err != nil {
-				return false, err
-			}
-			phase := TracingModeEntry
-			if isExit {
-				phase = TracingModeExit
-			}
-			flags := uint32(0)
-			if graph.Bprog != nil {
-				flags = traceeFlagIsProg
-			}
-			entry.functionGraph = append(entry.functionGraph, TraceFunctionGraphEvent{
-				Target: traceTarget(info, flags), Phase: phase,
-				CPU: raw.CPU, Depth: raw.Depth, DurationNS: uint64(uint32(raw.KernNs - entry.kernNS)),
-				Arguments: arguments, Retval: retval,
-			})
-			pending[raw.SessID] = entry
-			return false, nil
-		}
-		if len(data) < sizeOfEvent {
-			return false, nil
-		}
-		raw := (*Event)(unsafe.Pointer(&data[0]))
-		if raw.Type != eventTypeFuncEntry && raw.Type != eventTypeFuncExit {
-			return false, nil
-		}
-		info := getFuncInfo(raw.FuncIP, helpers, nil, raw.TraceeFlags)
-		argSize := int(raw.TraceeArgEntrySz)
-		if raw.Type == eventTypeFuncExit {
-			argSize = int(raw.TraceeArgExitSz)
-		}
-		payload := data[sizeOfEvent:]
-		if argSize < 0 || len(payload) < argSize {
-			return false, fmt.Errorf("trace event for %s has truncated argument data", info.name)
-		}
-		var arguments []TraceArgument
-		var retval *TraceValue
-		var err error
-		if haveFlag(raw.TraceeFlags, traceeFlagKmultiMode) {
-			arguments, retval, err = decodeTraceKprobeMultiValues(info, payload[:argSize], raw.Type == eventTypeFuncExit)
-		} else {
-			arguments, retval, err = decodeTraceFunctionValues(info, payload[:argSize], raw.Type == eventTypeFuncExit)
-		}
-		if err != nil {
-			return false, err
-		}
-		payload = payload[argSize:]
+// parsedTraceEvent owns all values decoded from a ring-buffer record.
+type parsedTraceEvent struct {
+	raw         Event
+	insn        *InsnEvent
+	graph       *GraphEvent
+	instruction TraceInstructionEvent
+	child       TraceFunctionGraphEvent
+	event       TraceEvent
+	arguments   []TraceArgument
+}
 
-		var packet *TracePacket
-		if haveFlag(raw.TraceeFlags, traceeFlagOutputPkt) {
-			packet, err = decodeTracePacket(payload)
-			if err != nil {
-				return false, err
-			}
-			payload = payload[sizeOfPktData:]
-		}
-		var selected []TraceSelectedArgument
-		if raw.TraceeArgDataSz != 0 {
-			argDataSize := int(raw.TraceeArgDataSz)
-			if argDataSize > len(payload) {
-				return false, fmt.Errorf("selected argument data for %s is truncated", info.name)
-			}
-			selected, err = decodeTraceSelectedArguments(info, payload[:argDataSize])
-			if err != nil {
-				return false, err
-			}
-		}
+// traceEventHandler decodes MCP records concurrently and owns pending sessions.
+type traceEventHandler struct {
+	helpers *Helpers
+	stacks  *ebpf.Map
+	capture traceStreamCapture
+	options *TraceOptions
+	pending map[uint64]pendingTraceEvent
+}
 
-		requiredSession := haveFlag(raw.TraceeFlags, traceeFlagBothMode) || haveFlag(raw.TraceeFlags, traceeFlagSession)
-		if requiredSession && raw.Type == eventTypeFuncEntry {
-			pending[raw.SessID] = pendingTraceEvent{arguments: arguments, kernNS: raw.KernNs}
-			return false, nil
-		}
-
-		var entry pendingTraceEvent
-		var duration *uint64
-		if requiredSession {
-			var ok bool
-			entry, ok = pending[raw.SessID+1]
-			if !ok {
-				return false, nil
-			}
-			delete(pending, raw.SessID+1)
-			arguments = entry.arguments
-			value := uint64(uint32(raw.KernNs - entry.kernNS))
-			duration = &value
-		}
-
-		var stack []TraceStackFrame
-		if capture.kernelStack || capture.flameGraph {
-			stack, err = traceStackFrames(raw, helpers, stacks)
-			if err != nil {
-				return false, err
-			}
-		}
-		event := makeTraceEvent(raw, info, capture, arguments, retval, duration, stack)
-		event.SelectedArguments = selected
-		event.Packet = packet
-		if requiredSession {
-			event.FunctionGraph = entry.functionGraph
-			event.Instructions = entry.instructions
-		}
-		if err := output(event); err != nil {
-			return false, err
-		}
-		return true, nil
+func NewTraceEventHandler(capture traceStreamCapture, options *TraceOptions) *traceEventHandler {
+	return &traceEventHandler{
+		capture: capture,
+		options: options,
+		pending: make(map[uint64]pendingTraceEvent),
 	}
+}
+
+// parse copies fixed headers by value and decodes borrowed payloads into owned
+// values. Escaping payload strings and selected-argument buffers are cloned.
+func (h *traceEventHandler) parse(data []byte) (*parsedTraceEvent, error) {
+	helpers, capture, stacks := h.helpers, h.capture, h.stacks
+	if len(data) < 2 {
+		return nil, nil
+	}
+	parsed := &parsedTraceEvent{}
+	typ := *(*uint16)(unsafe.Pointer(&data[0]))
+	if typ == eventTypeInsn {
+		if !capture.instructions || len(data) < int(unsafe.Sizeof(InsnEvent{})) {
+			return nil, nil
+		}
+		raw := *(*InsnEvent)(unsafe.Pointer(&data[0]))
+		insn, found := helpers.Insns[raw.InsnIP]
+		if !found {
+			return nil, nil
+		}
+		parsed.insn = &raw
+		parsed.instruction = TraceInstructionEvent{
+			Function: insn.Func, Address: fmt.Sprintf("%#x", insn.IP), OffsetBytes: insn.Off,
+			Bytes: hex.EncodeToString(insn.Insn.Bytes), Mnemonic: insn.Insn.Mnemonic,
+			Operands: insn.Insn.OpStr, CPU: raw.CPU,
+		}
+		return parsed, nil
+	}
+	if typ == eventTypeGraphEntry || typ == eventTypeGraphExit {
+		if !capture.functionGraph || len(data) < sizeOfGraphEvent {
+			return nil, nil
+		}
+		raw := *(*GraphEvent)(unsafe.Pointer(&data[0]))
+		graph, found := helpers.Graphs[raw.FuncIP]
+		if !found {
+			return nil, nil
+		}
+		info := getFuncInfo(uintptr(raw.FuncIP), helpers, graph, 0)
+		isExit := typ == eventTypeGraphExit
+		argSize := graph.ArgsEnSz
+		if isExit {
+			argSize = graph.ArgsExSz
+		}
+		payload := data[sizeOfGraphEvent:]
+		if argSize > len(payload) {
+			return nil, fmt.Errorf("function graph event for %s is truncated", info.name)
+		}
+		arguments, retval, err := decodeTraceFunctionValues(info, payload[:argSize], isExit)
+		if err != nil {
+			return nil, err
+		}
+		phase := TracingModeEntry
+		if isExit {
+			phase = TracingModeExit
+		}
+		flags := uint32(0)
+		if graph.Bprog != nil {
+			flags = traceeFlagIsProg
+		}
+		parsed.graph = &raw
+		parsed.child = TraceFunctionGraphEvent{
+			Target: traceTarget(info, flags), Phase: phase,
+			CPU: raw.CPU, Depth: raw.Depth,
+			Arguments: arguments, Retval: retval,
+		}
+		return parsed, nil
+	}
+	if len(data) < sizeOfEvent {
+		return nil, nil
+	}
+	raw := *(*Event)(unsafe.Pointer(&data[0]))
+	if raw.Type != eventTypeFuncEntry && raw.Type != eventTypeFuncExit {
+		return nil, nil
+	}
+	info := getFuncInfo(raw.FuncIP, helpers, nil, raw.TraceeFlags)
+	argSize := int(raw.TraceeArgEntrySz)
+	if raw.Type == eventTypeFuncExit {
+		argSize = int(raw.TraceeArgExitSz)
+	}
+	payload := data[sizeOfEvent:]
+	if argSize < 0 || len(payload) < argSize {
+		return nil, fmt.Errorf("trace event for %s has truncated argument data", info.name)
+	}
+	var arguments []TraceArgument
+	var retval *TraceValue
+	var err error
+	if haveFlag(raw.TraceeFlags, traceeFlagKmultiMode) {
+		arguments, retval, err = decodeTraceKprobeMultiValues(info, payload[:argSize], raw.Type == eventTypeFuncExit)
+	} else {
+		arguments, retval, err = decodeTraceFunctionValues(info, payload[:argSize], raw.Type == eventTypeFuncExit)
+	}
+	if err != nil {
+		return nil, err
+	}
+	payload = payload[argSize:]
+
+	var packet *TracePacket
+	if haveFlag(raw.TraceeFlags, traceeFlagOutputPkt) {
+		packet, err = decodeTracePacket(payload)
+		if err != nil {
+			return nil, err
+		}
+		payload = payload[sizeOfPktData:]
+	}
+	var selected []TraceSelectedArgument
+	if raw.TraceeArgDataSz != 0 {
+		argDataSize := int(raw.TraceeArgDataSz)
+		if argDataSize > len(payload) {
+			return nil, fmt.Errorf("selected argument data for %s is truncated", info.name)
+		}
+		selected, err = decodeTraceSelectedArguments(info, payload[:argDataSize])
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	requiredSession := haveFlag(raw.TraceeFlags, traceeFlagBothMode) || haveFlag(raw.TraceeFlags, traceeFlagSession)
+	var stack []TraceStackFrame
+	if (capture.kernelStack || capture.flameGraph) && (!requiredSession || raw.Type == eventTypeFuncExit) {
+		stack, err = traceStackFrames(&raw, helpers, stacks)
+		if err != nil {
+			return nil, err
+		}
+	}
+	event := makeTraceEvent(&raw, info, capture, arguments, retval, nil, stack)
+	event.SelectedArguments = selected
+	event.Packet = packet
+	parsed.raw = raw
+	parsed.arguments = arguments
+	parsed.event = event
+	return parsed, nil
+}
+
+func (h *traceEventHandler) handle(parsed *parsedTraceEvent) (bool, error) {
+	pending, capture := h.pending, h.capture
+	if raw := parsed.insn; raw != nil {
+		entry, ok := pending[raw.SessID]
+		if !ok {
+			return false, nil
+		}
+		parsed.instruction.DurationNS = uint64(uint32(raw.KernNs - entry.kernNS))
+		entry.instructions = append(entry.instructions, parsed.instruction)
+		pending[raw.SessID] = entry
+		return false, nil
+	}
+	if raw := parsed.graph; raw != nil {
+		entry, ok := pending[raw.SessID]
+		if !ok {
+			return false, nil
+		}
+		parsed.child.DurationNS = uint64(uint32(raw.KernNs - entry.kernNS))
+		entry.functionGraph = append(entry.functionGraph, parsed.child)
+		pending[raw.SessID] = entry
+		return false, nil
+	}
+	raw := &parsed.raw
+	event := parsed.event
+	arguments := parsed.arguments
+	requiredSession := haveFlag(raw.TraceeFlags, traceeFlagBothMode) || haveFlag(raw.TraceeFlags, traceeFlagSession)
+	if requiredSession && raw.Type == eventTypeFuncEntry {
+		pending[raw.SessID] = pendingTraceEvent{arguments: arguments, kernNS: raw.KernNs}
+		return false, nil
+	}
+
+	var entry pendingTraceEvent
+	var duration *uint64
+	if requiredSession {
+		var ok bool
+		entry, ok = pending[raw.SessID+1]
+		if !ok {
+			return false, nil
+		}
+		delete(pending, raw.SessID+1)
+		arguments = entry.arguments
+		value := uint64(uint32(raw.KernNs - entry.kernNS))
+		duration = &value
+	}
+
+	if capture.arguments {
+		event.Arguments = arguments
+	}
+	if capture.duration {
+		event.DurationNS = duration
+	}
+	if requiredSession {
+		event.FunctionGraph = entry.functionGraph
+		event.Instructions = entry.instructions
+	}
+	if err := h.options.Event(event); err != nil {
+		return false, err
+	}
+	return true, nil
 }

@@ -206,6 +206,10 @@ func (t *bpfTracing) traceGraphs(reusedMaps map[string]*ebpf.Map, graphs FuncGra
 		return fmt.Errorf("failed to load graph bpf spec: %w", err)
 	}
 
+	if err := updateEventsMapSpec(spec); err != nil {
+		return err
+	}
+
 	if err := setupFgraphStack(spec); err != nil {
 		return fmt.Errorf("failed to setup fgraph stack: %w", err)
 	}
