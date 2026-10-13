@@ -52,7 +52,6 @@ func haveAllFeatures(feats []string) bool {
 var features struct {
 	ringbuf             int8 // kernel 5.8
 	lbr                 int8 // kernel 6.2 on x86_64
-	getStackidHelper    int8
 	getFuncArgCntHelper int8 // kernel 5.17
 	fsession            int8 // kernel 7.0
 	kprobeMulti         int8 // kernel 5.18
@@ -88,7 +87,6 @@ func detectFeatures() error {
 	feats := map[string]*int8{
 		"Ringbuf map":       &features.ringbuf,
 		"Branch Record":     &features.lbr,
-		"Get stackid":       &features.getStackidHelper,
 		"Get arg_cnt":       &features.getFuncArgCntHelper,
 		"fsession":          &features.fsession,
 		"kprobe.multi":      &features.kprobeMulti,

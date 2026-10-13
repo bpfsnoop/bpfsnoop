@@ -49,6 +49,7 @@ type BpfsnoopConfig struct {
 	TraceeArgEntrySz uint32
 	TraceeArgExitSz  uint32
 	TraceeArgDataSz  uint32
+	StackBufferSz    uint32
 }
 
 func haveFlag(flags, flag uint32) bool {

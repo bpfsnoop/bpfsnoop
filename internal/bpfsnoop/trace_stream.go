@@ -5,7 +5,6 @@ package bpfsnoop
 
 import (
 	"encoding/hex"
-	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -13,7 +12,6 @@ import (
 	"unsafe"
 
 	"github.com/Asphaltt/mybtf"
-	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/btf"
 
 	"github.com/bpfsnoop/bpfsnoop/internal/btfx"
@@ -239,22 +237,8 @@ func decodeTraceKprobeMultiValues(info *funcInfo, data []byte, withRetval bool) 
 	}, nil
 }
 
-func traceStackFrames(event *Event, helpers *Helpers, stacks *ebpf.Map) ([]TraceStackFrame, error) {
-	if event.StackID < 0 {
-		return nil, nil
-	}
-	ips := make([]uint64, kernelPerfEventMaxStack)
-	id := uint32(event.StackID)
-	if err := stacks.Lookup(id, &ips); err != nil {
-		if errors.Is(err, ebpf.ErrKeyNotExist) {
-			return nil, nil
-		}
-		return nil, fmt.Errorf("failed to read kernel stack: %w", err)
-	}
-	// FIXME: delete the stack entry.
-	// Stack IDs are shared by events across CPU rings. Keep the entry alive
-	// until the trace's map is closed, including while other readers resolve it.
-
+func traceStackFrames(event *Event, helpers *Helpers, stacks []byte) ([]TraceStackFrame, error) {
+	ips := buf2stackPointers(stacks, int(event.StackSize))
 	frames := make([]TraceStackFrame, 0, len(ips))
 	for _, ip := range ips {
 		if ip == 0 {
@@ -409,7 +393,6 @@ type parsedTraceEvent struct {
 // traceEventHandler decodes MCP records concurrently and owns pending sessions.
 type traceEventHandler struct {
 	helpers *Helpers
-	stacks  *ebpf.Map
 	capture traceStreamCapture
 	options *TraceOptions
 	pending map[uint64]pendingTraceEvent
@@ -426,7 +409,7 @@ func NewTraceEventHandler(capture traceStreamCapture, options *TraceOptions) *tr
 // parse copies fixed headers by value and decodes borrowed payloads into owned
 // values. Escaping payload strings and selected-argument buffers are cloned.
 func (h *traceEventHandler) parse(data []byte) (*parsedTraceEvent, error) {
-	helpers, capture, stacks := h.helpers, h.capture, h.stacks
+	helpers, capture := h.helpers, h.capture
 	if len(data) < 2 {
 		return nil, nil
 	}
@@ -517,14 +500,6 @@ func (h *traceEventHandler) parse(data []byte) (*parsedTraceEvent, error) {
 	}
 	payload = payload[argSize:]
 
-	var packet *TracePacket
-	if haveFlag(raw.TraceeFlags, traceeFlagOutputPkt) {
-		packet, err = decodeTracePacket(payload)
-		if err != nil {
-			return nil, err
-		}
-		payload = payload[sizeOfPktData:]
-	}
 	var selected []TraceSelectedArgument
 	if raw.TraceeArgDataSz != 0 {
 		argDataSize := int(raw.TraceeArgDataSz)
@@ -535,12 +510,22 @@ func (h *traceEventHandler) parse(data []byte) (*parsedTraceEvent, error) {
 		if err != nil {
 			return nil, err
 		}
+		payload = payload[argDataSize:]
+	}
+
+	var packet *TracePacket
+	if haveFlag(raw.TraceeFlags, traceeFlagOutputPkt) {
+		packet, err = decodeTracePacket(payload)
+		if err != nil {
+			return nil, err
+		}
+		payload = payload[sizeOfPktData:]
 	}
 
 	requiredSession := haveFlag(raw.TraceeFlags, traceeFlagBothMode) || haveFlag(raw.TraceeFlags, traceeFlagSession)
 	var stack []TraceStackFrame
 	if (capture.kernelStack || capture.flameGraph) && (!requiredSession || raw.Type == eventTypeFuncExit) {
-		stack, err = traceStackFrames(&raw, helpers, stacks)
+		stack, err = traceStackFrames(&raw, helpers, payload)
 		if err != nil {
 			return nil, err
 		}

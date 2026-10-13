@@ -27,12 +27,12 @@ struct event {
     __u32 cpu;
     __u32 pid;
     __u8 comm[16];
-    __s64 func_stack_id;
+    __s64 lbr_retval;
     TRACEE_FLAGS;
     __u32 tracee_arg_entry_size;
     __u32 tracee_arg_exit_size;
     __u32 tracee_arg_data_size;
-    __s64 lbr_retval;
+    __s32 func_stack_size;
 };
 
 struct bpfsnoop_ringbuf {

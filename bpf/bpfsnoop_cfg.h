@@ -28,6 +28,7 @@ struct bpfsnoop_config {
     __u32 tracee_arg_entry_size;
     __u32 tracee_arg_exit_size;
     __u32 tracee_arg_data_size;
+    __u32 stack_buffer_size;
 } __attribute__((packed));
 
 volatile const struct bpfsnoop_config bpfsnoop_config = {};

@@ -35,7 +35,6 @@ type BPFFeatures struct {
 	Run               bool
 	HasRingbuf        bool
 	HasBranchSnapshot bool
-	HasGetStackID     bool
 }
 
 // KernelBPFFeatures combines the BPF-populated feature record with support
@@ -147,9 +146,6 @@ func DetectBPFFeatures() error {
 	if requiredLbr && !feat.HasBranchSnapshot {
 		return errors.New("bpf_get_branch_snapshot() helper not supported for output LBR")
 	}
-	if outputFuncStack && !feat.HasGetStackID {
-		return errors.New("bpf_get_stackid() helper not supported for --output-stack")
-	}
 	return nil
 }
 
@@ -165,7 +161,6 @@ func printFeatures() {
 	}{
 		{"Ringbuf map", features.HasRingbuf},
 		{"Branch Record", features.HasBranchSnapshot},
-		{"Get stackid", features.HasGetStackID},
 		{"Get arg_cnt", hasGetFuncArgCnt},
 		{"tracing union arg", haveTracingUnionArg()},
 		{"fsession", hasFsession},

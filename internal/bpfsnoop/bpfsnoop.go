@@ -39,12 +39,12 @@ type Event struct {
 	CPU              uint32
 	Pid              uint32
 	Comm             [16]byte
-	StackID          int64
+	LBRRetval        int64
 	TraceeFlags      uint32
 	TraceeArgEntrySz uint32
 	TraceeArgExitSz  uint32
 	TraceeArgDataSz  uint32
-	LBRRetval        int64
+	StackSize        int32
 }
 
 func ptr2bytes(p unsafe.Pointer, size int) []byte {
@@ -77,7 +77,6 @@ type parsedOutputEvent struct {
 type outputEventHandler struct {
 	helpers  *Helpers
 	output   io.Writer
-	stacks   *ebpf.Map
 	lbrs     *ebpf.Map
 	sessions *Sessions
 	runDelta time.Duration
@@ -91,7 +90,6 @@ func NewOutputEventHandler(maps map[string]*ebpf.Map, w io.Writer, helpers *Help
 	return &outputEventHandler{
 		helpers:  helpers,
 		output:   w,
-		stacks:   maps["bpfsnoop_stacks"],
 		lbrs:     maps["bpfsnoop_lbrs"],
 		sessions: NewSessions(),
 		runDelta: runDurationThreshold,
@@ -104,7 +102,7 @@ func NewOutputEventHandler(maps map[string]*ebpf.Map, w io.Writer, helpers *Help
 // parse copies fixed headers by value and formats borrowed payloads into owned
 // strings. Neither the returned event nor its aggregates reference the sample.
 func (h *outputEventHandler) parse(data []byte) (*parsedOutputEvent, error) {
-	helpers, stacks, lbrs := h.helpers, h.stacks, h.lbrs
+	helpers, lbrs := h.helpers, h.lbrs
 	if len(data) < 2 {
 		return nil, nil
 	}
@@ -171,17 +169,9 @@ func (h *outputEventHandler) parse(data []byte) (*parsedOutputEvent, error) {
 
 	sb.Reset()
 	// Keep aggregates local until the consumer applies session filters.
-	if event.TraceeArgDataSz != 0 || (outputFlameGraph != "" && haveFlag(event.TraceeFlags, traceeFlagOutputStack) && event.StackID >= 0) {
+	if event.TraceeArgDataSz != 0 || (outputFlameGraph != "" && haveFlag(event.TraceeFlags, traceeFlagOutputStack) && event.StackSize >= 0) {
 		parsed.derived = &Session{}
 		parsed.derived.deferDerived(helpers.Flags.histExpr, helpers.Flags.tdigestExpr)
-	}
-
-	if haveFlag(event.TraceeFlags, traceeFlagOutputPkt) {
-		if len(data) < sizeOfPktData {
-			return nil, fmt.Errorf("truncated packet tuple")
-		}
-		outputPktTuple(&sb, fnInfo, data[:sizeOfPktData], event)
-		data = data[sizeOfPktData:]
 	}
 
 	if argDataSz := int(event.TraceeArgDataSz); argDataSz != 0 {
@@ -199,22 +189,31 @@ func (h *outputEventHandler) parse(data []byte) (*parsedOutputEvent, error) {
 		data = data[argDataSz:]
 	}
 
+	if haveFlag(event.TraceeFlags, traceeFlagOutputPkt) {
+		if len(data) < sizeOfPktData {
+			return nil, fmt.Errorf("truncated packet tuple")
+		}
+
+		outputPktTuple(&sb, fnInfo, data[:sizeOfPktData], event)
+		data = data[sizeOfPktData:]
+	}
+
+	if haveFlag(event.TraceeFlags, traceeFlagOutputStack) && event.StackSize >= 0 {
+		var outputFlame *FlameGraph
+		if parsed.derived != nil {
+			outputFlame = parsed.derived.flame
+		}
+		err := newFnStack().output(&sb, helpers, data, int(event.StackSize), outputFlame, event)
+		if err != nil {
+			return nil, fmt.Errorf("failed to output function stack: %w", err)
+		}
+	}
+
 	if haveFlag(event.TraceeFlags, traceeFlagOutputLbr) && event.LBRRetval > 0 {
 		var lbrData LbrData
 		err := newLBRStack().outputStack(&sb, helpers, &lbrData, lbrs, event)
 		if err != nil {
 			return nil, fmt.Errorf("failed to output LBR stack: %w", err)
-		}
-	}
-
-	if haveFlag(event.TraceeFlags, traceeFlagOutputStack) && event.StackID >= 0 {
-		var outputFlame *FlameGraph
-		if parsed.derived != nil {
-			outputFlame = parsed.derived.flame
-		}
-		err := newFnStack().output(&sb, helpers, stacks, outputFlame, event)
-		if err != nil {
-			return nil, fmt.Errorf("failed to output function stack: %w", err)
 		}
 	}
 

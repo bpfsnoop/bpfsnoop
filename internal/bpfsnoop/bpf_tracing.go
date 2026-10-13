@@ -89,6 +89,7 @@ func setBpfsnoopConfig(spec *ebpf.CollectionSpec, c traceeConfig) error {
 	cfg.TraceeArgEntrySz = uint32(c.argEntrySz)
 	cfg.TraceeArgExitSz = uint32(c.argExitSz)
 	cfg.TraceeArgDataSz = uint32(c.argDataSz)
+	cfg.StackBufferSz = uint32(kernelPerfEventMaxStack * 8)
 
 	if err := spec.Variables["bpfsnoop_config"].Set(cfg); err != nil {
 		return fmt.Errorf("failed to set bpfsnoop config: %w", err)
@@ -113,6 +114,10 @@ func NewBPFTracing(spec *ebpf.CollectionSpec, reusedMaps map[string]*ebpf.Map, b
 			t.Close()
 		}
 	}()
+
+	if _, err := readKernelPerfEventMaxStack(); err != nil {
+		return nil, fmt.Errorf("failed to read sysctl kernel.perf_event_max_stack: %w", err)
+	}
 
 	t.traceProgs(&errg, spec, reusedMaps, bprogs)
 	if err := t.traceFuncs(&errg, spec, reusedMaps, kfuncs); err != nil {

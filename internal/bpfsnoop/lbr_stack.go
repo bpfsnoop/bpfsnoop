@@ -132,11 +132,6 @@ func newLBRStack() *lbrStack {
 	}
 }
 
-func (s *lbrStack) reset() {
-	s.last = 0
-	s.stack = s.stack[:0]
-}
-
 func (s *lbrStack) addRecord(record *branchRecord) {
 	s.stack = append(s.stack, record)
 	s.last++

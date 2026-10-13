@@ -15,7 +15,6 @@
 #include "bpfsnoop_lbr.h"
 #include "bpfsnoop_pkt.h"
 #include "bpfsnoop_pkt_output.h"
-#include "bpfsnoop_stack_map.h"
 
 static __always_inline void
 copy_comm(__u8 dst[16], __u8 src[16])
@@ -41,6 +40,7 @@ output_event(void *ctx, __u16 event_type, __u64 session_id, __u64 func_ip,
 
     buffer_sz = sizeof(*evt) + cfg->fn_args.buf_size + cfg->fn_args.data_size;
     buffer_sz += cfg->flags.output_pkt ? sizeof(struct bpfsnoop_pkt_data) : 0;
+    buffer_sz += cfg->flags.output_stack ? cfg->stack_buffer_size : 0;
     buffer = bpf_ringbuf_reserve(ringbuf, buffer_sz, 0);
     if (!buffer)
         return BPF_OK;
@@ -54,7 +54,7 @@ output_event(void *ctx, __u16 event_type, __u64 session_id, __u64 func_ip,
     evt->cpu = cpu;
     evt->pid = pid;
     copy_comm(evt->comm, comm);
-    evt->func_stack_id = -1;
+    evt->func_stack_size = -1;
     evt->tracee_flags = cfg->tracee_flags;
     evt->flags.output_lbr &= can_output_lbr;
     evt->flags.output_pkt &= can_output_pkt;
@@ -64,24 +64,28 @@ output_event(void *ctx, __u16 event_type, __u64 session_id, __u64 func_ip,
     evt->tracee_arg_exit_size = cfg->tracee_arg_exit_size;
     evt->tracee_arg_data_size = cfg->tracee_arg_data_size;
     evt->lbr_retval = lbr->nr_bytes;
-    if (cfg->flags.output_stack)
-        evt->func_stack_id = bpf_get_stackid(ctx, &bpfsnoop_stacks, BPF_F_FAST_STACK_CMP);
+
     if (can_output_lbr)
         output_lbr_data(lbr, session_id);
 
     ptr = buffer + sizeof(*evt);
     output_fn_args(args, ptr, retval);
     ptr += cfg->fn_args.buf_size;
-    if (can_output_pkt) {
-        output_pkt(args, ptr);
-        ptr += sizeof(struct bpfsnoop_pkt_data);
-    }
+
     if (can_output_arg) {
         output_arg(args, ptr);
         ptr += cfg->fn_args.data_size;
     } else {
         evt->tracee_arg_data_size = 0;
     }
+
+    if (can_output_pkt) {
+        output_pkt(args, ptr);
+        ptr += sizeof(struct bpfsnoop_pkt_data);
+    }
+
+    if (cfg->flags.output_stack)
+        evt->func_stack_size = bpf_get_stack(ctx, ptr, cfg->stack_buffer_size, 0);
 
     bpf_ringbuf_submit(evt, 0);
     return BPF_OK;

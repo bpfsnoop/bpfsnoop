@@ -103,7 +103,6 @@ func newEventReaders(events *ebpf.Map, inner *ebpf.MapSpec) (readers map[int]*ri
 func (r *eventReader) init(maps map[string]*ebpf.Map, output io.Writer, helpers *Helpers) error {
 	if r.trace != nil {
 		r.trace.helpers = helpers
-		r.trace.stacks = maps["bpfsnoop_stacks"]
 		return nil
 	}
 
