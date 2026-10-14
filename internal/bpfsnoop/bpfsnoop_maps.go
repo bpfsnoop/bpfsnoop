@@ -11,6 +11,7 @@ import (
 	"golang.org/x/sys/unix"
 
 	"github.com/bpfsnoop/bpfsnoop/internal/assert"
+	"github.com/bpfsnoop/bpfsnoop/internal/mathx"
 )
 
 func updateMMapableMapSpec(spec *ebpf.CollectionSpec, mapName string, valueSize uint32) error {
@@ -62,7 +63,12 @@ func updateLbrsDataMapSpec(spec *ebpf.CollectionSpec) error {
 		return updateLbrsPerCPUDataMapSpec(spec)
 	}
 
-	valueSize := uint32(unsafe.Sizeof(LbrData{})) * uint32(possibleCPUNr)
+	// The bpf prog indexes it with cpu & CPU_MASK, which can reach CPU_MASK
+	// on kernels before v6.6, as the verifier doesn't know the bound of
+	// bpf_get_smp_processor_id() before commit f42bcd168d03 ("bpf: teach
+	// verifier actual bounds of bpf_get_smp_processor_id() result").
+	nrEntries := mathx.Mask(possibleCPUNr) + 1
+	valueSize := uint32(unsafe.Sizeof(LbrData{})) * uint32(nrEntries)
 	return updateMMapableMapSpec(spec, ".data.lbrs", valueSize)
 }
 
