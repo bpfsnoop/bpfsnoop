@@ -20,6 +20,7 @@ import (
 )
 
 var (
+	hasPerCPUData    bool
 	hasArena         bool
 	hasEndbr         bool
 	requiredLbr      bool
@@ -106,6 +107,8 @@ func detectBPFFeatures() (KernelBPFFeatures, error) {
 	if err != nil {
 		return features, err
 	}
+	hasPerCPUData = probePerCPUData()
+	debugLogIf(hasPerCPUData, "global percpu data is supported")
 	hasArena, err = haveArena()
 	if err != nil {
 		return features, fmt.Errorf("failed to probe arena map: %w", err)
@@ -162,13 +165,14 @@ func printFeatures() {
 		{"Ringbuf map", features.HasRingbuf},
 		{"Branch Record", features.HasBranchSnapshot},
 		{"Get arg_cnt", hasGetFuncArgCnt},
-		{"tracing union arg", haveTracingUnionArg()},
 		{"fsession", hasFsession},
 		{"kprobe.multi", features.HasKprobeMulti},
 		{"kprobe.session", hasKprobeSession},
 		{"Nested tracing", features.HasNestedTracing},
 		{"ENDBR insn", hasEndbr},
 		{"arena", hasArena},
+		{"per-CPU data", hasPerCPUData},
+		{"tracing union arg", haveTracingUnionArg()},
 	} {
 		fmt.Printf("%s:\t%t\n", feature.name, feature.value)
 	}
@@ -226,7 +230,6 @@ func probeTracingTarget(target *ebpf.Program, name string) bool {
 		},
 	})
 	if err != nil {
-		DebugLog("Tracing target probe for %s failed: %v", name, err)
 		return false
 	}
 	_ = prog.Close()
@@ -281,4 +284,32 @@ func haveArena() (bool, error) {
 		return false, nil
 	}
 	return err == nil, err
+}
+
+// global percpu data was introduced by the commit
+// 6e61f4f8b043 ("bpf: Introduce global percpu data") kernel 7.3.
+func probePerCPUData() bool {
+	m, err := ebpf.NewMap(&ebpf.MapSpec{
+		Type: ebpf.PerCPUArray, KeySize: 4, ValueSize: 8, MaxEntries: 1,
+	})
+	if err != nil {
+		return false
+	}
+	defer m.Close()
+
+	prog, err := ebpf.NewProgram(&ebpf.ProgramSpec{
+		Type:    ebpf.SocketFilter,
+		License: "GPL",
+		Instructions: asm.Instructions{
+			asm.LoadMapValue(asm.R1, m.FD(), 0),
+			asm.LoadMem(asm.R0, asm.R1, 0, asm.DWord),
+			asm.Return(),
+		},
+	})
+	if err != nil {
+		return false
+	}
+	_ = prog.Close()
+
+	return true
 }

@@ -76,7 +76,7 @@ emit_bpfsnoop_event(void *ctx)
         return BPF_OK;
 
     cpu = bpf_get_smp_processor_id() & CPU_MASK;
-    lbr = &bpfsnoop_lbr_buff[cpu];
+    lbr = &bpfsnoop_lbr_buff[has_percpu_data ? 0 : cpu];
 
     mode = get_bpfsnoop_mode(ctx);
 

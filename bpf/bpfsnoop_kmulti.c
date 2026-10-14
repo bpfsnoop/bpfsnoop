@@ -98,7 +98,7 @@ emit_bpfsnoop_kmulti_event(struct pt_regs *ctx)
         return BPF_OK;
 
     cpu = bpf_get_smp_processor_id() & CPU_MASK;
-    lbr = &bpfsnoop_lbr_buff[cpu];
+    lbr = &bpfsnoop_lbr_buff[has_percpu_data ? 0 : cpu];
     mode = get_bpfsnoop_mode(ctx);
 
     can_output_lbr = !cfg->flags.both_entry_exit || (mode == BPFSNOOP_MODE_SESSION_ENTRY);

@@ -7,4 +7,6 @@
 #define BPFSNOOP_MAX_ENTRIES 65536
 #define MAX_FN_ARGS 12
 
+const volatile bool has_percpu_data = false;
+
 #endif // __BPFSNOOP_H_

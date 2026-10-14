@@ -37,7 +37,31 @@ func updateMMapableMapSpec(spec *ebpf.CollectionSpec, mapName string, valueSize 
 	return nil
 }
 
+func updateLbrsPerCPUDataMapSpec(spec *ebpf.CollectionSpec) error {
+	v := spec.Variables["has_percpu_data"]
+	if err := v.Set(true); err != nil {
+		return fmt.Errorf("set has_percpu_data: %w", err)
+	}
+
+	// Keep the ELF section name for relocations and shared map replacements.
+	// Per-CPU maps cannot be mmaped. The scratch buffer is zero-initialized
+	// by the kernel and has no userspace variable or initial-value updates.
+	// Avoid the loader automatically adding BPF_F_MMAPABLE by map name.
+	m := spec.Maps[".data.lbrs"]
+	m.Name = ".percpu.lbrs"
+	m.Type = ebpf.PerCPUArray
+	m.Flags &^= unix.BPF_F_MMAPABLE
+	m.ValueSize = uint32(unsafe.Sizeof(LbrData{}))
+	m.Contents = nil
+	delete(spec.Variables, "bpfsnoop_lbr_buff")
+	return nil
+}
+
 func updateLbrsDataMapSpec(spec *ebpf.CollectionSpec) error {
+	if hasPerCPUData {
+		return updateLbrsPerCPUDataMapSpec(spec)
+	}
+
 	numCPU, err := ebpf.PossibleCPU()
 	if err != nil {
 		return fmt.Errorf("failed to get possible cpu number: %w", err)
