@@ -51,7 +51,7 @@ func (t *testCase) validateFeature() bool {
 	return haveAllFeatures(t.feature)
 }
 
-func test(w io.Writer, t testCase) bool {
+func test(w io.Writer, t testCase) (passed bool) {
 	if !t.valid() {
 		prErr(w, red, "Invalid test case: %+v\n", t)
 		return false
@@ -63,18 +63,18 @@ func test(w io.Writer, t testCase) bool {
 	}
 
 	if t.requiredProcess != "" {
-		var signals []os.Signal
-		if strings.HasSuffix(strings.Split(t.requiredProcess, " ")[0], "bpfsnoop") {
-			signals = append(signals, os.Interrupt)
-		}
-
 		prInfo(w, yellow, "Required process: %s\n", t.requiredProcess)
 		process, err := runPrerequisite(w, t.requiredProcess, t.requiredReady, t.timeout)
 		if err != nil {
 			prErr(w, red, "Failed to start prerequisite: %v\n", err)
 			return false
 		}
-		defer killCmd(process, signals...)
+		defer func() {
+			if err := killCmd(process, os.Interrupt); err != nil {
+				prErr(w, red, "Prerequisite cleanup failed for %s: %v\n", t.requiredProcess, err)
+				passed = false
+			}
+		}()
 	}
 
 	prInfo(w, yellow, "Name: %s\n", t.name)

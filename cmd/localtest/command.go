@@ -4,6 +4,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -37,25 +38,38 @@ func runCmd(w io.Writer, command string) (*runningCmd, error) {
 	return process, nil
 }
 
-func killCmd(process *runningCmd, signals ...os.Signal) {
-	select {
-	case <-process.done:
-		return
-	default:
-	}
+func killCmd(process *runningCmd, signals ...os.Signal) error {
 	sig := os.Kill
 	if len(signals) != 0 {
 		sig = signals[0]
+	}
+	select {
+	case <-process.done:
+		return commandExitError(process.err, sig)
+	default:
 	}
 
 	// Kill the whole group, including children of shell loops and pipelines.
 	_ = syscall.Kill(-process.cmd.Process.Pid, sig.(syscall.Signal))
 	select {
 	case <-process.done:
+		return commandExitError(process.err, sig)
 	case <-time.After(30 * time.Second):
 		_ = syscall.Kill(-process.cmd.Process.Pid, syscall.SIGKILL)
 		<-process.done
+		return fmt.Errorf("process did not stop after %s; forced exit", sig)
 	}
+}
+
+func commandExitError(err error, sig os.Signal) error {
+	var exitErr *exec.ExitError
+	if errors.As(err, &exitErr) {
+		status, ok := exitErr.Sys().(syscall.WaitStatus)
+		if ok && (status.Signaled() && status.Signal() == sig || status.ExitStatus() == 128+int(sig.(syscall.Signal))) {
+			return nil // Expected termination of a prerequisite without a handler.
+		}
+	}
+	return err
 }
 
 type readinessWriter struct {

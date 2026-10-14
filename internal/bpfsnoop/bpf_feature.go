@@ -170,7 +170,7 @@ func printFeatures() {
 		{"kprobe.session", hasKprobeSession},
 		{"Nested tracing", features.HasNestedTracing},
 		{"ENDBR insn", hasEndbr},
-		{"arena", hasArena},
+		{"arena map", hasArena},
 		{"per-CPU data", hasPerCPUData},
 		{"tracing union arg", haveTracingUnionArg()},
 	} {

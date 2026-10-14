@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 	"unsafe"
 
 	"github.com/cilium/ebpf"
@@ -18,6 +19,7 @@ import (
 	"golang.org/x/sys/unix"
 
 	"github.com/bpfsnoop/bpfsnoop/internal/assert"
+	"github.com/bpfsnoop/bpfsnoop/internal/testutil"
 )
 
 // A list node in the arena:
@@ -54,13 +56,23 @@ func main() {
 	})
 	assert.NoErr(err, "Failed to create arena: %v")
 	defer arena.Close()
+	info, err := arena.Info()
+	assert.NoErr(err, "Failed to get arena info: %v")
+	id, ok := info.ID()
+	if !ok {
+		log.Fatal("Arena map ID unavailable")
+	}
 
 	// The first mmap of an arena fixes its user address range. Faulting a
 	// page in from user space allocates it for both sides. A pointer in the
 	// arena holds the user address of its target.
 	mem, err := unix.Mmap(arena.FD(), 0, os.Getpagesize(), unix.PROT_READ|unix.PROT_WRITE, unix.MAP_SHARED)
 	assert.NoErr(err, "Failed to mmap arena: %v")
-	defer unix.Munmap(mem)
+	defer func() {
+		if mem != nil {
+			_ = unix.Munmap(mem)
+		}
+	}()
 
 	base := uint64(uintptr(unsafe.Pointer(&mem[0])))
 	putNode(mem[0:], 1, "first", base+nodeSize)
@@ -69,4 +81,13 @@ func main() {
 	log.Printf("Mapped arenaprobe at %#x", base)
 
 	<-ctx.Done()
+
+	// Program teardown can retain a map reference after bpfsnoop exits.
+	// Release our own references, then wait until the old name cannot collide
+	// with the next test's arena. Do not open the map while waiting: that would
+	// acquire another reference and could prolong its lifetime.
+	assert.NoErr(unix.Munmap(mem), "Failed to unmap arena: %v")
+	mem = nil
+	assert.NoErr(arena.Close(), "Failed to close arena: %v")
+	assert.NoErr(testutil.WaitMapGone(id, 10*time.Second), "Failed to wait for arena cleanup: %v")
 }

@@ -94,7 +94,7 @@ func detectFeatures() error {
 		"Nested tracing":    &features.nestedTracing,
 		"ENDBR insn":        &features.endbr,
 		"tracing union arg": &features.tracingUnionArg,
-		"arena":             &features.arena,
+		"arena map":         &features.arena,
 	}
 
 	scanner := bufio.NewScanner(bytes.NewReader(output))
