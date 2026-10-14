@@ -179,11 +179,7 @@ func (t *bpfTracing) traceKfuncMultiMode(reusedMaps map[string]*ebpf.Map, g *kfu
 		return fmt.Errorf("failed to patch BPF session insns: %w", err)
 	}
 
-	numCPU, err := ebpf.PossibleCPU()
-	if err != nil {
-		return fmt.Errorf("failed to get possible cpu count for kmulti spec: %w", err)
-	}
-	if err := spec.Variables["CPU_MASK"].Set(uint32(mathx.Mask(numCPU))); err != nil {
+	if err := spec.Variables["CPU_MASK"].Set(uint32(mathx.Mask(possibleCPUNr))); err != nil {
 		return fmt.Errorf("failed to set CPU_MASK for kmulti spec: %w", err)
 	}
 

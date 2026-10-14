@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/bpfsnoop/bpfsnoop/internal/atomix"
 	"github.com/bpfsnoop/bpfsnoop/internal/strx"
 	"golang.org/x/sys/unix"
 )
@@ -31,8 +32,14 @@ func getRelease() (string, error) {
 	return strx.NullTerminated(uts.Release[:]), nil
 }
 
+var vmlinuxPathOnce = atomix.NewOnce(findVmlinux)
+
 // FindVmlinux tries to find vmlinux file from common locations.
 func FindVmlinux() (string, error) {
+	return vmlinuxPathOnce.Do()
+}
+
+func findVmlinux() (string, error) {
 	if kernelVmlinuxDir != "" {
 		vmlinux := filepath.Join(kernelVmlinuxDir, "vmlinux")
 		if fileExists(vmlinux) {
@@ -79,8 +86,19 @@ func FindVmlinux() (string, error) {
 	return "", ErrNotFound
 }
 
+var textAddrOnce = atomix.NewOnce(readTextAddrFromVmlinux)
+
 // ReadTextAddrFromVmlinux reads .text section address from vmlinux file.
-func ReadTextAddrFromVmlinux(vmlinux string) (uint64, error) {
+func ReadTextAddrFromVmlinux() (uint64, error) {
+	return textAddrOnce.Do()
+}
+
+func readTextAddrFromVmlinux() (uint64, error) {
+	vmlinux, err := FindVmlinux()
+	if err != nil {
+		return 0, fmt.Errorf("failed to find vmlinux: %w", err)
+	}
+
 	file, err := os.Open(vmlinux)
 	if err != nil {
 		return 0, fmt.Errorf("failed to open vmlinux file: %w", err)

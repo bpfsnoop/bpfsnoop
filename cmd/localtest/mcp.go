@@ -15,6 +15,24 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
+var mcpBackend *mcp.ClientSession
+
+func startMCPWorker(w io.Writer) (*mcp.ClientSession, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	cmd := exec.Command("./bpfsnoop-mcp")
+	cmd.Stderr = w
+	client := mcp.NewClient(&mcp.Implementation{
+		Name:    "bpfsnoop-localtest",
+		Version: "dev",
+	}, nil)
+	return client.Connect(ctx, &mcp.CommandTransport{
+		Command:           cmd,
+		TerminateDuration: time.Second,
+	}, nil)
+}
+
 func testMCP(w io.Writer, t testCase) bool {
 	started := time.Now()
 
@@ -27,22 +45,6 @@ func testMCP(w io.Writer, t testCase) bool {
 	ctx, cancel := context.WithTimeout(context.Background(), t.timeout)
 	defer cancel()
 
-	cmd := exec.Command("./bpfsnoop-mcp")
-	cmd.Stderr = w
-	client := mcp.NewClient(&mcp.Implementation{
-		Name:    "bpfsnoop-localtest",
-		Version: "dev",
-	}, nil)
-	session, err := client.Connect(ctx, &mcp.CommandTransport{
-		Command:           cmd,
-		TerminateDuration: time.Second,
-	}, nil)
-	if err != nil {
-		prErr(w, red, "Test FAILED in %s (failed to connect to MCP server: %v)\n", time.Since(started), err)
-		return false
-	}
-	defer session.Close()
-
 	if t.triggerProcess != "" {
 		prInfo(w, yellow, "Triggering: %s\n", t.triggerProcess)
 		// MCP trace tools attach during CallTool, after the connection is ready.
@@ -54,7 +56,7 @@ func testMCP(w io.Writer, t testCase) bool {
 		defer killCmd(trigger)
 	}
 
-	result, err := session.CallTool(ctx, &mcp.CallToolParams{
+	result, err := mcpBackend.CallTool(ctx, &mcp.CallToolParams{
 		Name:      t.tool,
 		Arguments: arguments,
 	})

@@ -5,6 +5,7 @@ package bpfsnoop
 
 import (
 	"bufio"
+	"bytes"
 	"fmt"
 	"io"
 	"iter"
@@ -15,6 +16,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 )
 
 const kallsymsFilepath = "/proc/kallsyms"
@@ -58,6 +60,7 @@ func isKernelBuiltinMod(mod string) bool {
 
 // KsymEntry represents a symbol entry in /proc/kallsyms.
 type KsymEntry struct {
+	line  string // original line; cached entries never acquire duplicate metadata
 	addr  uint64
 	typ   byte
 	name  string
@@ -98,7 +101,9 @@ func (ke *KsymEntry) String() string {
 // indexes contain only t/T symbols so existing text-address lookups cannot
 // resolve to data symbols.
 type Kallsyms struct {
-	syms []*KsymEntry // all symbols in /proc/kallsyms order
+	syms    []*KsymEntry // all symbols in /proc/kallsyms order
+	rawSyms []*KsymEntry // immutable parsed lines, before duplicate indexing
+	lines   map[string]*KsymEntry
 
 	a2s   map[uint64]*KsymEntry // addr => symbol
 	n2s   map[string]*KsymEntry // name => symbol
@@ -118,37 +123,86 @@ type Kallsyms struct {
 	x86PMU    uint64 // address of x86_pmu, if exists
 }
 
-// NewKallsyms reads /proc/kallsyms and returns a Kallsyms instance.
+var (
+	ksymsMu      sync.Mutex
+	lastKallsyms *Kallsyms
+)
+
+// NewKallsyms refreshes /proc/kallsyms, reusing unchanged parsed lines.
+// Existing snapshots remain valid when symbols are added, removed, or
+// change address.
 func NewKallsyms() (*Kallsyms, error) {
+	return kallsymsSnapshot(true)
+}
+
+// cachedKallsyms avoids rereading the proc file for ordinary tracing setup.
+// Call NewKallsyms when current module or trampoline symbols are required.
+func cachedKallsyms() (*Kallsyms, error) {
+	return kallsymsSnapshot(false)
+}
+
+func kallsymsSnapshot(refresh bool) (*Kallsyms, error) {
+	ksymsMu.Lock()
+	defer ksymsMu.Unlock()
+	if !refresh && lastKallsyms != nil {
+		return lastKallsyms, nil
+	}
+
+	ks, err := readKallsyms(lastKallsyms)
+	if err == nil {
+		lastKallsyms = ks
+	}
+	return ks, err
+}
+
+func readKallsyms(previous *Kallsyms) (*Kallsyms, error) {
 	fd, err := os.Open(kallsymsFilepath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open %s: %w", kallsymsFilepath, err)
 	}
 	defer fd.Close()
 
-	ks, err := newKallsyms(fd)
+	ks, err := newKallsyms(fd, previous)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read %s: %w", kallsymsFilepath, err)
 	}
 	return ks, nil
 }
 
-func newKallsyms(r io.Reader) (*Kallsyms, error) {
-	var ks Kallsyms
-	ks.a2s = make(map[uint64]*KsymEntry)
-	ks.n2s = make(map[string]*KsymEntry)
-
-	kmods := make(map[string]struct{})
+func newKallsyms(r io.Reader, previous *Kallsyms) (*Kallsyms, error) {
+	var rawSyms []*KsymEntry
+	var parsedLines map[string]*KsymEntry
+	if previous != nil {
+		rawSyms = make([]*KsymEntry, 0, len(previous.rawSyms))
+	}
 
 	scanner := bufio.NewScanner(r)
 	for scanner.Scan() {
-		line := scanner.Text()
-		line = strings.TrimSpace(line)
-		if line == "" {
+		line := bytes.TrimSpace(scanner.Bytes())
+		if len(line) == 0 {
 			continue
 		}
 
-		fields := strings.Fields(line)
+		if previous != nil {
+			// Most symbols stay in the same position. Avoid hashing those lines;
+			// fall back to the index when insertions or removals shift the file.
+			if i := len(rawSyms); i < len(previous.rawSyms) && string(line) == previous.rawSyms[i].line {
+				rawSyms = append(rawSyms, previous.rawSyms[i])
+				continue
+			}
+			// A byte-slice conversion used only for map lookup doesn't allocate.
+			if entry := previous.lines[string(line)]; entry != nil {
+				rawSyms = append(rawSyms, entry)
+				continue
+			}
+		}
+		if entry := parsedLines[string(line)]; entry != nil {
+			rawSyms = append(rawSyms, entry)
+			continue
+		}
+
+		text := string(line)
+		fields := strings.Fields(text)
 		if len(fields) < 3 {
 			continue
 		}
@@ -157,6 +211,7 @@ func newKallsyms(r io.Reader) (*Kallsyms, error) {
 		}
 
 		entry := &KsymEntry{
+			line: text,
 			typ:  fields[1][0],
 			name: fields[2],
 		}
@@ -168,7 +223,38 @@ func newKallsyms(r io.Reader) (*Kallsyms, error) {
 		if len(fields) >= 4 {
 			entry.mod = strings.Trim(fields[3], "[]")
 		}
-		ks.syms = append(ks.syms, entry)
+		if parsedLines == nil {
+			parsedLines = make(map[string]*KsymEntry, cap(rawSyms))
+		}
+		parsedLines[text] = entry
+		rawSyms = append(rawSyms, entry)
+	}
+	if err := scanner.Err(); err != nil {
+		return nil, fmt.Errorf("failed to scan kallsyms: %w", err)
+	}
+	if previous != nil && slices.Equal(rawSyms, previous.rawSyms) {
+		return previous, nil
+	}
+
+	var nrAddrs, nrNames int
+	if previous != nil {
+		nrAddrs, nrNames = len(previous.a2s), len(previous.n2s)
+	}
+	ks := Kallsyms{
+		rawSyms: rawSyms,
+		syms:    make([]*KsymEntry, 0, len(rawSyms)),
+		lines:   parsedLines,
+		a2s:     make(map[uint64]*KsymEntry, nrAddrs),
+		n2s:     make(map[string]*KsymEntry, nrNames),
+	}
+	if ks.lines == nil {
+		ks.lines = make(map[string]*KsymEntry, len(rawSyms))
+	}
+	kmods := make(map[string]struct{})
+	replaced := make(map[*KsymEntry]*KsymEntry)
+	for _, raw := range rawSyms {
+		ks.lines[raw.line] = raw
+		entry := raw
 
 		// When CONFIG_KEXEC_CORE=y, .data becomes executable after Linux v6.14
 		// due to commit cb33ff9e063c ("x86/kexec: Move relocate_kernel to kernel
@@ -192,8 +278,20 @@ func newKallsyms(r io.Reader) (*Kallsyms, error) {
 		switch entry.typ {
 		case 't', 'T':
 			if sym, ok := ks.n2s[entry.name]; ok {
+				if !sym.duped {
+					original := sym
+					copy := *sym
+					sym = &copy
+					replaced[original] = sym
+					ks.n2s[entry.name] = sym
+					if ks.a2s[sym.addr] == original {
+						ks.a2s[sym.addr] = sym
+					}
+				}
 				sym.extra = append(sym.extra, entry.addr)
 				sym.duped = true
+				copy := *entry
+				entry = &copy
 				entry.duped = true
 			} else {
 				ks.n2s[entry.name] = entry
@@ -225,10 +323,12 @@ func newKallsyms(r io.Reader) (*Kallsyms, error) {
 				ks.btfIDDeny = entry.addr
 			}
 		}
+		ks.syms = append(ks.syms, entry)
 	}
-
-	if err := scanner.Err(); err != nil {
-		return nil, fmt.Errorf("failed to scan kallsyms: %w", err)
+	for i, entry := range ks.syms {
+		if replacement := replaced[entry]; replacement != nil {
+			ks.syms[i] = replacement
+		}
 	}
 
 	ks.addrs = slices.Sorted(maps.Keys(ks.a2s))

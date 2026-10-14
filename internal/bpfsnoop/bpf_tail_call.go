@@ -22,6 +22,7 @@ import (
 var tailcallInfo TailcallInfo
 
 type TailcallInfo struct {
+	detected                                    bool
 	supportTailcallInBpf2bpf                    bool
 	fixedTailcallInfiniteLoopCausedByTrampoline bool
 }
@@ -122,6 +123,11 @@ func probeTailcallInfo(prog *ebpf.Program) (TailcallInfo, error) {
 }
 
 func ProbeTailcallIssue(spec *ebpf.CollectionSpec) error {
+	if tailcallInfo.detected {
+		return nil
+	}
+	defer func() { tailcallInfo.detected = true }()
+
 	tailcallSpec, err := bpf.LoadTailcall()
 	if err != nil {
 		return fmt.Errorf("failed to load tailcall bpf spec: %w", err)
@@ -152,7 +158,7 @@ func ProbeTailcallIssue(spec *ebpf.CollectionSpec) error {
 	tcProg := tcColl.Programs[tcProgName]
 
 	spec = spec.Copy()
-	reusedMaps := PrepareBPFMaps(spec)
+	reusedMaps := PrepareBPFMaps(spec, nil)
 	defer CloseBPFMaps(reusedMaps)
 
 	prog := spec.Programs[TracingProgName()]

@@ -8,15 +8,21 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"runtime"
 	"sync"
+	"time"
 
 	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/ringbuf"
 	"github.com/tklauser/numcpus"
 	"golang.org/x/sync/errgroup"
 	"golang.org/x/sys/unix"
+
+	"github.com/bpfsnoop/bpfsnoop/internal/bpf"
 )
+
+type rbReaders map[int]*ringbuf.Reader
 
 // eventReader owns the typed queue and shared lifecycle for CLI and MCP.
 type eventReader struct {
@@ -26,46 +32,65 @@ type eventReader struct {
 	trace       *traceEventHandler
 	traceEvents chan *parsedTraceEvent
 
-	readers map[int]*ringbuf.Reader
+	readers rbReaders
 
 	ctx        context.Context
 	readErrors chan error
 	workers    sync.WaitGroup
 }
 
-func closeEventReaders(readers map[int]*ringbuf.Reader) {
-	for _, reader := range readers {
+func (rr rbReaders) close() {
+	for _, reader := range rr {
 		_ = reader.Close()
 	}
 }
 
-// Populate online CPU slots before enabling tracing.
-// The outer map owns inner maps after Put.
-func newEventReaders(events *ebpf.Map, inner *ebpf.MapSpec) (readers map[int]*ringbuf.Reader, err error) {
-	defer func() {
-		if err != nil {
-			closeEventReaders(readers)
-		}
-	}()
+func newEventRingbufReaders() (*ebpf.Map, rbReaders, error) {
+	spec, err := bpf.LoadBpfsnoop()
+	if err != nil {
+		return nil, nil, err
+	}
 
+	if err := updateEventsMapSpec(spec); err != nil {
+		return nil, nil, err
+	}
+
+	events, err := ebpf.NewMap(spec.Maps["bpfsnoop_events"])
+	if err != nil {
+		return nil, nil, err
+	}
+
+	readers := make(rbReaders)
+	if err := populateEventMapSlots(events, spec.Maps["bpfsnoop_events"].InnerMap, readers); err != nil {
+		events.Close()
+		readers.close()
+		return nil, nil, err
+	}
+	return events, readers, nil
+}
+
+// populateEventMapSlots retains readers so subsequent requests need neither
+// map-in-map operations nor new ring-buffer mappings.
+func populateEventMapSlots(events *ebpf.Map, inner *ebpf.MapSpec, readers map[int]*ringbuf.Reader) error {
 	cpus, err := numcpus.ListOnline()
 	if err != nil {
-		return nil, fmt.Errorf("read online CPUs: %w", err)
+		return fmt.Errorf("read online CPUs: %w", err)
 	}
-	readers = make(map[int]*ringbuf.Reader, len(cpus))
+
 	for _, cpu := range cpus {
 		if uint32(cpu) >= events.MaxEntries() {
-			return readers, fmt.Errorf("online CPU %d exceeds ring-buffer map size %d", cpu, events.MaxEntries())
+			return fmt.Errorf("online CPU %d exceeds ring-buffer map size %d", cpu, events.MaxEntries())
 		}
 	}
 
-	// Map-in-map updates wait for an RCU grace period, even with BatchUpdate.
-	// Overlap independent CPU setups to avoid one serial wait per online CPU.
 	var group errgroup.Group
 	group.SetLimit(16)
-
 	created := make([]*ringbuf.Reader, len(cpus))
 	for i, cpu := range cpus {
+		if readers[cpu] != nil {
+			continue
+		}
+
 		group.Go(func() error {
 			m, err := ebpf.NewMap(inner)
 			if err != nil {
@@ -87,15 +112,15 @@ func newEventReaders(events *ebpf.Map, inner *ebpf.MapSpec) (readers map[int]*ri
 		})
 	}
 
-	// Collect after all workers finish, including on failure, so the deferred
-	// cleanup closes every successfully created reader without racing workers.
 	err = group.Wait()
+
+	// Collect all successes even on failure, so the owner closes every handle.
 	for i, reader := range created {
 		if reader != nil {
 			readers[cpus[i]] = reader
 		}
 	}
-	return readers, err
+	return err
 }
 
 // init connects the configured handler to maps and metadata created by Boot.
@@ -122,13 +147,11 @@ func (r *eventReader) cleanup() {
 
 // run parses records concurrently and consumes events serially. Only per-CPU
 // ordering is guaranteed. All workers stop before output cleanup.
-func (r *eventReader) run(ctx context.Context, readers map[int]*ringbuf.Reader, maxEvents uint) error {
+func (r *eventReader) run(ctx context.Context, readers map[int]*ringbuf.Reader, maxEvents uint, reused bool) error {
 	r.readers = readers
 	if len(r.readers) == 0 {
 		return errors.New("no event readers")
 	}
-
-	runtime.GOMAXPROCS(2*len(r.readers) + 2)
 
 	runCtx, cancel := context.WithCancel(ctx)
 	r.ctx = runCtx
@@ -141,10 +164,8 @@ func (r *eventReader) run(ctx context.Context, readers map[int]*ringbuf.Reader, 
 	}
 
 	r.readErrors = make(chan error, 1)
-	defer func() {
-		cancel()
-		r.close()
-	}()
+	defer r.close(reused)
+	defer cancel()
 
 	for cpu, reader := range r.readers {
 		r.workers.Go(func() {
@@ -204,8 +225,15 @@ func (r *eventReader) handleEvents(maxEvents uint) error {
 	}
 }
 
-func (r *eventReader) close() {
-	closeEventReaders(r.readers)
+func (r *eventReader) close(reused bool) {
+	if reused {
+		// Wake blocked reads without destroying the worker's shared readers.
+		for _, reader := range r.readers {
+			_ = reader.Flush()
+		}
+	} else {
+		r.readers.close()
+	}
 	r.workers.Wait()
 }
 
@@ -284,4 +312,32 @@ func (r *eventReader) readRecord(data []byte) error {
 	case <-r.ctx.Done():
 		return ringbuf.ErrClosed
 	}
+}
+
+func discardPendingRecords(reader *ringbuf.Reader) error {
+	reader.SetDeadline(time.Now())
+	defer reader.SetDeadline(time.Time{})
+
+	record := ringbuf.Record{Handle: func([]byte) error { return nil }}
+	for {
+		err := reader.ReadInto(&record)
+		if errors.Is(err, ringbuf.ErrFlushed) {
+			continue
+		}
+		if errors.Is(err, os.ErrDeadlineExceeded) {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+	}
+}
+
+func (rr rbReaders) discard() error {
+	for cpu, reader := range rr {
+		if err := discardPendingRecords(reader); err != nil {
+			return fmt.Errorf("CPU %d: discard pending records: %w", cpu, err)
+		}
+	}
+	return nil
 }

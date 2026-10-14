@@ -148,7 +148,7 @@ func (d *Disassembler) readKernelFunction(name string, address uint64, module st
 		return KernelFunction{}, fmt.Errorf("disassembly byte count %d exceeds maximum %d",
 			byteCount, maxBytes)
 	}
-	defer FlushReadObjs()
+	defer FlushReadObjs(false)
 	data, err := readKernel(address, uint32(byteCount))
 	if err != nil {
 		return KernelFunction{}, fmt.Errorf("failed to read %d bytes from kernel function %s: %w",

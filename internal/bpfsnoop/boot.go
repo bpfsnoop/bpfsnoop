@@ -10,6 +10,7 @@ import (
 	"io"
 	"log"
 	"os"
+	"runtime"
 	"syscall"
 	"time"
 
@@ -17,6 +18,7 @@ import (
 	"github.com/cilium/ebpf/rlimit"
 	"golang.org/x/sys/unix"
 
+	"github.com/bpfsnoop/bpfsnoop/internal/assert"
 	"github.com/bpfsnoop/bpfsnoop/internal/bpf"
 	"github.com/bpfsnoop/bpfsnoop/internal/cc"
 	"github.com/bpfsnoop/bpfsnoop/internal/mathx"
@@ -30,14 +32,23 @@ type BootConfig struct {
 	Ready          func()
 	Warning        func(string)
 	isEventStream  bool
+	reusedObjects  bool
 }
 
 // Boot initializes bpfsnoop and runs the operation selected by flags. Tracing
 // operations run until their event limit is reached or ctx is cancelled.
 func Boot(ctx context.Context, flags *Flags, config BootConfig) error {
-	if err := rlimit.RemoveMemlock(); err != nil {
-		return fmt.Errorf("failed to remove memlock limit: %w", err)
-	}
+	assert.NoErr(initEnv(), "Failed to init env: %v")
+
+	events, readers, err := newEventRingbufReaders()
+	assert.NoErr(err, "Failed to create event map and ringbufs: %v")
+	defer readers.close()
+	defer events.Close()
+
+	return boot(ctx, flags, config, events, readers)
+}
+
+func boot(ctx context.Context, flags *Flags, config BootConfig, events *ebpf.Map, readers rbReaders) error {
 	if err := PrepareKernelBTF(); err != nil {
 		return fmt.Errorf("failed to prepare kernel BTF: %w", err)
 	}
@@ -58,10 +69,10 @@ func Boot(ctx context.Context, flags *Flags, config BootConfig) error {
 		return nil
 	}
 
-	return bootTracing(ctx, flags, config)
+	return bootTracing(ctx, flags, config, events, readers)
 }
 
-func bootTracing(ctx context.Context, flags *Flags, config BootConfig) (retErr error) {
+func bootTracing(ctx context.Context, flags *Flags, config BootConfig, events *ebpf.Map, readers rbReaders) (retErr error) {
 	var r syscall.Rlimit
 	if err := syscall.Getrlimit(syscall.RLIMIT_NOFILE, &r); err != nil {
 		return fmt.Errorf("failed to get nofile rlimit: %w", err)
@@ -69,7 +80,7 @@ func bootTracing(ctx context.Context, flags *Flags, config BootConfig) (retErr e
 	VerboseLog("Current nofile rlimit: curr=%d max=%d", r.Cur, r.Max)
 
 	VerboseLog("Reading /proc/kallsyms ..")
-	kallsyms, err := NewKallsyms()
+	kallsyms, err := cachedKallsyms()
 	if err != nil {
 		return fmt.Errorf("failed to read /proc/kallsyms: %w", err)
 	}
@@ -124,18 +135,14 @@ func bootTracing(ctx context.Context, flags *Flags, config BootConfig) (retErr e
 		return fmt.Errorf("failed to patch BPF session instructions: %w", err)
 	}
 
-	numCPU, err := ebpf.PossibleCPU()
-	if err != nil {
-		return fmt.Errorf("failed to get possible CPU count: %w", err)
-	}
-	if err := bpfSpec.Variables["CPU_MASK"].Set(uint32(mathx.Mask(numCPU))); err != nil {
+	if err := bpfSpec.Variables["CPU_MASK"].Set(uint32(mathx.Mask(possibleCPUNr))); err != nil {
 		return fmt.Errorf("failed to set CPU mask: %w", err)
 	}
 	if err := ProbeTailcallIssue(bpfSpec); err != nil {
 		return fmt.Errorf("failed to probe tail-call support: %w", err)
 	}
 
-	defer FlushReadObjs()
+	defer FlushReadObjs(config.reusedObjects)
 
 	if err := bpfSpec.Variables["PID"].Set(uint32(os.Getpid())); err != nil {
 		return fmt.Errorf("failed to set bpfsnoop PID: %w", err)
@@ -145,7 +152,7 @@ func bootTracing(ctx context.Context, flags *Flags, config BootConfig) (retErr e
 	if err != nil {
 		return fmt.Errorf("failed to detect supported function argument count: %w", err)
 	}
-	VerboseLog("Max arg count limits to %d", maxArg)
+	DebugLog("Max arg count limits to %d", maxArg)
 
 	kfuncs, err := FindKernelFuncs(flags.Kfuncs(), kallsyms, maxArg)
 	if err != nil {
@@ -185,7 +192,7 @@ func bootTracing(ctx context.Context, flags *Flags, config BootConfig) (retErr e
 	if err == nil && flags.Vmlinux() {
 		VerboseLog("Found vmlinux: %s", vmlinux)
 
-		textAddr, err := ReadTextAddrFromVmlinux(vmlinux)
+		textAddr, err := ReadTextAddrFromVmlinux()
 		if err != nil {
 			return fmt.Errorf("failed to read .text address from vmlinux: %w", err)
 		}
@@ -252,7 +259,7 @@ func bootTracing(ctx context.Context, flags *Flags, config BootConfig) (retErr e
 
 	VerboseLog("Tracing bpf progs or kernel functions/tracepoints ..")
 	TrimSpec(bpfSpec)
-	reusedMaps := PrepareBPFMaps(bpfSpec)
+	reusedMaps := PrepareBPFMaps(bpfSpec, events)
 	defer CloseBPFMaps(reusedMaps)
 
 	if !config.isEventStream {
@@ -278,19 +285,12 @@ func bootTracing(ctx context.Context, flags *Flags, config BootConfig) (retErr e
 		return fmt.Errorf("failed to add bpfsnoop BPF programs: %w", err)
 	}
 
-	kallsyms, err = NewKallsyms()
+	refreshSymbols := shouldRefreshKallsyms(kfuncs, progs, kfuncsMulti)
+	kallsyms, err = kallsymsSnapshot(refreshSymbols)
 	if err != nil {
 		return fmt.Errorf("failed to reread /proc/kallsyms: %w", err)
 	}
-	FlushReadObjs()
-
-	readersStarted := time.Now()
-	readers, err := newEventReaders(reusedMaps["bpfsnoop_events"], bpfSpec.Maps["bpfsnoop_events"].InnerMap)
-	if err != nil {
-		return fmt.Errorf("failed to create ring-buffer reader: %w", err)
-	}
-	defer closeEventReaders(readers)
-	DebugLog("Creating %d ring-buffer readers costs %s", len(readers), time.Since(readersStarted))
+	FlushReadObjs(config.reusedObjects)
 
 	if flags.OutputFile() != "" {
 		file, err := os.OpenFile(flags.OutputFile(), os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
@@ -320,6 +320,14 @@ func bootTracing(ctx context.Context, flags *Flags, config BootConfig) (retErr e
 	}
 	defer reader.cleanup()
 
+	if config.reusedObjects {
+		// Previous producers and readers have stopped. Discard their records
+		// before enabling tracing with this request's target metadata.
+		if err := readers.discard(); err != nil {
+			return err
+		}
+	}
+
 	readyData := reusedMaps[".data.ready"]
 	if err := readyData.Put(uint32(0), uint32(1)); err != nil {
 		return fmt.Errorf("failed to mark bpfsnoop ready: %w", err)
@@ -339,8 +347,59 @@ func bootTracing(ctx context.Context, flags *Flags, config BootConfig) (retErr e
 	if maxEvents == 0 {
 		maxEvents = limitEvents
 	}
-	if err := reader.run(ctx, readers, maxEvents); err != nil && !errors.Is(err, ErrFinished) {
+	if err := reader.run(ctx, readers, maxEvents, config.reusedObjects); err != nil && !errors.Is(err, ErrFinished) {
 		return fmt.Errorf("bpfsnoop run failed: %w", err)
 	}
+	return nil
+}
+
+func shouldRefreshKallsyms(kfuncs KFuncs, progs []ProgFlag, kmulti []kfuncInfoMulti) bool {
+	// Only stack/LBR symbolization needs a fresh snapshot after loading
+	// our programs. Graph setup refreshes trampoline symbols
+	// separately.
+	refreshSymbols := requiredLbr || outputFuncStack
+	for _, fn := range kfuncs {
+		refreshSymbols = refreshSymbols || fn.Flag.stack || fn.Flag.lbr
+	}
+	for _, prog := range progs {
+		refreshSymbols = refreshSymbols || prog.stack || prog.lbr
+	}
+	for _, multi := range kmulti {
+		for _, fn := range multi.fns {
+			refreshSymbols = refreshSymbols || fn.Flag.stack || fn.Flag.lbr
+		}
+	}
+
+	return refreshSymbols
+}
+
+var possibleCPUNr int
+
+func possibleCPU() (int, error) {
+	if possibleCPUNr != 0 {
+		return possibleCPUNr, nil
+	}
+
+	nr, err := ebpf.PossibleCPU()
+	if err != nil {
+		return nr, err
+	}
+
+	possibleCPUNr = nr
+	return nr, nil
+}
+
+func initEnv() error {
+	if err := rlimit.RemoveMemlock(); err != nil {
+		return fmt.Errorf("failed to remove rlimit memlock: %w", err)
+	}
+
+	_, err := possibleCPU()
+	if err != nil {
+		return fmt.Errorf("failed to read possible CPU number: %w", err)
+	}
+
+	runtime.GOMAXPROCS(2*possibleCPUNr + 2)
+
 	return nil
 }

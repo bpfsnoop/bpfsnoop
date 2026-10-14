@@ -211,7 +211,7 @@ func ReadKernelData(ctx context.Context, exprs []string) ([]ReadKernelResult, er
 		return nil, err
 	}
 	defer helpers.Progs.Close()
-	defer FlushReadObjs()
+	defer FlushReadObjs(false)
 
 	results := make([]ReadKernelResult, 0, len(exprs))
 	for _, expr := range exprs {
@@ -243,7 +243,7 @@ func readKernelDatum(exprs []string, flags *Flags) {
 	helpers, err := newKernelReadHelpers(flags)
 	assert.NoErr(err, "Failed to prepare kernel read helpers: %v")
 	defer helpers.Progs.Close()
-	defer FlushReadObjs()
+	defer FlushReadObjs(false)
 
 	for i, expr := range exprs {
 		if i != 0 {

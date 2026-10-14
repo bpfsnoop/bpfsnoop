@@ -67,7 +67,7 @@ func loadDisasmAddr2Line() (disasmAddr2LineSetup, error) {
 			err:   fmt.Errorf("find vmlinux: %w", err),
 		}, nil
 	}
-	textAddress, err := ReadTextAddrFromVmlinux(vmlinux)
+	textAddress, err := ReadTextAddrFromVmlinux()
 	if err != nil {
 		return disasmAddr2LineSetup{
 			vmlinux: vmlinux,

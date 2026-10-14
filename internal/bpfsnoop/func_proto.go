@@ -160,7 +160,7 @@ func ShowFuncProto(f *Flags) {
 			if vmlinux != "" {
 				LogIf(true, "Found vmlinux: %s", vmlinux)
 
-				textAddr, err := ReadTextAddrFromVmlinux(vmlinux)
+				textAddr, err := ReadTextAddrFromVmlinux()
 				assert.NoErr(err, "Failed to read .text address from vmlinux: %v", err)
 
 				kaslr := NewKaslr(kallsyms.Stext(), textAddr)

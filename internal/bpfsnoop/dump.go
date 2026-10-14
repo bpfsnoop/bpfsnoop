@@ -64,7 +64,7 @@ func DumpProg(pf []ProgFlag) {
 	if err == nil {
 		VerboseLog("Found vmlinux: %s", vmlinux)
 
-		textAddr, err := ReadTextAddrFromVmlinux(vmlinux)
+		textAddr, err := ReadTextAddrFromVmlinux()
 		assert.NoErr(err, "Failed to read .text address from vmlinux: %v")
 
 		VerboseLog("Creating addr2line from vmlinux ..")

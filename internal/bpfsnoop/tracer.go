@@ -6,9 +6,12 @@ package bpfsnoop
 import (
 	"context"
 	"errors"
+	"fmt"
 	"slices"
 	"strconv"
 	"sync/atomic"
+
+	"github.com/cilium/ebpf"
 
 	"github.com/bpfsnoop/bpfsnoop/internal/cc"
 )
@@ -156,7 +159,12 @@ func prepareTraceFlags(options TraceOptions) (*Flags, error) {
 	return flags, nil
 }
 
-var traceRunning atomic.Bool
+var (
+	traceRunning atomic.Bool
+	// Protected by traceRunning and retained for the MCP process lifetime.
+	traceEvents  *ebpf.Map
+	traceReaders rbReaders
+)
 
 // Trace runs one native structured trace. Only one trace can run at a time
 // because bpfsnoop's tracing configuration is process-global.
@@ -171,6 +179,18 @@ func Trace(ctx context.Context, options TraceOptions) error {
 		return errors.New("another trace is already running")
 	}
 	defer traceRunning.Store(false)
+
+	if err := initEnv(); err != nil {
+		return fmt.Errorf("failed to init env: %w", err)
+	}
+
+	if traceEvents == nil {
+		var err error
+		traceEvents, traceReaders, err = newEventRingbufReaders()
+		if err != nil {
+			return err
+		}
+	}
 
 	flags, err := prepareTraceFlags(options)
 	if err != nil {
@@ -187,12 +207,13 @@ func Trace(ctx context.Context, options TraceOptions) error {
 		functionGraph:     options.Capture.FunctionGraph,
 		instructions:      options.Capture.Instructions,
 	}
-	return Boot(ctx, flags, BootConfig{
+	return boot(ctx, flags, BootConfig{
 		EventReader:    &eventReader{trace: NewTraceEventHandler(capture, &options)},
 		MaxEvents:      options.MaxEvents,
 		MaxKernelFuncs: options.MaxKernelFunctions,
 		Ready:          options.Ready,
 		Warning:        options.Warning,
 		isEventStream:  true,
-	})
+		reusedObjects:  true,
+	}, traceEvents, traceReaders)
 }

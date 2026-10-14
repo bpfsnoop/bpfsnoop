@@ -13,11 +13,6 @@ import (
 	"github.com/cilium/ebpf/btf"
 )
 
-const (
-	MAX_BPF_FUNC_ARGS      = 12
-	MAX_BPF_FUNC_ARGS_PREV = 6
-)
-
 // According to patch [bpf: Reject attaching fexit/fmod_ret to __noreturn functions](https://lore.kernel.org/bpf/20250318114447.75484-1-laoar.shao@gmail.com/),
 // the following functions in noreturn_deny set cannot be traced by fexit.
 var noreturnFuncs = []string{

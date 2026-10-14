@@ -62,27 +62,13 @@ func updateLbrsDataMapSpec(spec *ebpf.CollectionSpec) error {
 		return updateLbrsPerCPUDataMapSpec(spec)
 	}
 
-	numCPU, err := ebpf.PossibleCPU()
-	if err != nil {
-		return fmt.Errorf("failed to get possible cpu number: %w", err)
-	}
-
-	valueSize := uint32(unsafe.Sizeof(LbrData{})) * uint32(numCPU)
+	valueSize := uint32(unsafe.Sizeof(LbrData{})) * uint32(possibleCPUNr)
 	return updateMMapableMapSpec(spec, ".data.lbrs", valueSize)
 }
 
 func updateEventsMapSpec(spec *ebpf.CollectionSpec) error {
-	numCPU, err := ebpf.PossibleCPU()
-	if err != nil {
-		return fmt.Errorf("failed to get possible CPU count: %w", err)
-	}
-
-	m, ok := spec.Maps["bpfsnoop_events"]
-	if !ok || m.Type != ebpf.ArrayOfMaps || m.InnerMap == nil {
-		return fmt.Errorf("missing or invalid bpfsnoop_events map spec")
-	}
-
-	m.MaxEntries = uint32(numCPU)
+	m := spec.Maps["bpfsnoop_events"]
+	m.MaxEntries = uint32(possibleCPUNr)
 	return nil
 }
 
@@ -99,7 +85,7 @@ func updateMapsSpec(spec *ebpf.CollectionSpec) error {
 	return nil
 }
 
-func PrepareBPFMaps(spec *ebpf.CollectionSpec) map[string]*ebpf.Map {
+func PrepareBPFMaps(spec *ebpf.CollectionSpec, events *ebpf.Map) map[string]*ebpf.Map {
 	err := updateMapsSpec(spec)
 	assert.NoErr(err, "Failed to update bpf maps spec: %v")
 
@@ -115,7 +101,11 @@ func PrepareBPFMaps(spec *ebpf.CollectionSpec) map[string]*ebpf.Map {
 	readyData, err := ebpf.NewMap(spec.Maps[".data.ready"])
 	assert.NoErr(err, "Failed to create ready data map: %v")
 
-	events, err := ebpf.NewMap(spec.Maps["bpfsnoop_events"])
+	if events != nil {
+		events, err = events.Clone()
+	} else {
+		events, err = ebpf.NewMap(spec.Maps["bpfsnoop_events"])
+	}
 	assert.NoErr(err, "Failed to create events map: %v")
 
 	fgraphActive, err := ebpf.NewMap(spec.Maps["bpfsnoop_fgraph_active"])

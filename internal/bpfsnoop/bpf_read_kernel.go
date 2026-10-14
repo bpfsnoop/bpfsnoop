@@ -59,9 +59,13 @@ func initReadKernel() error {
 	return nil
 }
 
-func FlushReadObjs() {
+func FlushReadObjs(reused bool) {
 	readMu.Lock()
 	defer readMu.Unlock()
+
+	if reused {
+		return
+	}
 
 	if readLink != nil {
 		readLink.Close()

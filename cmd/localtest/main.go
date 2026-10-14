@@ -39,7 +39,15 @@ func main() {
 	}()
 
 	f := parseFlags()
-	if !mcpMode {
+	if mcpMode {
+		var err error
+		mcpBackend, err = startMCPWorker(os.Stdout)
+		if err != nil {
+			prErr(os.Stderr, red, "Failed to start MCP worker: %v\n", err)
+			return
+		}
+		defer mcpBackend.Close()
+	} else {
 		var err error
 		cliBackend, err = startCLIWorker(os.Stdout)
 		if err != nil {

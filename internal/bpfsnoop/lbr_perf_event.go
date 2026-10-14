@@ -6,7 +6,6 @@ package bpfsnoop
 import (
 	"fmt"
 
-	"github.com/cilium/ebpf"
 	"golang.org/x/sys/unix"
 )
 
@@ -24,7 +23,7 @@ func OpenLbrPerfEvent(branchTypes []string) (*LbrPerfEvent, error) {
 		}
 	}()
 
-	numCPU, err := ebpf.PossibleCPU()
+	numCPU, err := possibleCPU()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get number of CPUs: %w", err)
 	}
