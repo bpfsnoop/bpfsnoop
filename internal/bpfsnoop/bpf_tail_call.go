@@ -28,14 +28,13 @@ type TailcallInfo struct {
 }
 
 func isTailcallReachable(insns []byte) bool {
-	if len(insns) == 0 || len(insns) < 4+5+3 {
-		return false
-	}
-
 	offset := 5
 	u32 := binary.NativeEndian.Uint32(insns[:4])
 	if isEndbrInsn(u32) {
 		offset += 4
+	}
+	if len(insns) < offset+3 {
+		return false
 	}
 
 	var tailcallReachable bool
@@ -43,6 +42,17 @@ func isTailcallReachable(insns []byte) bool {
 	tailcallReachable = tailcallReachable || bytes.Equal(insns[offset:offset+3], []byte{0x48, 0x31, 0xc0}) /* xor rax, rax */
 
 	return tailcallReachable
+}
+
+func tailcallTrampolineAddr(insns []byte, addr uintptr) (uintptr, error) {
+	if insns[0] != 0xe8 /* callq */ && insns[0] != 0xe9 /* jmpq */ {
+		return 0, fmt.Errorf("expected rel32 trampoline branch at %#x, got % x", addr, insns)
+	}
+
+	// x86 rel32 displacements are signed, including when the trampoline is
+	// allocated below the JIT program. Zero extension would read 4 GiB too high.
+	offset := int32(binary.LittleEndian.Uint32(insns[1:5]))
+	return uintptr(int64(addr) + 5 + int64(offset)), nil
 }
 
 func probeTailcallInfo(prog *ebpf.Program) (TailcallInfo, error) {
@@ -75,8 +85,10 @@ func probeTailcallInfo(prog *ebpf.Program) (TailcallInfo, error) {
 	// Check whether there is `pushq %rax` insn in the trampoline. If so, the
 	// kernel has fixed the tailcall infinite loop issue caused by trampoline.
 
-	offset := binary.NativeEndian.Uint32(jinsns[1:])
-	kaddrTramp := kaddr + 5 /* next insn */ + uintptr(offset) /* callq target */
+	kaddrTramp, err := tailcallTrampolineAddr(jinsns, kaddr)
+	if err != nil {
+		return info, err
+	}
 
 	data, err := readKernel(uint64(kaddrTramp), 512)
 	if err != nil {
@@ -92,18 +104,18 @@ func probeTailcallInfo(prog *ebpf.Program) (TailcallInfo, error) {
 	}
 	defer engine.Close()
 
-	insns, b, pc := []gapstone.Instruction{}, data[:], uint64(kaddrTramp)
+	b, pc := data[:], uint64(kaddrTramp)
 	for len(b) != 0 {
 		insts, err := engine.Disasm(b, pc, 1)
 		if err != nil && len(b) <= 10 {
 			break
 		}
 		if err != nil {
-			return info, fmt.Errorf("failed to disasm trampoline insns: %w", err)
+			return info, fmt.Errorf("failed to disasm trampoline at %#x (offset %#x, bytes % x): %w",
+				pc, pc-uint64(kaddrTramp), b[:min(len(b), 15)], err)
 		}
 
 		insn := insts[0]
-		insns = append(insns, insn)
 
 		insnSize := insn.Size
 		if insnSize == 1 && insn.Bytes[0] == 0x50 /* pushq %rax */ {
@@ -114,6 +126,17 @@ func probeTailcallInfo(prog *ebpf.Program) (TailcallInfo, error) {
 		if insnSize == 1 && insn.Bytes[0] == 0xc3 /* retq */ {
 			break
 		}
+		if insnSize == 5 && insn.Bytes[0] == 0xe9 /* jmp rel32 */ {
+			target, err := tailcallTrampolineAddr(insn.Bytes, uintptr(pc))
+			if err != nil {
+				return info, err
+			}
+			// Return mitigations replace retq with a jump to an out-of-line
+			// return thunk. Stop here instead of decoding the following data.
+			if uint64(target) < uint64(kaddrTramp) || uint64(target) >= uint64(kaddrTramp)+uint64(len(data)) {
+				break
+			}
+		}
 
 		pc += uint64(insnSize)
 		b = b[insnSize:]
@@ -122,11 +145,11 @@ func probeTailcallInfo(prog *ebpf.Program) (TailcallInfo, error) {
 	return info, nil
 }
 
-func ProbeTailcallIssue(spec *ebpf.CollectionSpec) error {
+func ProbeTailcallIssue(spec *ebpf.CollectionSpec) (retErr error) {
 	if tailcallInfo.detected {
 		return nil
 	}
-	defer func() { tailcallInfo.detected = true }()
+	defer func() { tailcallInfo.detected = retErr == nil }()
 
 	tailcallSpec, err := bpf.LoadTailcall()
 	if err != nil {
