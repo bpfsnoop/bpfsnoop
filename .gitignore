@@ -36,4 +36,5 @@ go.work
 /arenaprobe
 
 /bin/*
+/log/
 coverage.txt

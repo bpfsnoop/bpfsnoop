@@ -126,16 +126,34 @@ These tags track the image publisher's builds; the guest log records `uname -a`.
 Feature-gated cases may be skipped on older kernels; test failures fail the job.
 Each job uploads its test output and guest kernel messages.
 
-To run locally on an amd64 Linux host with KVM, install the build dependencies
+To run locally on an amd64 Linux host, install the build dependencies
 and QEMU, make, bash, iproute2, ping, curl, Python 3, and bpftool. Download Go
 dependencies on the host before starting the guest:
 
 ```sh
 CGO_ENABLED=0 go install lmb.io/vimto@latest
 go mod download
-make -j"$(nproc)" all
-vimto -kernel :5.15 exec -- /bin/bash scripts/test-kernel.sh < /dev/null
+make vimto
 ```
+
+`make vimto` builds the binaries once and runs the same seven kernels as CI.
+It continues through failed kernels, prints a final summary, and returns failure
+if any kernel fails. Logs are saved to `bin/vimto/<kernel>.log`.
+If KVM is unavailable, it uses slower QEMU software emulation automatically.
+
+Run selected kernels or change the per-kernel timeout with:
+
+```sh
+make vimto VIMTO_KERNELS="5.15 stable" VIMTO_TIMEOUT=45m
+```
+
+Use `VIMTO=/path/to/vimto` or `VIMTO_LOG_DIR=/path/to/logs` to override the
+executable or log directory.
+
+CLI tests allow one minute for attachment setup. Each case's event timeout
+starts once bpfsnoop is ready, so slow software emulation does not consume the
+packet-matching window. Use `localtest --startup-timeout=2m` to change the
+readiness timeout when running cases directly.
 
 The `.vimto.toml` configuration runs the guest command as root. Only loopback
 networking is used by these tests. The guest uses `make testlocal-run` and

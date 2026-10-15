@@ -108,7 +108,7 @@ func startCLIWorker(w io.Writer) (*cliProcess, error) {
 		return p.process.err
 	})
 
-	timer := time.NewTimer(5 * time.Second)
+	timer := time.NewTimer(startupTimeout)
 	defer timer.Stop()
 
 	for {
@@ -184,13 +184,15 @@ func (p *cliProcess) Test(w io.Writer, t testCase, args []string) bool {
 		}
 	}()
 
-	timer := time.NewTimer(t.timeout)
+	timer := time.NewTimer(max(startupTimeout, t.timeout))
 	defer timer.Stop()
+	phase := "startup"
 
 	matched, cancelled, failed := false, false, false
 	cancel := func() {
 		if !cancelled {
 			cancelled = true
+			phase = "cleanup"
 			_ = p.encoder.Encode(cliworker.Request{Cancel: true})
 			timer.Reset(30 * time.Second) // Allow attachment cleanup before reuse.
 		}
@@ -215,6 +217,7 @@ func (p *cliProcess) Test(w io.Writer, t testCase, args []string) bool {
 			case "ready":
 				prInfo(w, yellow, "bpfsnoop is ready\n")
 				if !cancelled {
+					phase = "event"
 					timer.Reset(t.timeout)
 				}
 				if t.triggerProcess != "" && !cancelled {
@@ -243,7 +246,7 @@ func (p *cliProcess) Test(w io.Writer, t testCase, args []string) bool {
 			}
 
 		case <-timer.C:
-			prErr(w, red, "CLI test timeout after %s\n", time.Since(started))
+			prErr(w, red, "CLI %s timeout (elapsed %s)\n", phase, time.Since(started))
 			if cancelled {
 				p.Close(w)
 				return false

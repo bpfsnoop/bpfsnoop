@@ -12,9 +12,10 @@ import (
 )
 
 var (
-	colorful bool
-	mcpMode  bool
-	testName string
+	colorful       bool
+	mcpMode        bool
+	testName       string
+	startupTimeout = time.Minute
 )
 
 type flags struct {
@@ -38,6 +39,7 @@ func parseFlags() *flags {
 	flag.BoolVar(&f.expectError, "expect-error", false, "expect the MCP tool to return an error")
 	flag.StringVar(&f.match, "match", "", "match test case stderr/stdout output")
 	flag.DurationVar(&f.timeout, "timeout", 5*time.Second, "timeout for the test case")
+	flag.DurationVar(&startupTimeout, "startup-timeout", time.Minute, "timeout waiting for CLI attachment or prerequisite readiness")
 	flag.StringVar(&f.requiredProcess, "required-process", "", "required process to run the test case")
 	flag.StringVar(&f.requiredReady, "required-process-ready", "", "output indicating that the required process is ready")
 	flag.StringVar(&f.triggerProcess, "trigger-process", "", "process to trigger the test case")

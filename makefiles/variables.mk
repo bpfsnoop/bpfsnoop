@@ -15,6 +15,11 @@ CMD_TAR ?= tar
 CMD_GIT ?= git
 CMD_GIT_MODULES ?= $(CMD_GIT) submodule
 
+VIMTO			?= vimto
+VIMTO_KERNELS	?= 5.10 5.15 6.1 6.6 6.12 stable mainline
+VIMTO_LOG_DIR	?= log/vimto
+VIMTO_TIMEOUT	?= 30m
+
 ifeq ($(CMD_BPFTOOL),)
 	# Debian-based distros install bpftool to /usr/sbin/ which is only in root user's PATH
 	CMD_BPFTOOL := $(shell PATH="$$PATH:/usr/local/sbin:/usr/sbin:/sbin" which bpftool)
@@ -35,7 +40,7 @@ DIR_BIN := ./bin
 DIR_BPF := internal/bpf
 
 GOBUILD := go build -v -trimpath
-GO_SRC := $(shell $(CMD_GIT) ls-files '*.go')
+GO_SRC = $(shell $(CMD_GIT) ls-files '*.go')
 GOBUILD_CGO_CFLAGS := CGO_CFLAGS='-O2 -I$(CURDIR)/lib/capstone/include -I$(CURDIR)/lib/libpcap'
 GOBUILD_CGO_LDFLAGS := CGO_LDFLAGS='-O2 -g -L$(CURDIR)/lib/capstone/build -lcapstone -L$(CURDIR)/lib/libpcap -lpcap -static'
 

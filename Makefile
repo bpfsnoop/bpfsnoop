@@ -132,6 +132,11 @@ testmcp: $(ALL_OBJS)
 testmcp-run:
 	./$(LOCALTEST_OBJ) --mcp --test-dir ./t/mcp
 
+.PHONY: vimto
+vimto: $(ALL_OBJS)
+	@VIMTO="$(VIMTO)" VIMTO_LOG_DIR="$(VIMTO_LOG_DIR)" VIMTO_TIMEOUT="$(VIMTO_TIMEOUT)" \
+		bash scripts/test-vimto.sh $(VIMTO_KERNELS)
+
 .PHONY: sudo
 sudo: $(ALL_OBJS)
 	@sh scripts/sudo.sh $(ALL_OBJS)

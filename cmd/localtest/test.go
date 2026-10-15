@@ -64,7 +64,7 @@ func test(w io.Writer, t testCase) (passed bool) {
 
 	if t.requiredProcess != "" {
 		prInfo(w, yellow, "Required process: %s\n", t.requiredProcess)
-		process, err := runPrerequisite(w, t.requiredProcess, t.requiredReady, t.timeout)
+		process, err := runPrerequisite(w, t.requiredProcess, t.requiredReady, max(startupTimeout, t.timeout))
 		if err != nil {
 			prErr(w, red, "Failed to start prerequisite: %v\n", err)
 			return false
@@ -213,10 +213,8 @@ func testCLI(w io.Writer, t testCase) bool {
 		prInfo(w, yellow, "bpfsnoop is ready\n")
 		break
 
-	case <-time.After(t.timeout):
-		prErr(w, red, "Timeout after %s waiting for bpfsnoop to start\n", t.timeout)
-		prErr(w, red, "Test FAILED in %s (timeout of %s exceeded)\n",
-			time.Since(started), t.timeout)
+	case <-time.After(max(startupTimeout, t.timeout)):
+		prErr(w, red, "Test FAILED in %s (startup timeout)\n", time.Since(started))
 		return false
 	}
 
