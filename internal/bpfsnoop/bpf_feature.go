@@ -96,6 +96,9 @@ func detectBPFFeatures() (KernelBPFFeatures, error) {
 	if err != nil {
 		return features, err
 	}
+	if feat.HasBranchSnapshot && onAmd64 {
+		feat.HasBranchSnapshot = haveLbr()
+	}
 
 	hasGetFuncArgCnt, err = btfEnumValue("bpf_func_id", "BPF_FUNC_get_func_arg_cnt")
 	if err != nil {
@@ -147,7 +150,7 @@ func DetectBPFFeatures() error {
 		return err
 	}
 	if requiredLbr && !feat.HasBranchSnapshot {
-		return errors.New("bpf_get_branch_snapshot() helper not supported for output LBR")
+		return errors.New("LBR is not supported on the current system")
 	}
 	return nil
 }
@@ -176,6 +179,25 @@ func printFeatures() {
 	} {
 		fmt.Printf("%s:\t%t\n", feature.name, feature.value)
 	}
+}
+
+// haveLbr reports whether the PMU has LBR, which bpf_get_branch_snapshot()
+// requires as well. VMs usually don't have it.
+func haveLbr() bool {
+	ksyms, err := cachedKallsyms()
+	if err != nil {
+		DebugLog("Failed to read kallsyms for LBR detection: %v", err)
+		return false
+	}
+
+	nr, err := readLbrNr(ksyms)
+	if err != nil {
+		DebugLog("Failed to read LBR number: %v", err)
+		return false
+	}
+
+	DebugLog("LBR number is %d", nr)
+	return nr != 0
 }
 
 func btfEnumValue(enum, value string) (bool, error) {
