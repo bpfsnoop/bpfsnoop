@@ -1,6 +1,7 @@
 # Use the same prebuilt kernel images as cilium/ebpf's CI.
 kernel = "ghcr.io/cilium/ci-kernels:stable"
-smp = "cpus=2"
+# Not a power of 2, to cover the CPU_MASK paths on kernels before v6.6.
+smp = "cpus=3"
 memory = "2G"
 user = "root"
 setup = [

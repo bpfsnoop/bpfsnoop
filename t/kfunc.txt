@@ -21,6 +21,16 @@ trigger: ping -c 1 -s 64 127.0.0.1
 
 ---
 
+# Output the LBR stack, which requires LBR hardware.
+name: kfuncs::icmp_rcv:output-lbr
+tag: kfuncs,lbr
+feature: lbr
+test: -k 'icmp_rcv' --output-lbr
+match: LBR stack:
+trigger: ping -c 1 -s 64 127.0.0.1
+
+---
+
 # icmp_rcv in kprobe.multi mode
 name: kfuncs::icmp_rcv:kmulti
 tag: kfuncs,pkt,multi

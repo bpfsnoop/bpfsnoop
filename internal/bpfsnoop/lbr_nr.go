@@ -22,18 +22,32 @@ func ReadLbrNr(ksyms *Kallsyms) error {
 		return nil
 	}
 
+	nr, err := readLbrNr(ksyms)
+	if err != nil {
+		return err
+	}
+
+	lbrNr = nr
+	assert.NotZero(lbrNr, "lbr_nr should not be zero")
+	VerboseLog("LBR number is %d", lbrNr)
+
+	return nil
+}
+
+// readLbrNr reads x86_pmu.lbr_nr, which is zero if the PMU has no LBR.
+func readLbrNr(ksyms *Kallsyms) (uint32, error) {
 	if ksyms.x86PMU == 0 {
-		return fmt.Errorf("x86_pmu symbol not found in kallsyms")
+		return 0, fmt.Errorf("x86_pmu symbol not found in kallsyms")
 	}
 
 	pmuType, err := getKernelBTF().AnyTypeByName("x86_pmu")
 	if err != nil {
-		return fmt.Errorf("failed to get x86_pmu type from BTF: %w", err)
+		return 0, fmt.Errorf("failed to get x86_pmu type from BTF: %w", err)
 	}
 
 	st, ok := pmuType.(*btf.Struct)
 	if !ok {
-		return fmt.Errorf("x86_pmu BTF should be a struct type")
+		return 0, fmt.Errorf("x86_pmu BTF should be a struct type")
 	}
 
 	var offset uint64
@@ -46,17 +60,13 @@ func ReadLbrNr(ksyms *Kallsyms) error {
 		}
 	}
 	if !found {
-		return fmt.Errorf("lbr_nr field not found in x86_pmu struct")
+		return 0, fmt.Errorf("lbr_nr field not found in x86_pmu struct")
 	}
 
 	data, err := readKernel(ksyms.x86PMU+offset, 4)
 	if err != nil {
-		return fmt.Errorf("failed to read x86_pmu.lbr_nr: %w", err)
+		return 0, fmt.Errorf("failed to read x86_pmu.lbr_nr: %w", err)
 	}
 
-	lbrNr = ne.Uint32(data)
-	assert.NotZero(lbrNr, "lbr_nr should not be zero")
-	VerboseLog("LBR number is %d", lbrNr)
-
-	return nil
+	return ne.Uint32(data), nil
 }
