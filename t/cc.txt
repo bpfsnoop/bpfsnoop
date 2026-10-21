@@ -77,6 +77,24 @@ trigger: ping -c 1 -s 64 127.0.0.1
 
 ---
 
+# compare a char array with a string literal
+name: cc::str-cmp-array
+tag: cc,fnarg,xdp
+test: -k generic_xdp_install --filter-arg 'str(dev->name) == "lo"' --output-arg 'str(dev->name)' --limit-events 1
+match: 'str(dev->name)'="lo"
+trigger: ./xdpcrc -d lo
+
+---
+
+# compare a char pointer with a string literal
+name: cc::str-cmp-ptr
+tag: cc,fnarg
+test: -k security_file_open --filter-arg 'str(file->f_path.dentry->d_name.name) == "passwd"' --output-arg 'str(file->f_path.dentry->d_name.name)' --limit-events 1
+match: 'str(file->f_path.dentry->d_name.name)'="passwd"
+trigger: cat /etc/passwd
+
+---
+
 # cast void
 name: cc::cast-void
 tag: cc,type-cast
