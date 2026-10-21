@@ -126,7 +126,7 @@ func AnalyzeExpr(expr string) (ExprAnalysis, error) {
 	var names []string
 	callees := make(map[*c2go.Expr]bool)
 	c2go.Walk(varsExpr, func(node c2go.Syntax) {
-		if v, ok := node.(*c2go.Expr); ok && v.Op == c2go.Call && v.Left.Op == c2go.Name && isBuiltinFunc(v.Left.Text) {
+		if v, ok := node.(*c2go.Expr); ok && v.Op == c2go.Call && v.Left.Op == c2go.Name && (isBuiltinFunc(v.Left.Text) || v.Left.Text == strFn) {
 			callees[v.Left] = true
 		}
 
