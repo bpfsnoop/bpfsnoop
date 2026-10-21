@@ -490,3 +490,20 @@ func TestCompileEvalExpr(t *testing.T) {
 		})
 	})
 }
+
+func TestPushPopUsedCallerSavedRegs(t *testing.T) {
+	c := prepareCompiler(t)
+	// Registers are allocated from r8 down, so r5 is the first caller-saved one.
+	c.regalloc.MarkUsed(asm.R5)
+	c.regalloc.MarkUsed(asm.R0)
+
+	c.pushUsedCallerSavedRegs()
+	c.popUsedCallerSavedRegs()
+
+	test.AssertEqualSlice(t, c.insns, asm.Instructions{
+		asm.StoreMem(asm.RFP, -24, asm.R0, asm.DWord),
+		asm.StoreMem(asm.RFP, -16, asm.R5, asm.DWord),
+		asm.LoadMem(asm.R5, asm.RFP, -16, asm.DWord),
+		asm.LoadMem(asm.R0, asm.RFP, -24, asm.DWord),
+	})
+}
