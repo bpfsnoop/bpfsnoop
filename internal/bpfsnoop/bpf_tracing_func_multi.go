@@ -227,6 +227,10 @@ func (t *bpfTracing) traceKfuncMultiMode(reusedMaps map[string]*ebpf.Map, g *kfu
 		}
 	}
 
+	if err := injectStrLits(spec, progSpec); err != nil {
+		return err
+	}
+
 	withRet := sessionMode || isExit
 	fnArgsBufSize, err := injectOutputKmultiFnArgs(progSpec, maxArgsKmulti, withRet)
 	if err != nil {

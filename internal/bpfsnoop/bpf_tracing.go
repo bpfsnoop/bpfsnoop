@@ -78,6 +78,7 @@ func setBpfsnoopConfig(spec *ebpf.CollectionSpec, c traceeConfig) error {
 	cfg.SetExitFilter(c.exitFilter)
 	cfg.SetPktRetval(c.pktRetval)
 	cfg.SetHasFuncArgCnt(hasGetFuncArgCnt)
+	cfg.SetHasStrncmp(hasStrncmp)
 	cfg.FilterPid = filterPid
 	copy(cfg.FilterComm[:], []uint8(filterComm))
 	cfg.FilterCommLen = uint32(len(filterComm))

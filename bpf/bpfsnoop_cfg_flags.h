@@ -24,7 +24,8 @@
             __u32 deferred_filter:1;    \
             __u32 pkt_retval:1;         \
             __u32 has_func_arg_cnt:1;   \
-            __u32 pad:17;               \
+            __u32 has_strncmp:1;        \
+            __u32 pad:16;               \
         } flags;                        \
         __u32 tracee_flags;             \
     }

@@ -108,8 +108,25 @@ func readKernelData(expr string, helpers *Helpers) (kernelReadOutput, error) {
 		return kernelReadOutput{}, fmt.Errorf("failed to update target_pid_tgid: %w", err)
 	}
 
+	// Only bpfsnoop_str_eq() reads the config here.
+	var cfg BpfsnoopConfig
+	cfg.SetHasStrncmp(hasStrncmp)
+	if err := spec.Variables["bpfsnoop_config"].Set(cfg); err != nil {
+		return kernelReadOutput{}, fmt.Errorf("failed to set bpfsnoop config: %w", err)
+	}
+
 	progSpec := spec.Programs["read_data"]
 	injectInsns(progSpec, stubReadData, insns)
+	if err := injectStrLits(spec, progSpec); err != nil {
+		return kernelReadOutput{}, err
+	}
+	strBuf, err := prepareStrBufs(spec, progSpec)
+	if err != nil {
+		return kernelReadOutput{}, err
+	}
+	if strBuf != nil {
+		defer strBuf.Close()
+	}
 
 	progSpec.AttachTo = bpfFentryTest1
 	coll, err := ebpf.NewCollection(spec)

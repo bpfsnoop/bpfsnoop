@@ -1213,6 +1213,10 @@ func (c *compiler) evaluateTwid(expr *cc.Expr) (exprValue, error) {
 
 // evaluateEqEq handles equality comparison.
 func (c *compiler) evaluateEqEq(expr *cc.Expr) (exprValue, error) {
+	if val, done, err := c.evaluateStrCmpMaybe(expr, true); done {
+		return val, err
+	}
+
 	left, err := c.evaluate(expr.Left)
 	if err != nil {
 		return exprValue{}, err
@@ -1267,6 +1271,10 @@ func (c *compiler) evaluateEqEq(expr *cc.Expr) (exprValue, error) {
 
 // evaluateNotEq handles inequality comparison.
 func (c *compiler) evaluateNotEq(expr *cc.Expr) (exprValue, error) {
+	if val, done, err := c.evaluateStrCmpMaybe(expr, false); done {
+		return val, err
+	}
+
 	left, err := c.evaluate(expr.Left)
 	if err != nil {
 		return exprValue{}, err

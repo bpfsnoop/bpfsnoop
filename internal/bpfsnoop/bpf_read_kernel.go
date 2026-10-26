@@ -36,6 +36,8 @@ func initReadKernel() error {
 		return fmt.Errorf("failed to load read bpf spec: %w", err)
 	}
 	delete(spec.Programs, "read_data") // not used here
+	// Only bpfsnoop_str_eq() of read_data uses the event ringbufs.
+	delete(spec.Maps, "bpfsnoop_events")
 
 	spec.Programs["read"].AttachTo = bpfFentryTest1
 
