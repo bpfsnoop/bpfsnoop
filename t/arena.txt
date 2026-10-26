@@ -107,3 +107,92 @@ prerequisite: ./arenaprobe
 prerequisite-ready: Mapped arenaprobe
 trigger: ping -c 1 -s 64 127.0.0.1
 timeout: 10s
+
+---
+
+# The tests below trace funcs of arena_main in arenaprobe, whose params are
+# tagged __arg_arena and point into the arena. Pointers loaded from the arena
+# are followed if they point into it, like n->next, and read as they are
+# otherwise, like t->task.
+
+# read the arena through an arena param in output args
+name: arena::prog:output-arg
+tag: arena,fnarg
+feature: arena
+test: -p 'n:arena_main:arena_probe' -m entry --output-arg 'n->val' --output-arg 'str(n->name)' --limit-events 1
+match: (int)'n->val'=1, (array(char[12]))'str(n->name)'="first"
+prerequisite: ./arenaprobe
+prerequisite-ready: Mapped arenaprobe
+timeout: 10s
+
+---
+
+# follow a pointer loaded from the arena, to the second node
+name: arena::prog:arena-pointer
+tag: arena,fnarg
+feature: arena
+test: -p 'n:arena_main:arena_probe' -m entry --output-arg 'n->next->val' --output-arg 'str(n->next->name)' --limit-events 1
+match: (int)'n->next->val'=2, (array(char[12]))'str(n->next->name)'="second"
+prerequisite: ./arenaprobe
+prerequisite-ready: Mapped arenaprobe
+timeout: 10s
+
+---
+
+# copy a struct out of the arena
+name: arena::prog:struct
+tag: arena,fnarg
+feature: arena
+test: -p 'n:arena_main:arena_probe' -m entry --output-arg '*n' --limit-events 1
+match: (struct arena_node)'*n'={"val": 1, "name": "first
+prerequisite: ./arenaprobe
+prerequisite-ready: Mapped arenaprobe
+timeout: 10s
+
+---
+
+# follow a kernel pointer stored in the arena, cast to the kernel's type
+name: arena::prog:kernel-pointer
+tag: arena,fnarg
+feature: arena
+test: -p 'n:arena_main:arena_probe_task' -m entry --output-arg 'str(((struct task_struct *)t->task)->comm)' --limit-events 1
+match: 'str(((struct task_struct *)t->task)->comm)'="swapper/0"
+prerequisite: ./arenaprobe
+prerequisite-ready: Mapped arenaprobe
+timeout: 10s
+
+---
+
+# filter by the arena through an arena param
+name: arena::prog:filter-arg
+tag: arena,fnarg
+feature: arena
+test: -p 'n:arena_main:arena_probe' -m entry --filter-arg 'n->val == 1' --output-arg 'str(n->name)' --limit-events 1
+match: 'str(n->name)'="first"
+prerequisite: ./arenaprobe
+prerequisite-ready: Mapped arenaprobe
+timeout: 10s
+
+---
+
+# mark an arena param as __arena
+name: arena::prog:mark
+tag: arena,fnarg
+feature: arena
+test: -p 'n:arena_main:arena_probe' -m entry --limit-events 1
+match: (struct arena_node __arena *)n=0x
+prerequisite: ./arenaprobe
+prerequisite-ready: Mapped arenaprobe
+timeout: 10s
+
+---
+
+# print the pointee of a number pointer arena param, val of the first node
+name: arena::prog:number-pointer
+tag: arena,fnarg
+feature: arena
+test: -p 'n:arena_main:arena_probe_val' -m entry --limit-events 1
+match: (1)) cpu=
+prerequisite: ./arenaprobe
+prerequisite-ready: Mapped arenaprobe
+timeout: 10s

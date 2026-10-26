@@ -65,7 +65,7 @@ local_release: $(BPFSNOOP_OBJ)
 
 .PHONY: clean
 clean:
-	rm -f $(BPF_OBJ) $(XDPCRC_BPF_OBJ) $(VMLINUX_OBJ)
+	rm -f $(BPF_OBJ) $(XDPCRC_BPF_OBJ) $(ARENAPROBE_BPF_OBJ) $(VMLINUX_OBJ)
 	rm -f $(BPF_GO_SRC) $(BPF_GO_DEP)
 	rm -f $(BPFSNOOP_OBJ) $(XDPCRC_OBJ) $(ARENAPROBE_OBJ) $(LOCALTEST_OBJ)
 	rm -rf $(DIR_BIN)/*
@@ -92,7 +92,7 @@ testcc:
 	@go clean -testcache
 
 .PHONY: fixup
-fixup: $(BPF_GO_SRC) $(XDPCRC_OBJ)
+fixup: $(BPF_GO_SRC) $(XDPCRC_OBJ) $(ARENAPROBE_OBJ)
 	$(GOBUILD_CGO_CFLAGS) $(GOBUILD_CGO_LDFLAGS) go fix ./...
 	@echo "gofumpt -w .go files..."
 	@gofumpt -w $(GO_SRC)
@@ -105,7 +105,9 @@ $(XDPCRC_OBJ): $(XDPCRC_SRC) $(VMLINUX_OBJ)
 		$(GO_RUN_BPF2GO) -go-package main xdp ./xdp.c -- $(BPF2GO_EXTRA_FLAGS)
 	$(GOBUILD) -o $(XDPCRC_OBJ) $(XDPCRC_DIR)
 
-$(ARENAPROBE_OBJ): $(ARENAPROBE_SRC)
+$(ARENAPROBE_OBJ): $(ARENAPROBE_SRC) $(VMLINUX_OBJ)
+	cd ./cmd/arenaprobe && \
+		$(GO_RUN_BPF2GO) -go-package main arena ./arena.c -- $(BPF2GO_EXTRA_FLAGS)
 	$(GOBUILD) -o $(ARENAPROBE_OBJ) $(ARENAPROBE_DIR)
 
 .PHONY: all
