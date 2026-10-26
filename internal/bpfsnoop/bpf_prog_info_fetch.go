@@ -29,6 +29,7 @@ type progInfo struct {
 	jitedKsyms     []uint64
 	jitedFuncLens  []uint32
 	jitedLineInfos []uint64
+	mapIDs         []ebpf.MapID
 	btfOnce        sync.Once
 	btfSpec        *btf.Spec
 	btfErr         error
@@ -117,6 +118,7 @@ func fetchBPFProgInfo(prog *ebpf.Program) (*progInfo, error) {
 		jitedKsyms:     make([]uint64, info.NrJitedKsyms),
 		jitedFuncLens:  make([]uint32, info.NrJitedFuncLens),
 		jitedLineInfos: make([]uint64, info.NrJitedLineInfo),
+		mapIDs:         make([]ebpf.MapID, info.NrMapIDs),
 	}
 
 	// Use a fresh structure: feeding back the instruction lengths from the
@@ -135,6 +137,8 @@ func fetchBPFProgInfo(prog *ebpf.Program) (*progInfo, error) {
 		NrJitedLineInfo:      info.NrJitedLineInfo,
 		JitedLineInfoRecSize: uint32(unsafe.Sizeof(uint64(0))),
 		JitedLineInfo:        progInfoSlicePointer(p.jitedLineInfos),
+		NrMapIDs:             info.NrMapIDs,
+		MapIDs:               progInfoSlicePointer(p.mapIDs),
 	}
 	err := get(&data)
 	if err != nil {
@@ -144,7 +148,7 @@ func fetchBPFProgInfo(prog *ebpf.Program) (*progInfo, error) {
 	// Programs are immutable, but validate returned counts before slicing.
 	if data.NrFuncInfo > info.NrFuncInfo || data.NrLineInfo > info.NrLineInfo ||
 		data.NrJitedKsyms > info.NrJitedKsyms || data.NrJitedFuncLens > info.NrJitedFuncLens ||
-		data.NrJitedLineInfo > info.NrJitedLineInfo {
+		data.NrJitedLineInfo > info.NrJitedLineInfo || data.NrMapIDs > info.NrMapIDs {
 		return nil, fmt.Errorf("BPF program info grew while fetching metadata")
 	}
 
@@ -153,6 +157,7 @@ func fetchBPFProgInfo(prog *ebpf.Program) (*progInfo, error) {
 	p.jitedKsyms = p.jitedKsyms[:data.NrJitedKsyms]
 	p.jitedFuncLens = p.jitedFuncLens[:data.NrJitedFuncLens]
 	p.jitedLineInfos = p.jitedLineInfos[:data.NrJitedLineInfo]
+	p.mapIDs = p.mapIDs[:data.NrMapIDs]
 
 	// The kernel clears these pointers when raw address disclosure is denied.
 	if data.JitedKsyms == 0 {

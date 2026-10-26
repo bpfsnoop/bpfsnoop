@@ -208,10 +208,10 @@ func (t *bpfTracing) traceKfuncMultiMode(reusedMaps map[string]*ebpf.Map, g *kfu
 		if _, err := t.injectPktFilter(progSpec, params, fn.Func.Name, false, false); err != nil {
 			return err
 		}
-		if err := t.injectArgFilter(progSpec, params, nil, fn.Btf, fn.Func.Name, filterMatch, true); err != nil {
+		if err := t.injectArgFilter(progSpec, params, nil, fn.Btf, nil, fn.Func.Name, filterMatch, true); err != nil {
 			return err
 		}
-		args, argDataSize, err := t.injectArgOutput(progSpec, params, nil, fn.Btf, fn.Func.Name, false)
+		args, argDataSize, err := t.injectArgOutput(progSpec, params, nil, fn.Btf, nil, fn.Func.Name, false)
 		if err != nil {
 			return err
 		}

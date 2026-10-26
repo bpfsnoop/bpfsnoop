@@ -6,6 +6,8 @@ package bpfsnoop
 import (
 	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/asm"
+
+	"github.com/bpfsnoop/bpfsnoop/internal/cc"
 )
 
 const (
@@ -16,7 +18,7 @@ func clearOutputFuncArgs(prog *ebpf.ProgramSpec) {
 	clearOutputSubprog(prog, outputFnArgsStub)
 }
 
-func genOutputFuncArgs(prog *ebpf.ProgramSpec, prms []FuncParamFlags, ret FuncParamFlags, withRetval bool) (asm.Instructions, int, error) {
+func genOutputFuncArgs(prog *ebpf.ProgramSpec, prms []FuncParamFlags, ret FuncParamFlags, withRetval bool, arena *cc.ArenaInfo) (asm.Instructions, int, error) {
 	// output_fn_args(__u64 *args, void *buff, __u64 retval)
 
 	var insns asm.Instructions
@@ -53,6 +55,9 @@ func genOutputFuncArgs(prog *ebpf.ProgramSpec, prms []FuncParamFlags, ret FuncPa
 			offset += 8
 
 			if prm.IsNumberPtr {
+				if prm.IsArena {
+					insns = append(insns, cc.ArenaTranslate(arena)...)
+				}
 				insns = append(
 					insns,
 					asm.Mov.Imm(asm.R2, 8),
@@ -65,6 +70,9 @@ func genOutputFuncArgs(prog *ebpf.ProgramSpec, prms []FuncParamFlags, ret FuncPa
 				offset += 8
 			}
 		} else /* IsStr */ {
+			if prm.IsArena {
+				insns = append(insns, cc.ArenaTranslate(arena)...)
+			}
 			if offset != 0 {
 				insns = append(
 					insns,
@@ -143,13 +151,13 @@ func genOutputFuncArgs(prog *ebpf.ProgramSpec, prms []FuncParamFlags, ret FuncPa
 	return insns, offset, nil
 }
 
-func injectOutputFuncArgs(prog *ebpf.ProgramSpec, prms []FuncParamFlags, ret FuncParamFlags, withRetval bool) (int, error) {
+func injectOutputFuncArgs(prog *ebpf.ProgramSpec, prms []FuncParamFlags, ret FuncParamFlags, withRetval bool, arena *cc.ArenaInfo) (int, error) {
 	if len(prms) == 0 && !withRetval {
 		clearOutputFuncArgs(prog)
 		return 0, nil
 	}
 
-	insns, size, err := genOutputFuncArgs(prog, prms, ret, withRetval)
+	insns, size, err := genOutputFuncArgs(prog, prms, ret, withRetval, arena)
 	if err != nil {
 		return 0, err
 	}

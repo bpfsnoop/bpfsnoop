@@ -11,10 +11,13 @@ import (
 	"github.com/cilium/ebpf/btf"
 
 	"github.com/bpfsnoop/bpfsnoop/internal/btfx"
+	"github.com/bpfsnoop/bpfsnoop/internal/cc"
 )
 
 type bpfTracingInfo struct {
 	prog     *ebpf.Program
+	progID   ebpf.ProgramID
+	arena    *cc.ArenaInfo // arena of prog, nil if none, set when tracing it
 	fn       *btf.Func
 	jitedLen uint32 // length of the jited function
 	funcIP   uintptr
@@ -30,7 +33,7 @@ func getFuncParams(fn *btf.Func) ([]FuncParamFlags, FuncParamFlags, error) {
 	fnParams := fn.Type.(*btf.FuncProto).Params
 	params := make([]FuncParamFlags, 0, len(fnParams))
 	ret := FuncParamFlags{}
-	for _, p := range fnParams {
+	for i, p := range fnParams {
 		v := mybtf.IsConstCharPtr(p.Type)
 		isStr := v && !strUsed
 		strUsed = strUsed || v
@@ -57,6 +60,7 @@ func getFuncParams(fn *btf.Func) ([]FuncParamFlags, FuncParamFlags, error) {
 			ParamFlags: ParamFlags{
 				IsNumberPtr: btfx.IsNumberPointer(p.Type),
 				IsStr:       isStr,
+				IsArena:     isArenaParam(fn, i),
 			},
 		})
 	}
@@ -192,6 +196,7 @@ func (p *bpfProgs) addTracing(id ebpf.ProgramID, funcName string, prog *ebpf.Pro
 
 	p.tracings[key] = &bpfTracingInfo{
 		prog:     prog,
+		progID:   id,
 		fn:       fns[idx].Func,
 		jitedLen: jitedLens[idx],
 		funcIP:   jitedKsymAddrs[idx],
