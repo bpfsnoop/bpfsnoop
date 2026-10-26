@@ -127,24 +127,6 @@ func compileFuncCall(expr *cc.Expr) (funcCallValue, error) {
 			val.typ = EvalResultTypeHex
 		}
 
-	case "str":
-		if len(expr.List) != 1 && len(expr.List) != 2 {
-			return val, fmt.Errorf("%s() must have 1 or 2 arguments", fnName)
-		}
-
-		val.dataSize = -1
-		if len(expr.List) == 2 {
-			val.dataSize, err = parseExprNumber(expr.List[1])
-			if err != nil {
-				return val, fmt.Errorf("%s() second argument must be a number: %w", fnName, err)
-			}
-			if val.dataSize <= 0 {
-				return val, fmt.Errorf("%s() size must be greater than 0", fnName)
-			}
-		}
-
-		val.typ = EvalResultTypeString
-
 	case "pkt":
 		allowedPktTypes := []string{
 			PktTypeEth,

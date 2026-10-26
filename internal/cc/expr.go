@@ -187,8 +187,13 @@ func CompileEvalExpr(opts CompileExprOptions) (EvalResult, error) {
 			return res, fmt.Errorf("function call must have a constant name")
 		}
 		if isBuiltinFunc(e.Left.Text) {
-			if e.Left.Text == arenaFn {
+			switch e.Left.Text {
+			case arenaFn:
 				res.Type = EvalResultTypeArena // dumped as a whole
+			case strFn:
+				res.Type = EvalResultTypeString // output as a string
+				dataSize = -1
+				fnName = strFn
 			}
 			break // Scalar builtins are evaluated with the full expression.
 		}
