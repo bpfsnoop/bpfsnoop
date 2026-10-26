@@ -48,6 +48,29 @@ A BPF program can use only one arena, so all the `--filter-arg` and
 `--output-arg` expressions, or one `--read` expression, can use only one arena
 map.
 
+## Tracing a bpf prog that uses an arena
+
+When tracing a bpf prog with `-p`, a func param tagged `__arg_arena` points
+into the prog's arena. `--output-arg` and `--filter-arg` can read the arena
+through such a param, and the output marks its type as `__arena`:
+
+```
+$ bpfsnoop -p 'n:arena_main:arena_probe' --output-arg 'n->val' --output-arg 'str(n->name)'
+→ arena_probe[bpf] args=((struct arena_node __arena *)n=0x7f9b9b5f2000) ...
+Arg attrs: (int)'n->val'=1, (array(char[12]))'str(n->name)'="first"
+```
+
+Pointers loaded from the arena are followed too, like `next` in
+`n->next->val`. A pointer loaded from the arena may as well be a kernel pointer
+stored in the arena, like `task` in `((struct task_struct *)n->task)->comm`,
+so each address is translated only if it's in the arena's user range. User
+and kernel addresses don't overlap.
+
+Cast a kernel pointer stored in the arena to its kernel type. The program's
+BTF describes `struct task_struct` as of the kernel the program was built
+against, whose layout may differ from the running kernel's. The cast looks
+the type up in the running kernel's BTF.
+
 ## How it works
 
 Pointers into an arena hold addresses in the user space mapping of its owner,
@@ -60,6 +83,13 @@ So the BPF program of bpfsnoop loads the arena map pointer, which is its
 `struct bpf_arena`, and reads `user_vm_start` and `kern_vm` from it at run
 time. The verifier checks these reads against kernel BTF. Then `arena()` is
 the memory at `kern_vm_start + (u32)(user_vm_start + <offset>)`.
+
+For a traced bpf prog, bpfsnoop finds its arena among its maps: a prog uses
+one arena at most. Before each read through an `__arg_arena` param, or through
+a pointer loaded from the arena, `bpfsnoop_arena_addr()` in
+[bpf/bpfsnoop_arena.h](../bpf/bpfsnoop_arena.h) translates the address `addr`
+to `kern_vm_start + (u32)addr` the same way if it's in the arena's user range,
+`[user_vm_start, user_vm_end)`, and leaves it as it is otherwise.
 
 ## Limitations
 
