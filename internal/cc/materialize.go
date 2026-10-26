@@ -65,7 +65,11 @@ func (c *compiler) materializePending(val exprValue) (exprValue, error) {
 
 	// Process offset chain
 	if len(val.offsets) > 0 {
-		if err := c.emitOffsetChain(val.offsets, reg); err != nil {
+		offsets := val.offsets
+		if c.isArenaBase(val) {
+			offsets = markArenaDerefs(offsets)
+		}
+		if err := c.emitOffsetChain(offsets, reg); err != nil {
 			c.regalloc.Free(reg)
 			return exprValue{}, fmt.Errorf("failed to emit offset chain: %w", err)
 		}

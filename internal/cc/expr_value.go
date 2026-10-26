@@ -49,6 +49,7 @@ type pendingOffset struct {
 	prevBtf    btf.Type // type before this offset (used for CO-RE)
 	inArray    bool     // if true, this offset is within an array
 	bitfield   bool     // if true, this offset is a bitfield access
+	arena      bool     // if true, translate the address before the deref if it is in the arena
 }
 
 // exprValue represents the result of evaluating an expression.

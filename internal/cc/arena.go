@@ -6,6 +6,7 @@ package cc
 import (
 	"fmt"
 	"os"
+	"slices"
 
 	"github.com/Asphaltt/mybtf"
 	"github.com/cilium/ebpf"
@@ -34,11 +35,11 @@ type arenaOffsets struct {
 	vmAddr      int16 // struct vm_struct, addr
 }
 
-func (c *compiler) arenaStructOffsets() (arenaOffsets, error) {
+func arenaStructOffsets(krnl btfSpecer) (arenaOffsets, error) {
 	var offs arenaOffsets
 
 	offset := func(structName, member string) (int16, error) {
-		typ, err := c.krnlSpec.AnyTypeByName(structName)
+		typ, err := krnl.AnyTypeByName(structName)
 		if err != nil {
 			return 0, fmt.Errorf("failed to find struct %s: %w", structName, err)
 		}
@@ -113,7 +114,7 @@ func (c *compiler) evaluateArenaCall(expr *cc.Expr) (exprValue, error) {
 			arenaFn, mapID, size, offset, arenaSize)
 	}
 
-	offs, err := c.arenaStructOffsets()
+	offs, err := arenaStructOffsets(c.krnlSpec)
 	if err != nil {
 		return exprValue{}, fmt.Errorf("%s(%s): %w", arenaFn, mapID, err)
 	}
@@ -156,4 +157,71 @@ func (c *compiler) evaluateArenaCall(expr *cc.Expr) (exprValue, error) {
 		Type:   &btf.Int{Name: "u8", Size: 1},
 		Nelems: uint32(size),
 	}), nil
+}
+
+// ArenaInfo describes the BPF arena of a traced bpf prog, see
+// ArenaTranslate().
+type ArenaInfo struct {
+	// FD is the arena map, which the compiled insns reference. The caller
+	// keeps it open until they've been loaded.
+	FD int
+
+	// Params are the params of the traced func that point into the arena,
+	// i.e. that are tagged __arg_arena.
+	Params []string
+
+	guardHalf int32 // GUARD_SZ/2
+}
+
+// NewArenaInfo returns the ArenaInfo of the arena map fd.
+func NewArenaInfo(fd int) *ArenaInfo {
+	return &ArenaInfo{
+		FD:        fd,
+		guardHalf: int32(arenaGuardSize(os.Getpagesize()) / 2),
+	}
+}
+
+// isParam reports whether param name points into the arena.
+func (a *ArenaInfo) isParam(name string) bool {
+	return a != nil && slices.Contains(a.Params, name)
+}
+
+// ArenaAddrFunc is the C func in bpf/bpfsnoop_arena.h that translates an
+// arena address to the arena's kernel mapping.
+const ArenaAddrFunc = "bpfsnoop_arena_addr"
+
+// ArenaTranslate returns insns that translate the arena address in R3 to the
+// arena's kernel mapping, which bpf_probe_read_kernel() can read, by calling
+// bpfsnoop_arena_addr() in bpf/bpfsnoop_arena.h. Like the
+// bpf_probe_read_kernel() call that follows them, they clobber R0-R5.
+func ArenaTranslate(arena *ArenaInfo) asm.Instructions {
+	if arena == nil {
+		return nil
+	}
+
+	return asm.Instructions{
+		asm.Mov.Reg(asm.R2, asm.R3),
+		asm.LoadMapPtr(asm.R1, arena.FD),
+		asm.Mov.Imm(asm.R3, arena.guardHalf),
+		asm.Call.Label(ArenaAddrFunc),
+		asm.Mov.Reg(asm.R3, asm.R0),
+	}
+}
+
+// isArenaBase reports whether val is based on a param that points into the
+// arena, see ArenaInfo.Params.
+func (c *compiler) isArenaBase(val exprValue) bool {
+	return val.isPending() && val.varIndex >= 0 && val.varIndex < len(c.vars) && c.arena.isParam(c.vars[val.varIndex])
+}
+
+// markArenaDerefs marks the derefs of the offsets of an arena param to
+// translate their addresses if they're in the arena. A pointer loaded from the
+// arena may point into it, like a list's next, or be a kernel pointer stored
+// in it, which bpfsnoop_arena_addr() tells by its value.
+func markArenaDerefs(offsets []pendingOffset) []pendingOffset {
+	offsets = slices.Clone(offsets)
+	for i := range offsets {
+		offsets[i].arena = offsets[i].deref
+	}
+	return offsets
 }

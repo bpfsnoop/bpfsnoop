@@ -44,6 +44,8 @@ type compiler struct {
 	maps           map[BPFMapID]BPFMap
 	mapLookupLabel int
 
+	arena *ArenaInfo // arena of the traced prog, nil if none
+
 	rdonlyCastTypeID   btf.TypeID
 	rdonlyCastFastcall bool
 }
@@ -63,6 +65,7 @@ func newCompiler(opts CompileExprOptions) (*compiler, error) {
 		reservedStack: opts.ReservedStack,
 		memMode:       opts.MemoryReadMode,
 		maps:          opts.Maps,
+		arena:         opts.Arena,
 	}
 
 	c.vars = make([]string, len(opts.Params))

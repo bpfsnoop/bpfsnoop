@@ -6,6 +6,7 @@
 #include "bpf_map_helpers.h"
 
 #include "bpfsnoop.h"
+#include "bpfsnoop_arena.h"
 #include "bpfsnoop_arg_filter.h"
 #include "bpfsnoop_arg_output.h"
 #include "bpfsnoop_cfg.h"
