@@ -8,3 +8,11 @@ name: read::bpf_prog_active
 tag: read
 test: --read "*(int *)0x$(grep bpf_prog_active /proc/kallsyms | awk '{print $1}')"
 match: (int)'*(int *)0x
+
+---
+
+# compare a char array with two string literals
+name: read::str-cmp
+tag: read
+test: --read "str(((struct task_struct *)0x$(grep -w init_task /proc/kallsyms | awk '{print $1}'))->comm) == \"swapper\"" --read "str(((struct task_struct *)0x$(grep -w init_task /proc/kallsyms | awk '{print $1}'))->comm) == \"swapper/0\""
+match: ->comm) == "swapper/0"'=0x1/1
