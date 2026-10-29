@@ -164,9 +164,12 @@ func outputFnArgs(sb *strings.Builder, info *funcInfo, helpers *Helpers, data []
 
 	f := findSymbolHelper(uint64(info.funcIP), helpers)
 	params := info.proto.Type.(*btf.FuncProto).Params
-	lastIdx, idx := len(params)-1, 0
+	idx := 0
 	for i, param := range info.params {
 		if param.partOfPrevParam {
+			// The preceding aggregate was rendered with this slot, but it
+			// still occupies eight bytes in the captured event.
+			data = data[8:]
 			continue
 		}
 
@@ -186,7 +189,7 @@ func outputFnArgs(sb *strings.Builder, info *funcInfo, helpers *Helpers, data []
 		}
 
 		valNext := uint64(0)
-		if i < lastIdx {
+		if i+1 < len(info.params) && info.params[i+1].partOfPrevParam {
 			valNext = getU64(data)
 		}
 

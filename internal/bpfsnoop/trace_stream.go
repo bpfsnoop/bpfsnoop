@@ -133,12 +133,15 @@ func decodeTraceParam(typ btf.Type, flags FuncParamFlags, data []byte) (any, int
 	need := 8
 	if flags.IsNumberPtr {
 		need += 8
+	} else if size, err := btf.Sizeof(typ); err == nil && size > 8 {
+		// By-value aggregates occupy whole 64-bit capture slots.
+		need = (size + 7) / 8 * 8
 	}
 	if len(data) < need {
 		return nil, 0, fmt.Errorf("argument is truncated: got %d bytes, need %d", len(data), need)
 	}
 	if !flags.IsNumberPtr {
-		return decodeTraceRegister(typ, data[:8]), 8, nil
+		return decodeTraceRegister(typ, data[:need]), need, nil
 	}
 
 	pointer, ok := mybtf.UnderlyingType(typ).(*btf.Pointer)
