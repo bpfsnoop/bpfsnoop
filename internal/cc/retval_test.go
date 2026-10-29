@@ -40,9 +40,9 @@ func TestAnalyzeRetvalExpr(t *testing.T) {
 		{name: "struct pointer", expr: "((struct sk_buff *)$retval)->len > 0", vars: []string{RetvalName}, cast: "struct sk_buff*"},
 		{name: "same repeated cast", expr: "(int)$retval > 0 && (int)$retval < 10", vars: []string{RetvalName}, cast: "int"},
 		{name: "qualified equivalent casts", expr: "(int)$retval > 0 && (const int)$retval < 10", vars: []string{RetvalName}, cast: "int"},
-		{name: "bare", expr: "$retval != 0", wantErr: "requires an explicit concrete cast"},
-		{name: "bare through parens", expr: "($retval) != 0", wantErr: "requires an explicit concrete cast"},
-		{name: "member before cast", expr: "(int)$retval.foo != 0", wantErr: "requires an explicit concrete cast"},
+		{name: "bare", expr: "$retval != 0", vars: []string{RetvalName}},
+		{name: "bare through parens", expr: "($retval) != 0", vars: []string{RetvalName}},
+		{name: "member before cast", expr: "(int)$retval.foo != 0", vars: []string{RetvalName}},
 		{name: "void cast", expr: "(void)$retval", wantErr: "invalid non-scalar cast"},
 		{name: "struct value cast", expr: "(struct sk_buff)$retval", wantErr: "invalid non-scalar cast"},
 		{name: "conflicting casts", expr: "(int)$retval > 0 && (unsigned int)$retval < 10", wantErr: "conflicting casts"},
@@ -185,7 +185,8 @@ func TestPrepareRetvalCompileOptions(t *testing.T) {
 		want       string
 	}{
 		{name: "parse error", expr: "(int)$unknown", ret: intType, want: "failed to parse expression"},
-		{name: "analysis error", expr: "$retval", ret: intType, want: "requires an explicit concrete cast"},
+		{name: "retval parse error", expr: "(int $retval", ret: intType, want: "failed to parse expression"},
+		{name: "void return", expr: "$retval", ret: &btf.Void{}, want: "does not match declared return type"},
 		{name: "missing return type", expr: "(int)$retval", want: "without a declared return type"},
 		{name: "resolution error", expr: "(struct type_that_does_not_exist *)$retval", ret: &btf.Pointer{Target: &btf.Struct{Name: "type_that_does_not_exist"}}, want: "failed to resolve"},
 	}
@@ -211,7 +212,7 @@ func TestCompileRetvalExpr(t *testing.T) {
 
 	t.Run("filter loads synthetic final slot", func(t *testing.T) {
 		insns, err := CompileFilterExpr(CompileExprOptions{
-			Expr:       "retval == 7 && (int)$retval < 0",
+			Expr:       "retval == 7 && $retval < 0",
 			Params:     []btf.FuncParam{{Name: "retval", Type: intType}},
 			RetvalType: intType,
 			Spec:       testBtf,
@@ -240,7 +241,7 @@ func TestCompileRetvalExpr(t *testing.T) {
 
 	t.Run("boolean pointer and dereference", func(t *testing.T) {
 		_, err := CompileFilterExpr(CompileExprOptions{
-			Expr:       "(struct sk_buff *)$retval != NULL && ((struct sk_buff *)$retval)->len > 0",
+			Expr:       "$retval != NULL && $retval->len > 0",
 			RetvalType: &btf.Pointer{Target: skbType},
 			Spec:       testBtf,
 			Kernel:     testBtf,
@@ -253,7 +254,7 @@ func TestCompileRetvalExpr(t *testing.T) {
 
 	t.Run("eval preserves scalar type", func(t *testing.T) {
 		res, err := CompileEvalExpr(CompileExprOptions{
-			Expr:       "(int)$retval",
+			Expr:       "$retval",
 			RetvalType: &btf.Const{Type: intType},
 			Spec:       testBtf,
 			Kernel:     testBtf,
@@ -302,4 +303,26 @@ func TestCompileRetvalExpr(t *testing.T) {
 			t.Fatalf("got error %v, want type mismatch", err)
 		}
 	})
+}
+
+func TestRetvalSlotAfterAggregate(t *testing.T) {
+	intType := requireType(t, "int")
+	insns, err := CompileFilterExpr(CompileExprOptions{
+		Expr:       "size == 168 && $retval < 0",
+		Params:     []btf.FuncParam{{Name: "cmd", Type: intType}, {Name: "uattr", Type: &btf.Struct{Name: "bpfptr", Size: 16}}, {Name: "size", Type: intType}},
+		RetvalType: intType, Spec: testBtf, Kernel: testBtf, LabelExit: "exit",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var size, ret bool
+	for _, insn := range insns {
+		if insn.OpCode == asm.LoadMemOp(asm.DWord) && insn.Src == argsReg {
+			size = size || insn.Offset == 24
+			ret = ret || insn.Offset == 32
+		}
+	}
+	if !size || !ret {
+		t.Fatalf("incorrect argument slots: %v", insns)
+	}
 }

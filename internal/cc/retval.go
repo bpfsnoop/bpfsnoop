@@ -54,17 +54,21 @@ func enclosesThroughParens(expr, target *c2go.Expr) bool {
 }
 
 func matchRetvalType(analysis ExprAnalysis, returnType btf.Type, spec, kernel btfSpecer) (bool, error) {
-	if analysis.retvalExpr == nil {
+	if !slices.Contains(analysis.Vars, RetvalName) || returnType == nil {
 		return false, nil
+	}
+	if _, void := mybtf.UnderlyingType(returnType).(*btf.Void); void {
+		return false, nil
+	}
+	if analysis.retvalExpr == nil {
+		// Uncast $retval inherits the selected function's BTF return type.
+		return true, nil
 	}
 
 	c := &compiler{btfSpec: spec, krnlSpec: kernel}
 	cast, err := c.cc2btf(analysis.retvalExpr)
 	if err != nil {
 		return false, fmt.Errorf("failed to resolve %s cast %q: %w", RetvalName, analysis.RetvalCast, err)
-	}
-	if _, void := mybtf.UnderlyingType(returnType).(*btf.Void); void {
-		return false, nil
 	}
 	return sameUnderlyingType(cast, returnType), nil
 }

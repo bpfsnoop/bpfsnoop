@@ -9,6 +9,7 @@ import (
 	"iter"
 	"slices"
 
+	"github.com/bpfsnoop/bpfsnoop/internal/mathx"
 	"github.com/cilium/ebpf/asm"
 	"github.com/cilium/ebpf/btf"
 )
@@ -116,7 +117,15 @@ func (c *compiler) emit(insns ...asm.Instruction) {
 }
 
 func (c *compiler) emitLoadArg(index int, dst asm.Register) {
-	c.emit(asm.LoadMem(dst, argsReg, int16(index*8), asm.DWord))
+	offset := 0
+	for _, typ := range c.btfs[:index] {
+		size, err := btf.Sizeof(typ)
+		if err != nil || size < 8 {
+			size = 8
+		}
+		offset += mathx.Align(size, 8)
+	}
+	c.emit(asm.LoadMem(dst, argsReg, int16(offset), asm.DWord))
 }
 
 func (c *compiler) emitReg2bool(reg asm.Register) {

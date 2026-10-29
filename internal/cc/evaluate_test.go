@@ -16,7 +16,7 @@ import (
 
 func genInsnsWithN(reg asm.Register, pfx asm.Instructions, sfx asm.Instructions) asm.Instructions {
 	return slices.Concat(pfx, asm.Instructions{
-		asm.LoadMem(reg, argsReg, 40, dword),
+		asm.LoadMem(reg, argsReg, 48, dword),
 		asm.LSh.Imm(reg, 32),
 		asm.RSh.Imm(reg, 32),
 	}, sfx)
@@ -595,7 +595,7 @@ func TestEvaluateIndexLoadsElement(t *testing.T) {
 		_, err := c.materialize(prepareExprVal(t, c, "m->cell[1][2]"))
 		test.AssertNoErr(t, err)
 		test.AssertEqualSlice(t, c.insns, asm.Instructions{
-			asm.LoadMem(r8, argsReg, 48, dword), // m
+			asm.LoadMem(r8, argsReg, 56, dword), // m
 			asm.Add.Imm(r8, 4),                  // &m->cell[1]
 			asm.Add.Imm(r8, 2),                  // &m->cell[1][2]
 			asm.LoadMem(r8, r8, 0, dword),       // m->cell[1][2]
@@ -630,7 +630,7 @@ func TestEvaluateIndexLoadsElement(t *testing.T) {
 		_, err := cr.materialize(prepareExprVal(t, cr, "pod->id[1]"))
 		test.AssertNoErr(t, err)
 		test.AssertEqualSlice(t, cr.insns, asm.Instructions{
-			asm.LoadMem(r8, argsReg, 56, dword), // pod
+			asm.LoadMem(r8, argsReg, 64, dword), // pod
 			asm.Mov.Reg(r1, r8),
 			asm.Add.Imm(r1, 1), // &pod->id[1]
 			asm.Mov.Reg(r3, r1),
@@ -834,6 +834,11 @@ func TestShouldWiden(t *testing.T) {
 	byteType := &btf.Int{Name: "u8", Size: 1}
 	intType := &btf.Int{Name: "u32", Size: 4}
 	longType := &btf.Int{Name: "u64", Size: 8}
+	// UnderlyingType can resolve this chain, but Sizeof rejects its depth.
+	var deepSource btf.Type = byteType
+	for range 32 {
+		deepSource = &btf.Typedef{Name: "nested", Type: deepSource}
+	}
 	for _, tt := range []struct {
 		name   string
 		source btf.Type
@@ -854,6 +859,7 @@ func TestShouldWiden(t *testing.T) {
 		{"struct source", &btf.Struct{Size: 1}, intType, false},
 		{"void source", &btf.Void{}, intType, false},
 		{"unsized target", byteType, &btf.Fwd{Name: "unknown"}, false},
+		{"source exceeds sizeof depth", deepSource, intType, false},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			test.AssertEqual(t, shouldWiden(tt.source, tt.target), tt.want)
@@ -1016,7 +1022,7 @@ func TestAddValues(t *testing.T) {
 		test.AssertEqualSlice(t, c.insns, asm.Instructions{
 			asm.LoadMem(r8, argsReg, 0, dword),
 			asm.LoadMem(r8, r8, 16, dword),
-			asm.LoadMem(r7, argsReg, 40, dword),
+			asm.LoadMem(r7, argsReg, 48, dword),
 			asm.LSh.Imm(r7, 32),
 			asm.RSh.Imm(r7, 32),
 			asm.Mul.Imm(r7, 2512),
@@ -1036,7 +1042,7 @@ func TestAddValues(t *testing.T) {
 		test.AssertEqualSlice(t, c.insns, asm.Instructions{
 			asm.LoadMem(r8, argsReg, 8, dword),
 			asm.Add.Imm(r8, 72),
-			asm.LoadMem(r7, argsReg, 40, dword),
+			asm.LoadMem(r7, argsReg, 48, dword),
 			asm.LSh.Imm(r7, 32),
 			asm.RSh.Imm(r7, 32),
 			asm.Mul.Imm(r7, 8),
@@ -1241,7 +1247,7 @@ func TestSubValues(t *testing.T) {
 		test.AssertEqualSlice(t, c.insns, asm.Instructions{
 			asm.LoadMem(r8, argsReg, 8, dword),
 			asm.LoadMem(r8, r8, 56, dword),
-			asm.LoadMem(r7, argsReg, 40, dword),
+			asm.LoadMem(r7, argsReg, 48, dword),
 			asm.LSh.Imm(r7, 32),
 			asm.RSh.Imm(r7, 32),
 			asm.Mul.Imm(r7, 1072),
@@ -1260,7 +1266,7 @@ func TestSubValues(t *testing.T) {
 		test.AssertEqualSlice(t, c.insns, asm.Instructions{
 			asm.LoadMem(r8, argsReg, 8, dword),
 			asm.Add.Imm(r8, 72),
-			asm.LoadMem(r7, argsReg, 40, dword),
+			asm.LoadMem(r7, argsReg, 48, dword),
 			asm.LSh.Imm(r7, 32),
 			asm.RSh.Imm(r7, 32),
 			asm.Mul.Imm(r7, 8),
@@ -1357,7 +1363,7 @@ func TestEvaluateMul(t *testing.T) {
 		test.AssertTrue(t, val.isMaterialized())
 		test.AssertEqualSlice(t, c.insns, asm.Instructions{
 			asm.Mov.Imm(r8, 12),
-			asm.LoadMem(r7, argsReg, 40, dword),
+			asm.LoadMem(r7, argsReg, 48, dword),
 			asm.LSh.Imm(r7, 32),
 			asm.RSh.Imm(r7, 32),
 			asm.Mul.Reg(r8, r7),
@@ -1451,7 +1457,7 @@ func TestEvaluateDiv(t *testing.T) {
 		test.AssertNoErr(t, err)
 		test.AssertTrue(t, val.isMaterialized())
 		test.AssertEqualSlice(t, c.insns, asm.Instructions{
-			asm.LoadMem(r8, argsReg, 40, dword),
+			asm.LoadMem(r8, argsReg, 48, dword),
 			asm.LSh.Imm(r8, 32),
 			asm.RSh.Imm(r8, 32),
 			asm.Div.Imm(r8, 2),
@@ -1483,7 +1489,7 @@ func TestEvaluateDiv(t *testing.T) {
 			asm.LoadMem(r8, r8, 112, dword),
 			asm.LSh.Imm(r8, 32),
 			asm.RSh.Imm(r8, 32),
-			asm.LoadMem(r7, argsReg, 40, dword),
+			asm.LoadMem(r7, argsReg, 48, dword),
 			asm.LSh.Imm(r7, 32),
 			asm.RSh.Imm(r7, 32),
 			JmpOff(asm.JNE, r7, 0, 2),
@@ -3799,7 +3805,7 @@ func TestEvaluateCond(t *testing.T) {
 		test.AssertTrue(t, val.isMaterialized())
 		test.AssertEqualSlice(t, c.insns, genInsnsWithN(r8, nil, asm.Instructions{
 			JmpOff(asm.JEq, r8, 0, 5),
-			asm.LoadMem(r7, argsReg, 40, dword),
+			asm.LoadMem(r7, argsReg, 48, dword),
 			asm.LSh.Imm(r7, 32),
 			asm.RSh.Imm(r7, 32),
 			asm.Mov.Reg(r8, r7),

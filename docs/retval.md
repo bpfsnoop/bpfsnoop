@@ -1,14 +1,14 @@
 # Typed return values
 
-`--filter-arg` and `--output-arg` expose a function return value as `$retval` when exit tracing is enabled. The pseudo-variable always requires an explicit concrete cast:
+`--filter-arg` and `--output-arg` expose a function return value as `$retval` when exit tracing is enabled. Its type is inferred from the function's BTF return type:
 
 ```sh
 bpfsnoop -k tcp_v4_connect -m exit \
-  --filter-arg '(int)$retval != 0' \
-  --output-arg '(int)$retval'
+  --filter-arg '$retval != 0' \
+  --output-arg '$retval'
 ```
 
-The cast must match the function's declared return type after BTF typedef and qualifier wrappers are removed. For example, `(int)$retval` does not select a pointer-returning function. `$retval` is distinct from a real parameter named `retval`.
+An optional explicit cast must match the function's declared return type after BTF typedef and qualifier wrappers are removed. For example, `(int)$retval` does not select a pointer-returning function. `$retval` is distinct from a real parameter named `retval`.
 
 Return expressions work in `--mode exit` and `--mode entry,exit`. An entry-only target is skipped when its filter needs `$retval`, while return-only output expressions are ignored. Tracepoints and void-returning functions do not provide `$retval`.
 

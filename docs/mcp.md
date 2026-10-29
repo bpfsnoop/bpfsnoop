@@ -58,7 +58,7 @@ require fentry kernel-function targets and cannot be combined with a function
 graph.
 
 Filter and capture expressions may reference a typed return value as
-`$retval`, with the same required explicit concrete cast as the CLI, for
+`$retval`, with its type inferred from the function's BTF return type, for
 example `"(int)$retval < 0"`. MCP automatically selects exit tracing, or paired
 entry/exit tracing when duration, function-graph, or instruction capture needs
 the entry event. To apply a pcap filter to a packet-typed return value, set

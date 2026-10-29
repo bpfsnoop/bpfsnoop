@@ -24,7 +24,7 @@ func isBuiltinVar(name string) bool {
 }
 
 // ExprAnalysis contains the parser-facing form and variable metadata for an
-// expression. RetvalCast is empty when the expression doesn't use $retval.
+// expression. RetvalCast is empty when $retval has no explicit cast.
 type ExprAnalysis struct {
 	CompilerExpr string
 	Vars         []string
@@ -52,7 +52,7 @@ func AnalyzeExpr(expr string) (ExprAnalysis, error) {
 	}
 
 	var stack []*c2go.Expr
-	uses, castUses := 0, 0
+	uses := 0
 	var castErr error
 	var mapErr error
 	seen := make(map[*c2go.Expr]bool)
@@ -91,7 +91,6 @@ func AnalyzeExpr(expr string) (ExprAnalysis, error) {
 				castErr = fmt.Errorf("%s has invalid non-scalar cast %q", RetvalName, parent.Type.String())
 				break
 			}
-			castUses++
 			cast := parent.Type.String()
 			if analysis.retvalExpr == nil {
 				analysis.retvalExpr = parent
@@ -118,7 +117,7 @@ func AnalyzeExpr(expr string) (ExprAnalysis, error) {
 		if castErr != nil {
 			return analysis, castErr
 		}
-		if analysis.retvalExpr == nil || castUses != uses {
+		if uses == 0 {
 			return analysis, fmt.Errorf("%s requires an explicit concrete cast", RetvalName)
 		}
 	}
