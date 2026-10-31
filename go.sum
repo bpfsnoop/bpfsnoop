@@ -4,8 +4,6 @@ github.com/Asphaltt/mybtf v0.0.0-20250708022622-be6f548674b2 h1:IzK5ZB+DlIrLYX2/
 github.com/Asphaltt/mybtf v0.0.0-20250708022622-be6f548674b2/go.mod h1:ZxswciFofS8TXGsc2j5CWCY8O3XwKEysCnU7hoI1fnI=
 github.com/BurntSushi/toml v1.6.0 h1:dRaEfpa2VI55EwlIW72hMRHdWouJeRF7TPYhI+AUQjk=
 github.com/BurntSushi/toml v1.6.0/go.mod h1:ukJfTF/6rtPPRCnwkur4qwRxa8vTRFBF0uk2lLoLwho=
-github.com/bpfsnoop/ebpf v0.22.0-next h1:VYxL3RMQiiifYzKCTrDflij4muKPuP/TlqQp2wlmV+g=
-github.com/bpfsnoop/ebpf v0.22.0-next/go.mod h1:CDzZbe2hC5JjlDC+CY3KFCzlYwN4gbxppYM+Z10bQt4=
 github.com/bpfsnoop/gapstone v0.0.0-20260226134052-b57d31fae271 h1:b902uMahnLp0mR2k047oGJ4jXISgPmHaKy8/SnykUKM=
 github.com/bpfsnoop/gapstone v0.0.0-20260226134052-b57d31fae271/go.mod h1:z8pjvjRs6upeW3rOvXbyAua+ngoozVZg6HwTdRsALoM=
 github.com/caio/go-tdigest/v4 v4.0.1 h1:sx4ZxjmIEcLROUPs2j1BGe2WhOtHD6VSe6NNbBdKYh4=
@@ -42,6 +40,8 @@ github.com/kr/pretty v0.3.1 h1:flRD4NNwYAUpkphVc1HcthR4KEIFJ65n8Mw5qdRn3LE=
 github.com/kr/pretty v0.3.1/go.mod h1:hoEshYVHaxMs3cyo3Yncou5ZscifuDolrwPKZanG3xk=
 github.com/kr/text v0.2.0 h1:5Nx0Ya0ZqY2ygV366QzturHI13Jq95ApcVaJBhpS+AY=
 github.com/kr/text v0.2.0/go.mod h1:eLer722TekiGuMkidMxC/pM04lWEeraHUUmBw8l2grE=
+github.com/kunkun-tang/ebpf v0.0.0-20261030145142-01b3482a7060 h1:GCp13f4tcVM8SCurj8L2iWOqU3MseuIut3eZ8NzF2Ag=
+github.com/kunkun-tang/ebpf v0.0.0-20261030145142-01b3482a7060/go.mod h1:CDzZbe2hC5JjlDC+CY3KFCzlYwN4gbxppYM+Z10bQt4=
 github.com/leesper/go_rng v0.0.0-20190531154944-a612b043e353 h1:X/79QL0b4YJVO5+OsPH9rF2u428CIrGL/jLmPsoOQQ4=
 github.com/leesper/go_rng v0.0.0-20190531154944-a612b043e353/go.mod h1:N0SVk0uhy+E1PZ3C9ctsPRlvOPAFPkCNlcPBDkt0N3U=
 github.com/lorenzosaino/go-sysctl v0.3.1 h1:3phX80tdITw2fJjZlwbXQnDWs4S30beNcMbw0cn0HtY=
