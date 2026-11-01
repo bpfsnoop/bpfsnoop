@@ -191,6 +191,9 @@ func outputFnArgs(sb *strings.Builder, info *funcInfo, helpers *Helpers, data []
 		}
 
 		fp := btfx.ReprFuncParam(&params[idx], i, param.IsStr, param.IsNumberPtr, arg, argVal, valNext, argStr, f)
+		if !param.IsStr && isArenaParam(info.proto, idx) {
+			fp = markArenaPointer(fp, params[idx].Type)
+		}
 		if colorfulOutput {
 			funcParamColors[i].Fprint(sb, fp)
 		} else {

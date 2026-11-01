@@ -139,7 +139,8 @@ func (t *bpfTracing) traceProg(spec *ebpf.CollectionSpec, reusedMaps map[string]
 	progSpec := spec.Programs[tracingFuncName]
 	bprog := bprogs.funcs[info.funcIP]
 	canExit := fexit || bothEntryExit
-	outputs, ok, err := t.injectTraceeOutputs(progSpec, params, retType, krnl, traceeName,
+	arena := withArenaParams(info.arena, info.fn)
+	outputs, ok, err := t.injectTraceeOutputs(progSpec, params, retType, krnl, arena, traceeName,
 		info.flag.pkt, bothEntryExit, fexit, canExit)
 	if err != nil {
 		return err
@@ -150,7 +151,7 @@ func (t *bpfTracing) traceProg(spec *ebpf.CollectionSpec, reusedMaps map[string]
 	bprog.funcArgs = outputs.args
 	bprog.argDataSz = outputs.argDataSize
 	bprog.pktOutput = outputs.pkt
-	fnArgsBufSize, err := injectOutputFuncArgs(progSpec, info.params, info.ret, fexit)
+	fnArgsBufSize, err := injectOutputFuncArgs(progSpec, info.params, info.ret, fexit, info.arena)
 	if err != nil {
 		return fmt.Errorf("failed to inject output func args: %w", err)
 	}
@@ -251,6 +252,10 @@ func (t *bpfTracing) traceProgs(errg *errgroup.Group, spec *ebpf.CollectionSpec,
 	for _, info := range bprogs.tracings {
 		bothEntryExit := info.flag.graph || info.flag.both
 		info := info
+
+		arena, err := bprogs.progArena(info.progID)
+		WarnLogIf(err != nil, "Not reading arena memory of prog %d: %v", info.progID, err)
+		info.arena = arena
 
 		if bothEntryExit {
 			if hasFsession {

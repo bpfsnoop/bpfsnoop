@@ -81,7 +81,7 @@ func readKernelData(expr string, helpers *Helpers) (kernelReadOutput, error) {
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
 
-	readSize, err := arg.compile(nil, nil, krnl, krnl, 0, int(cc.MemoryReadFlagForce), "__read_data_fail")
+	readSize, err := arg.compile(nil, nil, krnl, krnl, nil, 0, int(cc.MemoryReadFlagForce), "__read_data_fail")
 	if err != nil {
 		return kernelReadOutput{}, fmt.Errorf("failed to compile expression %q: %w", expr, err)
 	}

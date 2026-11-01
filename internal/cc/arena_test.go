@@ -5,6 +5,7 @@ package cc
 
 import (
 	"os"
+	"slices"
 	"testing"
 
 	"github.com/cilium/ebpf"
@@ -250,5 +251,182 @@ func TestCompileArena(t *testing.T) {
 		test.AssertNoErr(t, err)
 		test.AssertEqual(t, insns[1].IsLoadFromMap(), true)
 		test.AssertEqual(t, insns[1].Constant, int64(4))
+	})
+}
+
+func testTracedArena() *ArenaInfo {
+	return &ArenaInfo{
+		FD:        7,
+		Params:    []string{"node"},
+		guardHalf: 32768,
+	}
+}
+
+func arenaTranslateInsns(arena *ArenaInfo) asm.Instructions {
+	return asm.Instructions{
+		asm.Mov.Reg(asm.R2, asm.R3),
+		asm.LoadMapPtr(asm.R1, arena.FD),
+		asm.Mov.Imm(asm.R3, arena.guardHalf),
+		asm.Call.Label(ArenaAddrFunc),
+		asm.Mov.Reg(asm.R3, asm.R0),
+	}
+}
+
+// addArenaNode adds var node, an __arg_arena param pointing to
+//
+//	struct arena_node { int val; struct arena_node *next; struct task_struct *task; };
+func addArenaNode(t *testing.T, c *compiler) {
+	t.Helper()
+
+	intTyp, err := testBtf.AnyTypeByName("int")
+	test.AssertNoErr(t, err)
+	taskTyp, err := testBtf.AnyTypeByName("task_struct")
+	test.AssertNoErr(t, err)
+
+	node := &btf.Struct{Name: "arena_node", Size: 24}
+	node.Members = []btf.Member{
+		{Name: "val", Type: intTyp},
+		{Name: "next", Type: &btf.Pointer{Target: node}, Offset: 64},
+		{Name: "task", Type: &btf.Pointer{Target: taskTyp}, Offset: 128},
+	}
+	c.vars = append(c.vars, "node")
+	c.btfs = append(c.btfs, &btf.Pointer{Target: node})
+}
+
+// translations returns the indexes of the arena translations in insns, by
+// their load of the arena map pointer.
+func translations(insns asm.Instructions, arena *ArenaInfo) []int {
+	var idx []int
+	for i, ins := range insns {
+		if ins.IsLoadFromMap() && ins.Constant == int64(arena.FD) {
+			idx = append(idx, i)
+		}
+	}
+	return idx
+}
+
+func TestNewArenaInfo(t *testing.T) {
+	arena := NewArenaInfo(7)
+	test.AssertEqual(t, arena.FD, 7)
+	test.AssertEqual(t, arena.guardHalf, int32(arenaGuardSize(os.Getpagesize())/2))
+}
+
+func TestArenaTranslate(t *testing.T) {
+	t.Run("no arena", func(t *testing.T) {
+		test.AssertEmptySlice(t, ArenaTranslate(nil))
+	})
+
+	t.Run("arena", func(t *testing.T) {
+		arena := testTracedArena()
+		test.AssertEqualSlice(t, ArenaTranslate(arena), arenaTranslateInsns(arena))
+	})
+}
+
+func TestArenaReads(t *testing.T) {
+	arena := testTracedArena()
+
+	for _, tt := range []struct {
+		name  string
+		expr  string
+		core  bool
+		reads int // translations
+	}{
+		{name: "arena param", expr: "node->val", reads: 1},
+		{name: "address in the arena", expr: "&node->next"},
+		{name: "pointer loaded from the arena", expr: "node->next->val", reads: 2},
+		{name: "pointer loaded from the arena, core read", expr: "node->next->val", core: true, reads: 2},
+		// Translated if it points into the arena, which it doesn't.
+		{name: "kernel pointer stored in the arena", expr: "node->task->pid", reads: 2},
+		{name: "kernel pointer stored in the arena, core read", expr: "node->task->pid", core: true, reads: 2},
+		{name: "not an arena param", expr: "skb->dev->ifindex"},
+		{name: "not an arena param, core read", expr: "skb->dev->ifindex", core: true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			c := prepareCompiler(t)
+			if tt.core {
+				c = prepareCompilerCoreRead(t)
+			}
+			c.arena = arena
+			addArenaNode(t, c)
+
+			_, err := c.materialize(prepareExprVal(t, c, tt.expr))
+			test.AssertNoErr(t, err)
+
+			idx := translations(c.insns, arena)
+			test.AssertEqual(t, len(idx), tt.reads)
+			if tt.reads != 0 {
+				// The translation comes before the first read.
+				first := slices.IndexFunc(c.insns, func(ins asm.Instruction) bool { return ins.IsBuiltinCall() })
+				test.AssertTrue(t, idx[0] < first)
+			}
+		})
+	}
+
+	t.Run("core read of a program-local struct", func(t *testing.T) {
+		c := prepareCompilerCoreRead(t)
+		c.arena = arena
+		addArenaNode(t, c)
+
+		_, err := c.materialize(prepareExprVal(t, c, "node->val"))
+		test.AssertNoErr(t, err)
+		test.AssertEqualSlice(t, c.insns, append(append(asm.Instructions{
+			asm.LoadMem(r8, argsReg, 48, dword), // node
+			asm.Mov.Reg(r1, r8),
+			asm.Mov.Reg(r3, r1),
+		}, arenaTranslateInsns(arena)...),
+			asm.Mov.Imm(r2, 8),
+			asm.Mov.Reg(r1, rfp),
+			asm.Add.Imm(r1, -8),
+			asm.FnProbeReadKernel.Call(),
+			asm.LoadMem(r8, rfp, -8, dword), // node->val
+			asm.LSh.Imm(r8, 32),
+			asm.ArSh.Imm(r8, 32),
+		))
+	})
+
+	t.Run("eval result", func(t *testing.T) {
+		c := prepareCompiler(t)
+		addArenaNode(t, c)
+		params := []btf.FuncParam{
+			{Name: "skb", Type: getSkbBtf(t)},
+			{Name: "node", Type: c.btfs[len(c.btfs)-1]},
+		}
+
+		for _, tt := range []struct {
+			expr  string
+			arena bool // the result may be an address in the arena
+		}{
+			{expr: "node", arena: true},
+			{expr: "*node", arena: true},
+			{expr: "node->next", arena: true},
+			{expr: "*node->next", arena: true},
+			{expr: "skb->dev"},
+		} {
+			res, err := CompileEvalExpr(CompileExprOptions{
+				Expr: tt.expr, Params: params, Spec: testBtf, Kernel: testBtf,
+				LabelExit: "__label_exit", Arena: arena,
+			})
+			test.AssertNoErr(t, err)
+			test.AssertEqual(t, res.Arena, tt.arena)
+		}
+	})
+
+	t.Run("filter expr", func(t *testing.T) {
+		c := prepareCompiler(t)
+		addArenaNode(t, c)
+
+		insns, err := CompileFilterExpr(CompileExprOptions{
+			Expr:      "node->next->val == 2 && skb->len == 0",
+			LabelExit: "__label_exit",
+			Spec:      testBtf,
+			Kernel:    testBtf,
+			Params: []btf.FuncParam{
+				{Name: "skb", Type: getSkbBtf(t)},
+				{Name: "node", Type: c.btfs[len(c.btfs)-1]},
+			},
+			Arena: arena,
+		})
+		test.AssertNoErr(t, err)
+		test.AssertEqual(t, len(translations(insns, arena)), 2) // node->next, ->val
 	})
 }

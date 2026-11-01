@@ -194,13 +194,13 @@ func TracingProgName() string {
 	return "bpfsnoop_fn"
 }
 
-func (t *bpfTracing) injectArgFilter(prog *ebpf.ProgramSpec, params []btf.FuncParam, ret btf.Type, spec *btf.Spec, fnName string, match *funcArgument, compile bool) error {
+func (t *bpfTracing) injectArgFilter(prog *ebpf.ProgramSpec, params []btf.FuncParam, ret btf.Type, spec *btf.Spec, arena *cc.ArenaInfo, fnName string, match *funcArgument, compile bool) error {
 	if match == nil || !compile {
 		clearFilterArgSubprog(prog)
 		return nil
 	}
 
-	if err := match.inject(prog, getKernelBTF(), spec, params, ret); err != nil {
+	if err := match.inject(prog, getKernelBTF(), spec, params, ret, arena); err != nil {
 		return fmt.Errorf("failed to inject func arg filter expr: %w", err)
 	}
 
@@ -209,13 +209,13 @@ func (t *bpfTracing) injectArgFilter(prog *ebpf.ProgramSpec, params []btf.FuncPa
 	return nil
 }
 
-func (t *bpfTracing) injectArgOutput(prog *ebpf.ProgramSpec, params []btf.FuncParam, ret btf.Type, spec *btf.Spec, fnName string, canExit bool) ([]funcArgumentOutput, int, error) {
+func (t *bpfTracing) injectArgOutput(prog *ebpf.ProgramSpec, params []btf.FuncParam, ret btf.Type, spec *btf.Spec, arena *cc.ArenaInfo, fnName string, canExit bool) ([]funcArgumentOutput, int, error) {
 	if len(argOutput.args) == 0 {
 		clearOutputArgSubprog(prog)
 		return nil, 0, nil
 	}
 
-	args, size, err := argOutput.matchParams(params, ret, spec, canExit)
+	args, size, err := argOutput.matchParams(params, ret, spec, arena, canExit)
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to match params: %w", err)
 	}
@@ -227,7 +227,7 @@ func (t *bpfTracing) injectArgOutput(prog *ebpf.ProgramSpec, params []btf.FuncPa
 	return args, size, nil
 }
 
-func (t *bpfTracing) injectTraceeOutputs(prog *ebpf.ProgramSpec, params []btf.FuncParam, ret btf.Type, spec *btf.Spec, fnName string, outputPkt, bothEntryExit, isExit, canExit bool) (traceeOutputs, bool, error) {
+func (t *bpfTracing) injectTraceeOutputs(prog *ebpf.ProgramSpec, params []btf.FuncParam, ret btf.Type, spec *btf.Spec, arena *cc.ArenaInfo, fnName string, outputPkt, bothEntryExit, isExit, canExit bool) (traceeOutputs, bool, error) {
 	var outputs traceeOutputs
 
 	filterMatch, err := argFilter.selectMatch(params, ret, spec)
@@ -254,10 +254,10 @@ func (t *bpfTracing) injectTraceeOutputs(prog *ebpf.ProgramSpec, params []btf.Fu
 	}
 
 	outputs.exitFilter = (filterRetval || pktFilterRetval) && bothEntryExit
-	if err := t.injectArgFilter(prog, params, ret, spec, fnName, filterMatch, !filterRetval || isExit); err != nil {
+	if err := t.injectArgFilter(prog, params, ret, spec, arena, fnName, filterMatch, !filterRetval || isExit); err != nil {
 		return outputs, false, err
 	}
-	outputs.args, outputs.argDataSize, err = t.injectArgOutput(prog, params, ret, spec, fnName, canExit)
+	outputs.args, outputs.argDataSize, err = t.injectArgOutput(prog, params, ret, spec, arena, fnName, canExit)
 	if err != nil {
 		return outputs, false, err
 	}

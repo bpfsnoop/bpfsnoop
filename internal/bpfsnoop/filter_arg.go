@@ -115,7 +115,7 @@ func (arg *funcArgument) matchParams(params []btf.FuncParam) bool {
 	return true
 }
 
-func (arg *funcArgument) inject(prog *ebpf.ProgramSpec, krnl, spec *btf.Spec, params []btf.FuncParam, ret btf.Type) error {
+func (arg *funcArgument) inject(prog *ebpf.ProgramSpec, krnl, spec *btf.Spec, params []btf.FuncParam, ret btf.Type, arena *cc.ArenaInfo) error {
 	mode := cc.MemoryReadModeProbeRead
 	if _, err := krnl.AnyTypeByName("bpf_rdonly_cast"); err == nil {
 		mode = cc.MemoryReadModeCoreRead
@@ -132,6 +132,7 @@ func (arg *funcArgument) inject(prog *ebpf.ProgramSpec, krnl, spec *btf.Spec, pa
 		Kernel:     krnl,
 		LabelExit:  "__label_cc_exit",
 		Maps:       arg.maps,
+		Arena:      arena,
 
 		MemoryReadMode: mode,
 	})

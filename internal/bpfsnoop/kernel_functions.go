@@ -58,6 +58,7 @@ var tracingDenyFuncs = []string{
 type ParamFlags struct {
 	IsNumberPtr bool
 	IsStr       bool
+	IsArena     bool // points into the arena, i.e. tagged __arg_arena
 }
 
 type FuncParamFlags struct {

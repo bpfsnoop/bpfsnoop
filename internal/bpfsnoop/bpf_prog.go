@@ -11,6 +11,8 @@ import (
 
 	"github.com/cilium/ebpf"
 	"golang.org/x/sync/errgroup"
+
+	"github.com/bpfsnoop/bpfsnoop/internal/cc"
 )
 
 type bpfProgs struct {
@@ -21,6 +23,9 @@ type bpfProgs struct {
 	funcs map[uintptr]*bpfProgFuncInfo // func IP -> prog func info
 
 	tracings map[string]*bpfTracingInfo // id:func -> prog, func
+
+	arenas    map[ebpf.ProgramID]*cc.ArenaInfo // ID -> arena, if any
+	arenaMaps []*ebpf.Map
 
 	traceable sync.Map // program ID -> verifier probe result
 
@@ -33,6 +38,7 @@ func NewBPFProgs(pflags []ProgFlag, noParseProgs, disasm bool) (*bpfProgs, error
 	progs.infos = make(map[ebpf.ProgramID]*progInfo, len(pflags))
 	progs.funcs = make(map[uintptr]*bpfProgFuncInfo, len(pflags))
 	progs.tracings = make(map[string]*bpfTracingInfo, len(pflags))
+	progs.arenas = make(map[ebpf.ProgramID]*cc.ArenaInfo)
 	progs.disasm = disasm
 
 	var err error
@@ -116,6 +122,9 @@ func (b *bpfProgs) AddProgs(progs []*ebpf.Program, isBpfsnoop bool) error {
 func (b *bpfProgs) Close() {
 	for _, prog := range b.progs {
 		_ = prog.Close()
+	}
+	for _, m := range b.arenaMaps {
+		_ = m.Close()
 	}
 }
 

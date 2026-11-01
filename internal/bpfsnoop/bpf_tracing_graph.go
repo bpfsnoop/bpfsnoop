@@ -58,7 +58,7 @@ func (t *bpfTracing) traceGraph(spec *ebpf.CollectionSpec,
 ) error {
 	tracingProgName := "bpfsnoop_fgraph"
 	progSpec := spec.Programs[tracingProgName]
-	fnArgsBufSize, err := injectOutputFuncArgs(progSpec, params, ret, !entry || fsession)
+	fnArgsBufSize, err := injectOutputFuncArgs(progSpec, params, ret, !entry || fsession, nil)
 	if err != nil {
 		return fmt.Errorf("failed to inject output func args: %w", err)
 	}

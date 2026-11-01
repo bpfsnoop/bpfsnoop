@@ -55,7 +55,7 @@ func bpfKfuncCall(id btf.TypeID) asm.Instruction {
 	}
 }
 
-func (c *compiler) coreReadByProbeRead(offset int64, reg asm.Register, lastIdx bool) {
+func (c *compiler) coreReadByProbeRead(offset int64, reg asm.Register, lastIdx, arena bool) {
 	immReg := asm.R1
 	resReg := immReg
 	if lastIdx && reg != immReg {
@@ -64,8 +64,11 @@ func (c *compiler) coreReadByProbeRead(offset int64, reg asm.Register, lastIdx b
 	if offset != 0 {
 		c.emit(asm.Add.Imm(immReg, int32(offset)))
 	}
+	c.emit(asm.Mov.Reg(asm.R3, immReg)) // r3 = r1
+	if arena {
+		c.emit(ArenaTranslate(c.arena)...)
+	}
 	c.emit(
-		asm.Mov.Reg(asm.R3, immReg),  // r3 = r1
 		asm.Mov.Imm(asm.R2, 8),       // r2 = 8
 		asm.Mov.Reg(asm.R1, asm.RFP), // r1 = rfp
 		asm.Add.Imm(asm.R1, -8),      // r1 -= 8
@@ -101,12 +104,18 @@ func (c *compiler) emitCoreRead(offsets []pendingOffset, reg asm.Register) error
 			continue
 		}
 
+		if offset.arena {
+			// bpf_rdonly_cast() can't read an arena address.
+			c.coreReadByProbeRead(offset.offset, reg, i == lastIdx, true)
+			continue
+		}
+
 		canCast, typID, err := canRdonlyCast(c.btfSpec, offset.prevBtf)
 		if err != nil {
 			return fmt.Errorf("failed to check if %v can be bpf_rdonly_cast: %w", offset.prevBtf, err)
 		}
 		if !canCast {
-			c.coreReadByProbeRead(offset.offset, reg, i == lastIdx)
+			c.coreReadByProbeRead(offset.offset, reg, i == lastIdx, false)
 			continue
 		}
 
@@ -116,7 +125,7 @@ func (c *compiler) emitCoreRead(offsets []pendingOffset, reg asm.Register) error
 		}
 
 		if !canReadByRdonlyCast(offset.btf) {
-			c.coreReadByProbeRead(offset.offset, reg, i == lastIdx)
+			c.coreReadByProbeRead(offset.offset, reg, i == lastIdx, false)
 			continue
 		}
 

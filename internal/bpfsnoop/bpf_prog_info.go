@@ -4,7 +4,9 @@
 package bpfsnoop
 
 import (
+	"errors"
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/Asphaltt/mybtf"
@@ -174,4 +176,33 @@ func (b *bpfProgInfo) contains(addr uintptr) bool {
 
 func (b *bpfProgInfo) funcName() string {
 	return b.progs[0].funcName
+}
+
+// openArena opens the arena map of the prog, among its maps, or returns nil if
+// it uses none. A prog can use one arena at most.
+func (p *progInfo) openArena() (*ebpf.Map, error) {
+	for _, id := range p.mapIDs {
+		m, err := ebpf.NewMapFromID(id)
+		if errors.Is(err, os.ErrNotExist) {
+			continue
+		}
+		if err != nil {
+			return nil, fmt.Errorf("failed to open map %d: %w", id, err)
+		}
+
+		info, err := m.Info()
+		if err != nil {
+			err = fmt.Errorf("failed to get info of map %d: %w", id, err)
+			return nil, errors.Join(err, m.Close())
+		}
+		if info.Type == ebpf.Arena {
+			return m, nil
+		}
+
+		if err := m.Close(); err != nil {
+			return nil, err
+		}
+	}
+
+	return nil, nil
 }
