@@ -24,6 +24,12 @@ import (
 
 type rbReaders map[int]*ringbuf.Reader
 
+// eventFlushPeriod is how often flushPending() wakes the readers whose ringbuf
+// has unread records. bpfsnoop_str_eq() in bpf/bpfsnoop_str.h discards its
+// buffers without waking the reader, and the kernel doesn't wake it for the
+// records after them either, until it reads past them.
+const eventFlushPeriod = 100 * time.Millisecond
+
 // eventReader owns the typed queue and shared lifecycle for CLI and MCP.
 type eventReader struct {
 	output       *outputEventHandler
@@ -167,6 +173,7 @@ func (r *eventReader) run(ctx context.Context, readers map[int]*ringbuf.Reader, 
 	defer r.close(reused)
 	defer cancel()
 
+	r.workers.Go(r.flushPending)
 	for cpu, reader := range r.readers {
 		r.workers.Go(func() {
 			err := r.readCPU(cpu, reader)
@@ -274,8 +281,33 @@ func (r *eventReader) readCPU(cpu int, reader *ringbuf.Reader) (retErr error) {
 	record := ringbuf.Record{Handle: r.readRecord}
 
 	for {
-		if err := reader.ReadInto(&record); err != nil {
+		err := reader.ReadInto(&record)
+		if errors.Is(err, ringbuf.ErrFlushed) && r.ctx.Err() == nil {
+			continue // by flushPending()
+		}
+		if err != nil {
 			return err
+		}
+	}
+}
+
+// flushPending regularly wakes the readers whose ringbuf has unread records,
+// which can wait for a wakeup otherwise, see eventFlushPeriod. Idle readers
+// aren't woken.
+func (r *eventReader) flushPending() {
+	ticker := time.NewTicker(eventFlushPeriod)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-r.ctx.Done():
+			return
+		case <-ticker.C:
+			for _, reader := range r.readers {
+				if reader.AvailableBytes() != 0 {
+					_ = reader.Flush()
+				}
+			}
 		}
 	}
 }
