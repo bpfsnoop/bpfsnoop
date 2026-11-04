@@ -19,6 +19,7 @@ const (
 	configFlagExitFilterIdx
 	configFlagPktRetvalIdx
 	configFlagHasFuncArgCntIdx
+	configFlagHasStrncmpIdx
 )
 
 const (
@@ -132,4 +133,8 @@ func (cfg *BpfsnoopConfig) SetPktRetval(v bool) {
 
 func (cfg *BpfsnoopConfig) SetHasFuncArgCnt(v bool) {
 	cfg.setFlags(v, configFlagHasFuncArgCntIdx)
+}
+
+func (cfg *BpfsnoopConfig) SetHasStrncmp(v bool) {
+	cfg.setFlags(v, configFlagHasStrncmpIdx)
 }

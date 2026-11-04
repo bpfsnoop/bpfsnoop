@@ -84,6 +84,9 @@ func (t *bpfTracing) traceFunc(spec *ebpf.CollectionSpec, reusedMaps map[string]
 	if !ok {
 		return nil
 	}
+	if err := injectStrLits(spec, progSpec); err != nil {
+		return err
+	}
 	fn.Args = outputs.args
 	fn.Data = outputs.argDataSize
 	fn.Pkt = outputs.pkt

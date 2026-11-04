@@ -107,44 +107,6 @@ func TestCompileFuncCall(t *testing.T) {
 		})
 	})
 
-	t.Run("str", func(t *testing.T) {
-		t.Run("str(skb->cb, a, b)", func(t *testing.T) {
-			expr, err := cc.ParseExpr("str(skb->cb, a, b)")
-			test.AssertNoErr(t, err)
-
-			_, err = compileFuncCall(expr)
-			test.AssertHaveErr(t, err)
-			test.AssertErrorPrefix(t, err, "str() must have 1 or 2 arguments")
-		})
-
-		t.Run("str(skb->cb, a)", func(t *testing.T) {
-			expr, err := cc.ParseExpr("str(skb->cb, a)")
-			test.AssertNoErr(t, err)
-
-			_, err = compileFuncCall(expr)
-			test.AssertHaveErr(t, err)
-			test.AssertErrorPrefix(t, err, "str() second argument must be a number")
-		})
-
-		t.Run("str(skb->cb, 0xFFULL)", func(t *testing.T) {
-			expr, err := cc.ParseExpr("str(skb->cb, 0xFFULL)")
-			test.AssertNoErr(t, err)
-
-			_, err = compileFuncCall(expr)
-			test.AssertHaveErr(t, err)
-			test.AssertErrorPrefix(t, err, "str() second argument must be a number")
-		})
-
-		t.Run("str(skb->cb, 0)", func(t *testing.T) {
-			expr, err := cc.ParseExpr("str(skb->cb, 0)")
-			test.AssertNoErr(t, err)
-
-			_, err = compileFuncCall(expr)
-			test.AssertHaveErr(t, err)
-			test.AssertErrorPrefix(t, err, "str() size must be greater than 0")
-		})
-	})
-
 	t.Run("pkt", func(t *testing.T) {
 		t.Run("2 args", func(t *testing.T) {
 			t.Run("pkt(skb->head, 0xFFULL)", func(t *testing.T) {

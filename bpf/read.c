@@ -5,6 +5,8 @@
 #include "bpf_helpers.h"
 #include "bpf_tracing.h"
 
+#include "bpfsnoop_str.h"
+
 #define BUFF_SIZE 65536
 
 __u64 target_pid_tgid SEC(".data.target");

@@ -190,3 +190,69 @@ func TestCompileByteOrderExpressions(t *testing.T) {
 	}
 	test.AssertEqual(t, swaps, 2)
 }
+
+func TestEvaluateStrCall(t *testing.T) {
+	for _, tt := range []struct{ expr, want string }{
+		{"str()", "str() must have 1 or 2 arguments"},
+		{"str(skb->cb, a, b)", "str() must have 1 or 2 arguments"},
+		{"str(skb->cb, a)", "str() second argument must be a number"},
+		{"str(skb->cb, 0xFFULL)", "str() second argument must be a number"},
+		{"str(skb->cb, 0)", "str() size must be greater than 0"},
+		{"str(skb->nope)", "failed to evaluate str() argument:"},
+		{"str(skb->len)", "disallow non-{pointer,array} type"},
+	} {
+		t.Run(tt.expr, func(t *testing.T) {
+			c := prepareCompiler(t)
+			_, err := c.evaluate(prepareCcExpr(t, tt.expr))
+			test.AssertErrorPrefix(t, err, tt.want)
+		})
+	}
+
+	t.Run("materialization", func(t *testing.T) {
+		c := prepareCompiler(t)
+		c.markRegisterAllUsed()
+		_, err := c.evaluate(prepareCcExpr(t, "str(prog)"))
+		test.AssertErrorPrefix(t, err, "failed to materialize str() argument:")
+		if !errors.Is(err, ErrRegisterNotEnough) {
+			t.Fatalf("expected register exhaustion, got %v", err)
+		}
+	})
+
+	// str(x) is the char pointer or array x itself, str(x, size) a char
+	// array of size bytes at x.
+	charArray := func(n uint32) btf.Type {
+		return &btf.Array{
+			Index:  &btf.Int{Name: "unsigned int", Size: 4},
+			Type:   &btf.Int{Name: "char", Size: 1, Encoding: btf.Char},
+			Nelems: n,
+		}
+	}
+	for _, tt := range []struct {
+		expr string
+		btf  btf.Type // nil for the type of x
+	}{
+		{"str(skb->cb)", nil},
+		{"str(prog->aux->attach_func_name)", nil},
+		{"str(skb->cb, 4)", charArray(4)},
+		{"str((void *)prog, 16)", charArray(16)},
+	} {
+		t.Run(tt.expr, func(t *testing.T) {
+			c := prepareCompiler(t)
+			val, err := c.evaluate(prepareCcExpr(t, tt.expr))
+			test.AssertNoErr(t, err)
+			test.AssertEqual(t, val.kind, exprValueKindMaterialized)
+			if tt.btf != nil {
+				test.AssertEqualBtf(t, val.btf, tt.btf)
+				return
+			}
+
+			x, err := c.evaluate(prepareCcExpr(t, tt.expr).List[0])
+			test.AssertNoErr(t, err)
+			test.AssertEqualBtf(t, val.btf, x.btf)
+		})
+	}
+
+	names, err := ExtractVarNames("str(skb->dev->name, 16)")
+	test.AssertNoErr(t, err)
+	test.AssertEqualSlice(t, names, []string{"skb"})
+}

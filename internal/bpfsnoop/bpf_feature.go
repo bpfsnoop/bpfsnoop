@@ -29,6 +29,7 @@ var (
 	hasKprobeMulti   bool
 	hasKprobeSession bool
 	hasNestedTracing bool
+	hasStrncmp       bool
 	trampJmpMode     bool
 )
 
@@ -104,6 +105,12 @@ func detectBPFFeatures() (KernelBPFFeatures, error) {
 	}
 	debugLogIf(!hasGetFuncArgCnt, "bpf_get_func_arg_cnt() is not supported, detecting trampoline arg count in userspace")
 
+	hasStrncmp, err = btfEnumValue("bpf_func_id", "BPF_FUNC_strncmp")
+	if err != nil {
+		return features, err
+	}
+	debugLogIf(!hasStrncmp, "bpf_strncmp() is not supported, comparing strings 8 bytes at a time")
+
 	hasFsession, err = btfEnumValue("bpf_attach_type", "BPF_TRACE_FSESSION")
 	if err != nil {
 		return features, err
@@ -166,6 +173,7 @@ func printFeatures() {
 		{"Ringbuf map", features.HasRingbuf},
 		{"Branch Record", features.HasBranchSnapshot},
 		{"Get arg_cnt", hasGetFuncArgCnt},
+		{"strncmp", hasStrncmp},
 		{"fsession", hasFsession},
 		{"kprobe.multi", features.HasKprobeMulti},
 		{"kprobe.session", hasKprobeSession},

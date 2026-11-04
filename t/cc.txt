@@ -77,6 +77,43 @@ trigger: ping -c 1 -s 64 127.0.0.1
 
 ---
 
+# compare a char array with a string literal
+name: cc::str-cmp-array
+tag: cc,fnarg,xdp
+test: -k generic_xdp_install --filter-arg 'str(dev->name) == "lo"' --output-arg 'str(dev->name)' --limit-events 1
+match: 'str(dev->name)'="lo"
+trigger: ./xdpcrc -d lo
+
+---
+
+# compare a char pointer with a string literal
+name: cc::str-cmp-ptr
+tag: cc,fnarg
+test: -k security_file_open --filter-arg 'str(file->f_path.dentry->d_name.name) == "passwd"' --output-arg 'str(file->f_path.dentry->d_name.name)' --limit-events 1
+match: 'str(file->f_path.dentry->d_name.name)'="passwd"
+trigger: cat /etc/passwd
+
+---
+
+# output the comparisons with a string literal as bools
+name: cc::str-cmp-output
+tag: cc,fnarg
+test: -k security_file_open --filter-arg 'str(file->f_path.dentry->d_name.name) == "passwd"' --output-arg 'str(file->f_path.dentry->d_name.name) == "passwd"' --output-arg 'str(file->f_path.dentry->d_name.name) != "passwd"' --limit-events 1
+match: (bool)'str(file->f_path.dentry->d_name.name) == "passwd"'=0x1/1, (bool)'str(file->f_path.dentry->d_name.name) != "passwd"'=0x0/0
+trigger: cat /etc/passwd
+
+---
+
+# compare a string longer than 128 bytes with a string literal: a file name of
+# 200 chars
+name: cc::str-cmp-long
+tag: cc,fnarg
+test: -k security_file_open --filter-arg "str(file->f_path.dentry->d_name.name) == \"$(printf 'x%.0s' {1..200})\"" --output-arg "str(file->f_path.dentry->d_name.name) == \"$(printf 'x%.0s' {1..200})\"" --limit-events 1
+match: xxxxxxxxxx"'=0x1/1
+trigger: f=/tmp/$(printf 'x%.0s' {1..200}); touch $f; cat $f; rm -f $f
+
+---
+
 # cast void
 name: cc::cast-void
 tag: cc,type-cast

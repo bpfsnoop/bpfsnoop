@@ -20,6 +20,7 @@
 #include "bpfsnoop_sess.h"
 #include "bpfsnoop_session.h"
 #include "bpfsnoop_stack.h"
+#include "bpfsnoop_str.h"
 #include "bpfsnoop_tracing.h"
 
 volatile const __u32 PID = -1;

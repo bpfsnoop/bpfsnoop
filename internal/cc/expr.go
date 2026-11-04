@@ -187,8 +187,13 @@ func CompileEvalExpr(opts CompileExprOptions) (EvalResult, error) {
 			return res, fmt.Errorf("function call must have a constant name")
 		}
 		if isBuiltinFunc(e.Left.Text) {
-			if e.Left.Text == arenaFn {
+			switch e.Left.Text {
+			case arenaFn:
 				res.Type = EvalResultTypeArena // dumped as a whole
+			case strFn:
+				res.Type = EvalResultTypeString // output as a string
+				dataSize = -1
+				fnName = strFn
 			}
 			break // Scalar builtins are evaluated with the full expression.
 		}
@@ -235,22 +240,26 @@ func CompileEvalExpr(opts CompileExprOptions) (EvalResult, error) {
 	return res, nil
 }
 
-func (c *compiler) pushUsedCallerSavedRegsN(n int) {
-	usedRegNr := 0
+// usedCallerSavedRegs returns the registers in use among r1 to rn.
+func (c *compiler) usedCallerSavedRegs(n int) []asm.Register {
+	var regs []asm.Register
 	for i := range n {
-		reg := asm.R1 + asm.Register(i)
-		if c.regalloc.IsUsed(reg) {
-			usedRegNr++
+		if reg := asm.R1 + asm.Register(i); c.regalloc.IsUsed(reg) {
+			regs = append(regs, reg)
 		}
 	}
+	return regs
+}
 
-	offset := c.reservedStack + usedRegNr*8
+func (c *compiler) pushUsedCallerSavedRegsN(n int) {
+	regs := c.usedCallerSavedRegs(n)
+
+	offset := c.reservedStack + len(regs)*8
 	if c.regalloc.IsUsed(asm.R0) {
 		c.emit(asm.StoreMem(asm.RFP, int16(-offset-8), asm.R0, asm.DWord))
 	}
 
-	for i := range usedRegNr {
-		reg := asm.R1 + asm.Register(i)
+	for i, reg := range regs {
 		c.emit(asm.StoreMem(asm.RFP, int16(-offset+i*8), reg, asm.DWord))
 	}
 }
@@ -260,18 +269,11 @@ func (c *compiler) pushUsedCallerSavedRegs() {
 }
 
 func (c *compiler) popUsedCallerSavedRegsN(n int) {
-	usedRegNr := 0
-	for i := range n {
-		reg := asm.R1 + asm.Register(i)
-		if c.regalloc.IsUsed(reg) {
-			usedRegNr++
-		}
-	}
+	regs := c.usedCallerSavedRegs(n)
 
-	offset := c.reservedStack + usedRegNr*8
+	offset := c.reservedStack + len(regs)*8
 
-	for i := range usedRegNr {
-		reg := asm.R1 + asm.Register(i)
+	for i, reg := range regs {
 		c.emit(asm.LoadMem(reg, asm.RFP, int16(-offset+i*8), asm.DWord))
 	}
 

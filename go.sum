@@ -4,8 +4,8 @@ github.com/Asphaltt/mybtf v0.0.0-20250708022622-be6f548674b2 h1:IzK5ZB+DlIrLYX2/
 github.com/Asphaltt/mybtf v0.0.0-20250708022622-be6f548674b2/go.mod h1:ZxswciFofS8TXGsc2j5CWCY8O3XwKEysCnU7hoI1fnI=
 github.com/BurntSushi/toml v1.6.0 h1:dRaEfpa2VI55EwlIW72hMRHdWouJeRF7TPYhI+AUQjk=
 github.com/BurntSushi/toml v1.6.0/go.mod h1:ukJfTF/6rtPPRCnwkur4qwRxa8vTRFBF0uk2lLoLwho=
-github.com/bpfsnoop/ebpf v0.22.0-next h1:VYxL3RMQiiifYzKCTrDflij4muKPuP/TlqQp2wlmV+g=
-github.com/bpfsnoop/ebpf v0.22.0-next/go.mod h1:CDzZbe2hC5JjlDC+CY3KFCzlYwN4gbxppYM+Z10bQt4=
+github.com/bpfsnoop/ebpf v0.22.0-next.0.20261102162746-64895264fdd1 h1:os1dRJAuxI/t6r2nUFL7wVRmR2NhVIocQBWyGt9rt6c=
+github.com/bpfsnoop/ebpf v0.22.0-next.0.20261102162746-64895264fdd1/go.mod h1:CDzZbe2hC5JjlDC+CY3KFCzlYwN4gbxppYM+Z10bQt4=
 github.com/bpfsnoop/gapstone v0.0.0-20260226134052-b57d31fae271 h1:b902uMahnLp0mR2k047oGJ4jXISgPmHaKy8/SnykUKM=
 github.com/bpfsnoop/gapstone v0.0.0-20260226134052-b57d31fae271/go.mod h1:z8pjvjRs6upeW3rOvXbyAua+ngoozVZg6HwTdRsALoM=
 github.com/caio/go-tdigest/v4 v4.0.1 h1:sx4ZxjmIEcLROUPs2j1BGe2WhOtHD6VSe6NNbBdKYh4=

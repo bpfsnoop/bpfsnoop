@@ -23,12 +23,14 @@ const (
 	bpfMapLookupElemHelper = "bpf_map_lookup_elem"
 
 	arenaFn = "arena"
+
+	strFn = "str"
 )
 
 func isBuiltinFunc(name string) bool {
 	switch name {
 	case byteOrderH2ns, byteOrderN2hs, byteOrderH2nl, byteOrderN2hl,
-		mapLookupFn, bpfMapLookupElemHelper, arenaFn:
+		mapLookupFn, bpfMapLookupElemHelper, arenaFn, strFn:
 		return true
 	default:
 		return false
@@ -69,6 +71,9 @@ func (c *compiler) evaluateCall(expr *cc.Expr) (exprValue, error) {
 
 	case arenaFn:
 		return c.evaluateArenaCall(expr)
+
+	case strFn:
+		return c.evaluateStrCall(expr)
 
 	default:
 		return exprValue{}, fmt.Errorf("unsupported function call in expression: %s", name)
@@ -123,4 +128,49 @@ func (c *compiler) evaluateByteOrderCall(expr *cc.Expr) (exprValue, error) {
 	c.emit(asm.HostTo(asm.BE, val.reg, size))
 
 	return newMaterialized(val.reg, typ), nil
+}
+
+// evaluateStrCall evaluates str(x, [size]) to the address of the string at
+// x, a char pointer or array. With size, it's a char array of size bytes.
+func (c *compiler) evaluateStrCall(expr *cc.Expr) (exprValue, error) {
+	if len(expr.List) != 1 && len(expr.List) != 2 {
+		return exprValue{}, fmt.Errorf("%s() must have 1 or 2 arguments", strFn)
+	}
+
+	var size int64
+	if len(expr.List) == 2 {
+		var err error
+		size, err = parseExprNumber(expr.List[1])
+		if err != nil {
+			return exprValue{}, fmt.Errorf("%s() second argument must be a number: %w", strFn, err)
+		}
+		if size <= 0 {
+			return exprValue{}, fmt.Errorf("%s() size must be greater than 0", strFn)
+		}
+	}
+
+	val, err := c.evaluate(expr.List[0])
+	if err != nil {
+		return exprValue{}, fmt.Errorf("failed to evaluate %s() argument: %w", strFn, err)
+	}
+
+	switch t := mybtf.UnderlyingType(val.btf).(type) {
+	case *btf.Pointer, *btf.Array:
+	default:
+		return exprValue{}, fmt.Errorf("disallow non-{pointer,array} type %v for %s()", t, strFn)
+	}
+
+	val, err = c.materialize(val)
+	if err != nil {
+		return exprValue{}, fmt.Errorf("failed to materialize %s() argument: %w", strFn, err)
+	}
+	if size == 0 {
+		return val, nil
+	}
+
+	return newMaterialized(val.reg, &btf.Array{
+		Index:  &btf.Int{Name: "unsigned int", Size: 4},
+		Type:   &btf.Int{Name: "char", Size: 1, Encoding: btf.Char},
+		Nelems: uint32(size),
+	}), nil
 }
